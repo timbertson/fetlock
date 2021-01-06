@@ -1,0 +1,19 @@
+[package]
+name = "fetlock"
+version = "0.1.0"
+authors = ["Tim Cuthbertson <tim@gfxmonk.net>"]
+edition = "2018"
+
+[[bin]]
+name = "fetlock"
+path = "src/bin/fetlock.rs"
+
+[dependencies]
+serde = "1.0"
+serde_json = "1.0"
+serde_yaml = "0.8"
+futures = "0.3"
+anyhow = "1.0"
+getopts = "0.2"
+log = "0.4"
+env_logger = "0.7"

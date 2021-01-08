@@ -5,3 +5,4 @@ pub use expr::*;
 mod lock;
 pub use lock::*;
 pub mod esy;
+pub mod err;

@@ -34,7 +34,7 @@ fn main() -> Result<()> {
   }
   println!("Hello, world");
   
-  let lock = esy::load("esy.lock")?;
+  let lock = esy::load("sample/esy.json")?;
   println!("{:?}", lock);
   Ok(())
 }

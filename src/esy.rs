@@ -10,26 +10,24 @@ use crate::*;
 pub fn load(path: &str) -> Result<Lock> {
 	let context = LockContext::new(lock::Type::Esy);
   info!("loading {}", path);
-	let lock = Lock::new(context);
-	Ok(lock)
+  let contents = std::fs::read_to_string(path)?;
+  let lock: EsyLock = serde_json::from_str(&contents)?;
+  Ok(lock.0)
 }
 
-struct EsyVisitor<'a> {
-	lock: &'a mut Lock,
-}
+struct EsyLock(Lock);
+struct EsyVisitor;
 
-impl<'de: 'c, 'c> DeserializeSeed<'de> for EsyVisitor<'c> {
-	type Value = Lock;
-
-	fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+impl<'de> Deserialize<'de> for EsyLock {
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
 	where D: Deserializer<'de>,
 	{
-		deserializer.deserialize_any(self)
+		deserializer.deserialize_any(EsyVisitor)
 	}
 }
 
-impl<'de: 'c, 'c> Visitor<'de> for EsyVisitor<'c> {
-	type Value = Lock;
+impl<'de> Visitor<'de> for EsyVisitor {
+	type Value = EsyLock;
 
 	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
 		formatter.write_str("esy.lock")
@@ -37,17 +35,23 @@ impl<'de: 'c, 'c> Visitor<'de> for EsyVisitor<'c> {
 
 	fn visit_map<A>(self, mut map: A) -> std::result::Result<Self::Value, A::Error>
 		where A: MapAccess<'de> {
+    let mut lock = Lock::new(LockContext::new(lock::Type::Esy));
 		while let Some(key) = map.next_key::<&str>()? {
 			match key {
+        "root" => {
+          lock.context.add_toplevel(map.next_value::<Key>()?);
+        }
         "node" => {
-          let impls = map.next_value::<HashMap<Key,EsyImpl>>()?;
-          self.lock.implementations =
-            impls.into_iter().map(|(k,v)| (k,v.0)).collect();
+          lock.implementations = map
+            .next_value::<HashMap<Key,EsyImpl>>()?
+            .into_iter()
+            .map(|(k,v)| (k,v.0))
+            .collect();
         }
         _ => { map.next_value::<IgnoredAny>()?; },
       }
 		}
-		Ok(self.lock.clone())
+		Ok(EsyLock(lock))
 	}
 }
 
@@ -76,7 +80,7 @@ impl<'de> Visitor<'de> for EsyImplVisitor {
 			match key {
         "name" => partial.id.set_name(map.next_value::<String>()?),
         "version" => partial.id.set_version(map.next_value::<String>()?),
-        "source" => partial.set_src(map.next_value_seed(EsySrc {})?),
+        "source" => partial.set_src(map.next_value::<EsySrc>()?.0),
         "dependencies" => {
           let keys = map.next_value::<Vec<String>>()?.into_iter().map(Key::new);
           partial.add_deps(&mut keys.collect())
@@ -88,10 +92,19 @@ impl<'de> Visitor<'de> for EsyImplVisitor {
 	}
 }
 
-struct EsySrc {
+struct EsySrc(Src);
+
+impl<'de> Deserialize<'de> for EsySrc {
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+	where D: Deserializer<'de>,
+	{
+		deserializer.deserialize_any(EsySrcVisitor)
+	}
 }
 
-impl EsySrc {
+struct EsySrcVisitor;
+
+impl EsySrcVisitor {
   fn parse(spec: &str) -> Result<Src> {
     let mut it = spec.splitn(2, ":");
     let typ = it.next().ok_or_else(||anyhow!("type missing"))?;
@@ -109,30 +122,32 @@ impl EsySrc {
         // TODO handle (optional?) digest after hash
         Ok(Src::Archive(Url::new(url)))
       },
+      "no-source" => Ok(Src::None),
       other => Err(anyhow!("Unknown archive type: {}", other)),
     }
   }
 
   fn extract(sources: Vec<String>) -> Result<Src> {
-    match sources.first().filter(|_| sources.len() == 1) {
-      Some(source) => Self::parse(source),
-      None => Err(anyhow!("Expected 1 source archive, got {}", sources.len())),
+    match sources.first() {
+      Some(source) => {
+        if sources.len() > 1 {
+          debug!("using only first source of array: {:?}", sources);
+        }
+        Self::parse(source)
+      },
+      None => Err(anyhow!("Empty source array")),
     }
   }
 }
 
-impl<'de> DeserializeSeed<'de> for EsySrc {
-	type Value = Src;
-
-	fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-	where D: Deserializer<'de>,
-	{
-		deserializer.deserialize_any(self)
-	}
+enum SrcType {
+  Install,
+  LinkDev,
+  Unknown(String),
 }
 
-impl<'de> Visitor<'de> for EsySrc {
-	type Value = Src;
+impl<'de> Visitor<'de> for EsySrcVisitor {
+	type Value = EsySrc;
 	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
 		formatter.write_str("esy source")
 	}
@@ -140,17 +155,31 @@ impl<'de> Visitor<'de> for EsySrc {
 	fn visit_map<A>(self, mut map: A) -> std::result::Result<Self::Value, A::Error>
 		where A: MapAccess<'de> {
 		let mut src = None;
+		let mut typ = None;
 		while let Some(key) = map.next_key::<&str>()? {
 		  match key {
         // source.source is an array of archives.
-        // In practice we only see one element, so this will fail on multiple
+        // Multiple archives appear to be for redundancy, so we just take the first
+        // (and warn until I confirm this behaviour is correct)
         "source" => {
           let archives = map.next_value::<Vec<String>>()?;
           src = Some(err::into_serde(Self::extract(archives))?);
         },
+        "type" => {
+          typ = Some(match map.next_value::<&str>()? {
+            "install" => SrcType::Install,
+            "link-dev" => SrcType::LinkDev,
+            other => SrcType::Unknown(other.to_owned()),
+          })
+        },
         _ => { map.next_value::<IgnoredAny>()?; },
       }
     }
-    err::into_serde(src.ok_or_else(||anyhow!("Missing `src`")))
+    err::into_serde(match typ {
+      Some(SrcType::Install) => src.ok_or_else(||anyhow!("Missing `source.source`")),
+      Some(SrcType::LinkDev) => Ok(Src::None),
+      Some(SrcType::Unknown(u)) => Err(anyhow!("Unknown source type: {}", u)),
+      None => Err(anyhow!("Missing `source.type`")),
+    }).map(EsySrc)
   }
 }

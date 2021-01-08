@@ -116,8 +116,9 @@ impl Url {
 
 #[derive(Debug, Clone)]
 pub enum Src {
-	Github(Github), // TODO
-	Archive(Url), // TODO
+	Github(Github),
+	Archive(Url),
+	None,
 }
 
 #[derive(Debug, Clone)]

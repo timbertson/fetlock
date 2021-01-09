@@ -112,9 +112,13 @@ impl EsySrcVisitor {
     match typ {
       "github" => {
         let mut it = src.splitn(2, "#");
-        let repo = it.next().unwrap().to_owned();
+        let owner_repo = it.next().unwrap().to_owned();
         let git_ref = it.next().ok_or_else(||anyhow!("ref missing"))?.to_owned();
-        Ok(Src::Github(Github { repo, git_ref }))
+
+        let mut it = owner_repo.splitn(2, "/");
+        let owner = it.next().unwrap().to_owned();
+        let repo = it.next().ok_or_else(||anyhow!("repo missing"))?.to_owned();
+        Ok(Src::Github(Github { owner, repo, git_ref }))
       },
       "archive" => {
         let mut it = src.splitn(2, "#");

@@ -119,6 +119,7 @@ impl LockContext {
 
 #[derive(Debug, Clone)]
 pub struct Github {
+	pub owner: String,
 	pub repo: String,
 	pub git_ref: String,
 }
@@ -140,6 +141,7 @@ pub enum Src {
 
 #[derive(Debug, Clone)]
 pub struct Impl {
+	pub id: Id,
 	pub dep_keys: Vec<Key>,
 	pub src: Src,
 	pub extra: HashMap<String, Expr>,
@@ -166,9 +168,9 @@ impl PartialImpl {
 	pub fn build(self) -> Result<Impl> {
 		match self {
 			Self { id, dep_keys, src, extra } => {
-				let id = id.build();
+				let id = id.build()?;
 				let src = src.ok_or_else(||anyhow!("src required"))?;
-				Ok(Impl { dep_keys, src, extra })
+				Ok(Impl { id, dep_keys, src, extra })
 			}
 		}
 	}

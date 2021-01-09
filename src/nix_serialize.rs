@@ -163,8 +163,11 @@ impl Writeable for LockContext {
 
 impl Writeable for Impl {
   fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
-    let Impl { dep_keys, extra, src } = self;
+    let Impl { id, dep_keys, extra, src } = self;
+    let Id { name, version } = id;
     c.attrs_start()?;
+    c.attr(&"pname", &DrvName::new(name))?;
+    c.attr(&"version", &DrvName::new(version))?;
     c.attr(&"depKeys", dep_keys)?;
     c.attr(&"src", src)?;
     for (k,v) in extra.iter() {
@@ -179,9 +182,9 @@ impl Writeable for Src {
     // TODO a bit inefficient
     let expr = match self {
       Src::Github(github) => {
-        let Github { repo, git_ref } = github;
+        let Github { owner, repo, git_ref } = github;
         let mut attrs = HashMap::new();
-        // TODO break into owner/repo
+        attrs.insert("owner".to_owned(), Box::new(Expr::Str(owner.to_string())));
         attrs.insert("repo".to_owned(), Box::new(Expr::Str(repo.to_string())));
         attrs.insert("rev".to_owned(), Box::new(Expr::Str(git_ref.to_string())));
         Expr::FunCall(FunCall::new(
@@ -204,6 +207,9 @@ impl Writeable for Src {
 }
 
 
+/* Simple delegating implementations for various string-like types and wrappers.
+ * We could achieve this by an impl for Display, but we're not allowed to
+ */
 impl Writeable for Type {
   fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
     c.write_nix_string(self)
@@ -217,6 +223,18 @@ impl Writeable for Key {
 }
 
 impl Writeable for &str {
+  fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
+    c.write_nix_string(self)
+  }
+}
+
+impl Writeable for &String {
+  fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
+    c.write_nix_string(self)
+  }
+}
+
+impl Writeable for DrvName<'_> {
   fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
     c.write_nix_string(self)
   }

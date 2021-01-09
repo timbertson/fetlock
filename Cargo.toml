@@ -15,6 +15,7 @@ serde_yaml = "0.8"
 # pretty = "0.10"
 futures = "0.3"
 anyhow = "1.0"
+tokio = { version = "1.0", features = ["rt", "process"] }
 getopts = "0.2"
 log = "0.4"
 regex = "1.4"

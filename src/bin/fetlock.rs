@@ -1,8 +1,8 @@
 use anyhow::*;
+use log::*;
 use std::env;
 use std::writeln;
 use std::io::Write;
-use std::fs::File;
 use getopts::Options;
 
 use fetlock::esy;
@@ -15,7 +15,7 @@ Usage: {} LOCKFILE [options]
     print!("{}", opts.usage(&brief));
 }
 
-fn main() -> Result<()> {
+fn run() -> Result<()> {
   env_logger::from_env(env_logger::Env::default().default_filter_or("info"))
     .format(|buf, record| {
       let level = buf.default_styled_level(record.level());
@@ -34,11 +34,24 @@ fn main() -> Result<()> {
   if matches.opt_present("h") {
     return Ok(print_usage(&program, opts));
   }
-  println!("Hello, world");
-  
   let lock = esy::load("sample/esy.json")?;
-  println!("{:?}", lock);
-  let mut out = WriteContext::initial(File::create("sample/esy.nix")?);
-  lock.write_to(&mut out)?;
+  debug!("{:?}", lock);
+  let out_path = "sample/esy.nix";
+  fetlock::fs::write_atomically(out_path, |mut out_file| {
+    let mut out = WriteContext::initial(&mut out_file);
+    lock.write_to(&mut out)?;
+    Ok(())
+  })?;
+  info!("Wrote to {}", out_path);
   Ok(())
+}
+
+fn main() -> () {
+	match run() {
+		Ok(()) => (),
+		Err(e) => {
+			error!("{}", e);
+			std::process::exit(1)
+		}
+	}
 }

@@ -1,6 +1,6 @@
 // writes Expr objects to a stream
 
-use std::io::{Result,Write};
+use std::io::{Result,Write,Error,ErrorKind};
 use std::fmt;
 use std::ops::Deref;
 use std::collections::HashMap;
@@ -9,15 +9,15 @@ use lazy_static::lazy_static;
 use crate::lock::*;
 use crate::expr::*;
 
-pub struct WriteContext<W: Write> {
-	file: W,
+pub struct WriteContext<'a, W: Write> {
+	file: &'a mut W,
   indent: usize,
   empty_line: bool, // after `nl`, no indent or content written
 }
 
-impl<W: Write> WriteContext<W> {
-  pub fn initial(file: W) -> Self {
-    Self {
+impl<W: Write> WriteContext<'_, W> {
+  pub fn initial<'a>(file: &'a mut W) -> WriteContext<'a, W> {
+    WriteContext {
       file, indent: 0, empty_line: true
     }
   }
@@ -55,10 +55,33 @@ impl<W: Write> WriteContext<W> {
     self.write_str("\"")
   }
 
-  fn attrs_start(&mut self) -> Result<()> {
-    self.write_str("{")?;
-    self.indent += 1;
-    Ok(())
+  fn bracketed_with(&mut self,
+                    indent: bool,
+                    open: &str,
+                    close: &str,
+                    f: impl Fn(&mut WriteContext<W>) -> Result<()>) -> Result<()> {
+    self.write_str(open)?;
+    if indent {
+      self.indent += 1;
+    }
+    f(self)?;
+    if indent {
+      self.indent -= 1;
+      self.nl()?;
+    }
+    self.write_str(close)
+  }
+
+  fn bracket(&mut self, f: impl Fn(&mut WriteContext<W>) -> Result<()>) -> Result<()> {
+    self.bracketed_with(false, "(", ")", f)
+  }
+
+  fn bracket_attrs(&mut self, f: impl Fn(&mut WriteContext<W>) -> Result<()>) -> Result<()> {
+    self.bracketed_with(true, "{", "}", f)
+  }
+
+  fn bracket_list(&mut self, f: impl Fn(&mut WriteContext<W>) -> Result<()>) -> Result<()> {
+    self.bracketed_with(true, "[", "]", f)
   }
 
   fn attr<K: fmt::Display, V: Writeable>(&mut self, k: &K, v: &V) -> Result<()> {
@@ -77,34 +100,20 @@ impl<W: Write> WriteContext<W> {
     self.write_str(";")
   }
 
-  fn attrs_end(&mut self) -> Result<()> {
-    self.indent -= 1;
+  fn list_item<V: Writeable>(&mut self, v: &V) -> Result<()> {
     self.nl()?;
-    self.write_str("}")
+    // TODO only bracket complex expressions
+    self.bracket(|c| v.write_to(c))
   }
 
-  fn attrs<K: fmt::Display, V: Writeable>(&mut self, attrs: &HashMap<K,V>) -> Result<()> {
-    self.attrs_start()?;
-    for (k,v) in attrs.iter() {
-      self.attr(k, v)?;
-    }
-    self.attrs_end()
+  fn fn_arg<V: Writeable>(&mut self, v: &V) -> Result<()> {
+    self.space()?;
+    // TODO only bracket complex expressions
+    self.bracket(|c| v.write_to(c))
   }
 
-  fn list<V: Writeable>(&mut self, attrs: &Vec<V>) -> Result<()> {
-    self.write_str("[")?;
-    self.indent += 1;
-    for v in attrs.iter() {
-      self.nl()?;
-      // TODO only bracket complex expressions
-      self.write_str("(")?;
-      v.write_to(self)?;
-      self.write_str(")")?;
-    }
-    self.indent -= 1;
-    self.nl()?;
-    self.write_str("]")?;
-    Ok(())
+  fn path_component(&mut self, p: &str) -> Result<()> {
+    self.write(format_args!(".{}", p))
   }
 }
 
@@ -150,59 +159,69 @@ impl Writeable for Expr {
 impl Writeable for LockContext {
   fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
     let LockContext { lock_type, toplevel, extra } = self;
-    c.attrs_start()?;
-    c.attr(&"type", lock_type)?;
-    c.attr(&"version", &Self::version())?;
-    c.attr(&"toplevel", toplevel)?;
-    for (k,v) in extra.iter() {
-      c.attr(k, v)?;
-    }
-    c.attrs_end()
+    c.bracket_attrs(|c| {
+      c.attr(&"type", lock_type)?;
+      c.attr(&"version", &Self::version())?;
+      c.attr(&"toplevel", toplevel)?;
+      for (k,v) in extra.iter() {
+        c.attr(k, v)?;
+      }
+      Ok(())
+    })
   }
 }
 
 impl Writeable for Impl {
   fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
-    let Impl { id, dep_keys, extra, src } = self;
+    let Impl { id, dep_keys, extra, src, digest } = self;
     let Id { name, version } = id;
-    c.attrs_start()?;
-    c.attr(&"pname", &DrvName::new(name))?;
-    c.attr(&"version", &DrvName::new(version))?;
-    c.attr(&"depKeys", dep_keys)?;
-    c.attr(&"src", src)?;
-    for (k,v) in extra.iter() {
-      c.attr(k, v)?;
-    }
-    c.attrs_end()
+    c.bracket_attrs(|c| {
+      c.attr(&"pname", &DrvName::new(name))?;
+      c.attr(&"version", &DrvName::new(version))?;
+      c.attr(&"depKeys", dep_keys)?;
+
+      // let digest: &Sha256 = digest.as_ref().ok_or_else(||
+      //   Error::new(
+      //     ErrorKind::Other,
+      //     format!("implementation is missing a sha256 digest: {:?}", src)
+      //   )
+      // )?;
+
+      // TODO uncomment above code
+      let digest: &Sha256 = digest.as_ref().unwrap_or_else(|| Sha256::dummy());
+      c.attr(&"src", &SrcDigest::new(src, digest))?;
+
+      for (k,v) in extra.iter() {
+        c.attr(k, v)?;
+      }
+      Ok(())
+    })
   }
 }
 
-impl Writeable for Src {
+impl Writeable for SrcDigest<'_> {
   fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
-    // TODO a bit inefficient
-    let expr = match self {
+    let SrcDigest { src, digest } = self;
+    match src {
       Src::Github(github) => {
         let Github { owner, repo, git_ref } = github;
-        let mut attrs = HashMap::new();
-        attrs.insert("owner".to_owned(), Box::new(Expr::Str(owner.to_string())));
-        attrs.insert("repo".to_owned(), Box::new(Expr::Str(repo.to_string())));
-        attrs.insert("rev".to_owned(), Box::new(Expr::Str(git_ref.to_string())));
-        Expr::FunCall(FunCall::new(
-          Expr::Literal("pkgs.fetchFromGitHub".to_owned()),
-          vec!(Expr::AttrSet(attrs)))
-        )
+        c.write_str("pkgs.fetchFromGitHub ")?;
+        c.bracket_attrs(|c| {
+          c.attr(&"owner", &owner)?;
+          c.attr(&"repo", &repo)?;
+          c.attr(&"rev", &git_ref)?;
+          c.attr(&"sha256", digest)
+        })
       },
       Src::Archive(url) => {
-        let mut attrs = HashMap::new();
-        attrs.insert("url".to_owned(), Box::new(Expr::Str(url.0.clone())));
-        Expr::FunCall(FunCall::new(
-          Expr::Literal("pkgs.fetchUrl".to_owned()),
-          vec!(Expr::AttrSet(attrs)))
-        )
+        c.write_str("pkgs.fetchurl ")?;
+        c.bracket_attrs(|c| {
+          c.attr(&"url", &url.0)?;
+          c.attr(&"sha256", digest)
+        })
       },
-      Src::None => Expr::Literal("null".to_owned()), // TODO better error reporting, assert?
-    };
-    expr.write_to(c)
+      Src::None => c.write_str("null"), // TODO better error reporting, assert?
+    }
   }
 }
 
@@ -222,13 +241,25 @@ impl Writeable for Key {
   }
 }
 
+impl<T:Writeable> Writeable for &T {
+  fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
+    self.deref().write_to(c)
+  }
+}
+
+impl Writeable for Sha256 {
+  fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
+    c.write_nix_string(self)
+  }
+}
+
 impl Writeable for &str {
   fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
     c.write_nix_string(self)
   }
 }
 
-impl Writeable for &String {
+impl Writeable for String {
   fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
     c.write_nix_string(self)
   }
@@ -242,7 +273,12 @@ impl Writeable for DrvName<'_> {
 
 impl<V: Writeable> Writeable for Vec<V> {
   fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
-    c.list(self)
+    c.bracket_list(|c| {
+      for v in self.iter() {
+        c.list_item(v)?;
+      }
+      Ok(())
+    })
   }
 }
 
@@ -254,7 +290,13 @@ impl<V: Writeable> Writeable for Box<V> {
 
 impl<K: fmt::Display, V: Writeable> Writeable for HashMap<K, V> {
   fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
-    c.attrs(self)
+    // TODO: sort keys
+    c.bracket_attrs(|c| {
+      for (k,v) in self.iter() {
+        c.attr(k, v)?;
+      }
+      Ok(())
+    })
   }
 }
 
@@ -272,9 +314,10 @@ impl Writeable for Lock {
     c.write_str("in")?;
     c.nl()?;
 
-    c.attrs_start()?;
-    c.attr(&"context", context)?;
-    c.attr(&"implementations", implementations)?;
-    c.attrs_end()
+    c.bracket_attrs(|c| {
+      c.attr(&"context", context)?;
+      c.attr(&"implementations", implementations)?;
+      Ok(())
+    })
   }
 }

@@ -48,9 +48,3 @@ impl fmt::Display for DrvName<'_> {
 		f.write_str(&UNSAFE_CHARS.replace_all(&self.0, "-"))
 	}
 }
-
-/*
-let unsafe_drvname_chars = Str.regexp "[^-_.0-9a-zA-Z]"
-let envvar_of_ident name =	let drvname_safe str =
-var_prefix ^ (Str.global_replace unsafe_envvar_chars "_" name)		(Str.global_replace unsafe_drvname_chars "-" str)
-*/

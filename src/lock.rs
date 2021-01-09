@@ -3,6 +3,7 @@ use std::fmt;
 use std::collections::HashMap;
 use anyhow::*;
 use serde::de::{Deserialize,Deserializer};
+use lazy_static::lazy_static;
 use crate::expr::Expr;
 
 #[derive(Debug, Copy, Clone)]
@@ -18,7 +19,6 @@ impl fmt::Display for Type {
 		})
 	}
 }
-
 
 // newtype for a package key
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -140,10 +140,47 @@ pub enum Src {
 }
 
 #[derive(Debug, Clone)]
+pub struct Sha256(String);
+
+impl Sha256 {
+	pub fn new(s: String) -> Sha256 {
+		Sha256(s)
+	}
+
+	pub fn len() -> usize { 52 }
+
+	pub fn dummy() -> &'static Self {
+    lazy_static! {
+      static ref DUMMY: Sha256 =
+      	Sha256::new(std::iter::repeat("0").take(Sha256::len()).collect::<String>());
+    }
+    &DUMMY
+	}
+}
+
+impl fmt::Display for Sha256 {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		fmt::Display::fmt(&self.0, f)
+	}
+}
+
+pub struct SrcDigest<'a> {
+	pub src: &'a Src,
+	pub digest: &'a Sha256,
+}
+
+impl SrcDigest<'_> {
+	pub fn new<'a>(src: &'a Src, digest: &'a Sha256) -> SrcDigest<'a> {
+		SrcDigest { src, digest }
+	}
+}
+
+#[derive(Debug, Clone)]
 pub struct Impl {
 	pub id: Id,
 	pub dep_keys: Vec<Key>,
 	pub src: Src,
+	pub digest: Option<Sha256>,
 	pub extra: HashMap<String, Expr>,
 }
 
@@ -170,7 +207,7 @@ impl PartialImpl {
 			Self { id, dep_keys, src, extra } => {
 				let id = id.build()?;
 				let src = src.ok_or_else(||anyhow!("src required"))?;
-				Ok(Impl { id, dep_keys, src, extra })
+				Ok(Impl { id, dep_keys, src, extra, digest: None })
 			}
 		}
 	}

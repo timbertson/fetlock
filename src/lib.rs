@@ -6,3 +6,4 @@ mod lock;
 pub use lock::*;
 pub mod esy;
 pub mod err;
+pub mod nix_serialize;

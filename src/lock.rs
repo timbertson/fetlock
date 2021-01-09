@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::fmt;
 use std::collections::HashMap;
 use anyhow::*;
 use serde::de::{Deserialize,Deserializer};
@@ -9,6 +10,16 @@ pub enum Type {
 	Esy
 }
 
+impl fmt::Display for Type {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		use Type::*;
+		f.write_str(match self {
+			Esy => "esy"
+		})
+	}
+}
+
+
 // newtype for a package key
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Key(String);
@@ -16,6 +27,12 @@ pub struct Key(String);
 impl Key {
 	pub fn new(raw: String) -> Key {
 		Key(raw)
+	}
+}
+
+impl fmt::Display for Key {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		fmt::Display::fmt(&self.0, f)
 	}
 }
 
@@ -77,9 +94,9 @@ impl PartialId {
 
 #[derive(Debug, Clone)]
 pub struct LockContext {
-	lock_type: Type,
-	toplevel: Vec<Key>,
-	extra: HashMap<String, Expr>,
+	pub lock_type: Type,
+	pub toplevel: Vec<Key>,
+	pub extra: HashMap<String, Expr>,
 }
 
 impl LockContext {
@@ -107,7 +124,7 @@ pub struct Github {
 }
 
 #[derive(Debug, Clone)]
-pub struct Url(String);
+pub struct Url(pub String);
 impl Url {
 	pub fn new(s: String) -> Url {
 		Url(s)

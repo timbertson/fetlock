@@ -2,9 +2,11 @@ use anyhow::*;
 use std::env;
 use std::writeln;
 use std::io::Write;
+use std::fs::File;
 use getopts::Options;
 
 use fetlock::esy;
+use fetlock::nix_serialize::{WriteContext, Writeable};
 
 fn print_usage(program: &str, opts: Options) {
     let brief = format!("\
@@ -36,5 +38,7 @@ fn main() -> Result<()> {
   
   let lock = esy::load("sample/esy.json")?;
   println!("{:?}", lock);
+  let mut out = WriteContext::initial(File::create("sample/esy.nix")?);
+  lock.write_to(&mut out)?;
   Ok(())
 }

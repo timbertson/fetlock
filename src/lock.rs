@@ -1,21 +1,21 @@
-use std::fmt::Debug;
-use std::fmt;
-use std::collections::HashMap;
-use anyhow::*;
-use serde::de::{Deserialize,Deserializer};
-use lazy_static::lazy_static;
 use crate::expr::Expr;
+use anyhow::*;
+use lazy_static::lazy_static;
+use serde::de::{Deserialize, Deserializer};
+use std::collections::HashMap;
+use std::fmt;
+use std::fmt::Debug;
 
 #[derive(Debug, Copy, Clone)]
 pub enum Type {
-	Esy
+	Esy,
 }
 
 impl fmt::Display for Type {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		use Type::*;
 		f.write_str(match self {
-			Esy => "esy"
+			Esy => "esy",
 		})
 	}
 }
@@ -38,7 +38,8 @@ impl fmt::Display for Key {
 
 impl<'de> Deserialize<'de> for Key {
 	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-	where D: Deserializer<'de>,
+	where
+		D: Deserializer<'de>,
 	{
 		Ok(Key(String::deserialize(deserializer)?))
 	}
@@ -52,11 +53,14 @@ pub struct Id {
 
 impl Id {
 	pub fn version(v: Option<String>) -> String {
-		v.unwrap_or_else(||"development".to_owned())
+		v.unwrap_or_else(|| "development".to_owned())
 	}
 
 	pub fn new(name: String, version: Option<String>) -> Id {
-		Id { name, version: Self::version(version) }
+		Id {
+			name,
+			version: Self::version(version),
+		}
 	}
 }
 
@@ -77,12 +81,15 @@ impl PartialId {
 	pub fn build(self) -> Result<Id> {
 		match self {
 			Self { name, version } => {
-				let name = name.ok_or_else(||anyhow!("name required"))?;
-				Ok(Id { name, version: Id::version(version) })
+				let name = name.ok_or_else(|| anyhow!("name required"))?;
+				Ok(Id {
+					name,
+					version: Id::version(version),
+				})
 			}
 		}
 	}
-	
+
 	pub fn set_name(&mut self, v: String) {
 		self.name = Some(v);
 	}
@@ -107,11 +114,11 @@ impl LockContext {
 	pub fn new(lock_type: Type) -> LockContext {
 		LockContext {
 			lock_type,
-			toplevel: vec!(),
+			toplevel: vec![],
 			extra: HashMap::new(),
 		}
 	}
-	
+
 	pub fn add_toplevel(&mut self, key: Key) {
 		self.toplevel.push(key)
 	}
@@ -146,7 +153,7 @@ impl Src {
 			_ => true,
 		}
 	}
-	
+
 	pub fn extension(&self) -> Option<&str> {
 		match self {
 			Src::Archive(url) => {
@@ -157,7 +164,7 @@ impl Src {
 				} else {
 					None
 				}
-			},
+			}
 			_ => None,
 		}
 	}
@@ -171,14 +178,19 @@ impl Sha256 {
 		Sha256(s)
 	}
 
-	pub fn len() -> usize { 52 }
+	pub fn len() -> usize {
+		52
+	}
 
 	pub fn dummy() -> &'static Self {
-    lazy_static! {
-      static ref DUMMY: Sha256 =
-      	Sha256::new(std::iter::repeat("0").take(Sha256::len()).collect::<String>());
-    }
-    &DUMMY
+		lazy_static! {
+			static ref DUMMY: Sha256 = Sha256::new(
+				std::iter::repeat("0")
+					.take(Sha256::len())
+					.collect::<String>()
+			);
+		}
+		&DUMMY
 	}
 }
 
@@ -229,14 +241,25 @@ impl PartialImpl {
 
 	pub fn build(self) -> Result<Impl> {
 		match self {
-			Self { id, dep_keys, src, extra } => {
+			Self {
+				id,
+				dep_keys,
+				src,
+				extra,
+			} => {
 				let id = id.build()?;
-				let src = src.ok_or_else(||anyhow!("src required"))?;
-				Ok(Impl { id, dep_keys, src, extra, digest: None })
+				let src = src.ok_or_else(|| anyhow!("src required"))?;
+				Ok(Impl {
+					id,
+					dep_keys,
+					src,
+					extra,
+					digest: None,
+				})
 			}
 		}
 	}
-	
+
 	pub fn add_deps(&mut self, dep_keys: &mut Vec<Key>) {
 		self.dep_keys.append(dep_keys);
 	}
@@ -254,9 +277,12 @@ pub struct Lock {
 
 impl Lock {
 	pub fn new(context: LockContext) -> Lock {
-		Lock { context, specs: HashMap::new() }
+		Lock {
+			context,
+			specs: HashMap::new(),
+		}
 	}
-	
+
 	pub fn add_impl(&mut self, k: Key, v: Impl) {
 		self.specs.insert(k, v);
 	}

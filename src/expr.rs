@@ -1,7 +1,7 @@
+use lazy_static::lazy_static;
+use regex::Regex;
 use std::collections::HashMap;
 use std::fmt;
-use regex::Regex;
-use lazy_static::lazy_static;
 
 #[derive(Debug, Clone)]
 pub struct FunCall {
@@ -42,9 +42,9 @@ impl DrvName<'_> {
 
 impl fmt::Display for DrvName<'_> {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    lazy_static! {
-      static ref UNSAFE_CHARS: Regex = Regex::new(r"[^-_.0-9a-zA-Z]").unwrap();
-    }
+		lazy_static! {
+			static ref UNSAFE_CHARS: Regex = Regex::new(r"[^-_.0-9a-zA-Z]").unwrap();
+		}
 		f.write_str(&UNSAFE_CHARS.replace_all(&self.0, "-"))
 	}
 }

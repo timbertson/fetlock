@@ -1,6 +1,7 @@
 // esy.lock backend
 
 use crate::*;
+use crate::esy::command;
 use anyhow::{anyhow, Result};
 use log::*;
 use serde::de::*;
@@ -8,7 +9,11 @@ use std::collections::{HashMap,hash_map};
 use std::fmt;
 
 #[derive(Clone, Debug)]
-pub struct EsyLock(Lock);
+pub struct EsyLock {
+	lock: Lock,
+	meta: HashMap<Key, EsyMeta>,
+}
+
 impl Backend for EsyLock {
 	fn load(path: &str) -> Result<Self> {
 		let context = LockContext::new(lock::Type::Esy);
@@ -19,13 +24,21 @@ impl Backend for EsyLock {
 	}
 	
 	fn specs_mut(&mut self) -> hash_map::ValuesMut<Key, Impl> {
-		self.0.specs.values_mut()
+		self.lock.specs.values_mut()
 	}
 	
 	fn finalize(self) -> Lock {
-		self.0
+		self.lock
 	}
 }
+
+#[derive(Debug, Clone)]
+struct OpamMeta {
+	manifest: command::Manifest,
+}
+
+#[derive(Debug, Clone)]
+struct EsyMeta(Option<OpamMeta>);
 
 struct EsyVisitor;
 
@@ -67,7 +80,7 @@ impl<'de> Visitor<'de> for EsyVisitor {
 				}
 			}
 		}
-		Ok(EsyLock(lock))
+		Ok(EsyLock{ lock, meta: HashMap::new() })
 	}
 }
 
@@ -106,6 +119,7 @@ impl<'de> Visitor<'de> for EsyImplVisitor {
 					let EsySrc { src, manifest } = map.next_value::<EsySrc>()?;
 					partial.set_src(src);
 					if let Some(manifest) = manifest {
+						// TODO may not need to actually expose this
 						partial
 							.extra
 							.insert("manifest".to_owned(), Expr::Str(manifest));

@@ -200,6 +200,7 @@ impl fmt::Display for Sha256 {
 	}
 }
 
+#[derive(Debug, Clone)]
 pub struct SrcDigest<'a> {
 	pub src: &'a Src,
 	pub digest: &'a Sha256,
@@ -219,6 +220,12 @@ pub struct Impl {
 	pub src: Src,
 	pub digest: Option<Sha256>,
 	pub extra: HashMap<String, Expr>,
+}
+
+impl Impl {
+	pub fn src_digest(&self) -> Option<SrcDigest> {
+		self.digest.as_ref().map(|digest| SrcDigest { src: &self.src, digest })
+	}
 }
 
 #[derive(Debug, Clone)]

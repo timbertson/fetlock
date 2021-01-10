@@ -1,7 +1,8 @@
 use crate::esy::backend::EsyImpl;
 use anyhow::*;
 
-enum Manifest {
+#[derive(Debug, Clone)]
+pub enum Manifest {
 	Path(String),
 	Coments(String),
 	Unknown, // TODO can we ever drop this?

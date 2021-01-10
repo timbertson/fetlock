@@ -224,7 +224,10 @@ pub struct Spec {
 
 impl Spec {
 	pub fn src_digest(&self) -> Option<SrcDigest> {
-		self.digest.as_ref().map(|digest| SrcDigest { src: &self.src, digest })
+		self.digest.as_ref().map(|digest| SrcDigest {
+			src: &self.src,
+			digest,
+		})
 	}
 }
 

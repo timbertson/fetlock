@@ -6,9 +6,9 @@ use std::io::Write;
 use std::writeln;
 
 use fetlock::esy;
-use fetlock::Backend;
 use fetlock::fetch;
 use fetlock::nix_serialize::{WriteContext, Writeable};
+use fetlock::Backend;
 
 fn print_usage(program: &str, opts: Options) {
 	let brief = format!(

@@ -1,7 +1,7 @@
 // common interface followed by all backends
-use crate::lock::{Lock, Spec, Key};
-use std::collections::hash_map;
+use crate::lock::{Key, Lock, Spec};
 use anyhow::*;
+use std::collections::hash_map;
 
 pub trait Backend: Sized {
 	fn load(path: &str) -> Result<Self>;

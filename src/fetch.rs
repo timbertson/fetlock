@@ -11,7 +11,7 @@ use std::str;
 use tokio::fs;
 use tokio::process::Command;
 
-pub async fn populate_source_digests<'a, I: Iterator<Item=&'a mut Spec>>(impls: I) -> Result<()> {
+pub async fn populate_source_digests<'a, I: Iterator<Item = &'a mut Spec>>(impls: I) -> Result<()> {
 	let mut stream = futures::stream::iter(impls)
 		.map(|i| ensure_digest(i))
 		.buffer_unordered(8);
@@ -103,7 +103,7 @@ fn warn_output(desc: &'static str, output: &Vec<u8>) {
 					warn!("[{}]: {}", desc, line);
 				}
 			}
-		},
+		}
 		Err(e) => {
 			warn!("[{}]: non-utf8 bytes: {:?}", desc, output);
 		}

@@ -1,11 +1,11 @@
 // esy.lock backend
 
-use crate::*;
 use crate::esy::command;
+use crate::*;
 use anyhow::{anyhow, Result};
 use log::*;
 use serde::de::*;
-use std::collections::{HashMap,hash_map};
+use std::collections::{hash_map, HashMap};
 use std::fmt;
 
 #[derive(Clone, Debug)]
@@ -22,23 +22,32 @@ impl Backend for EsyLock {
 		let lock: EsyLock = serde_json::from_str(&contents)?;
 		Ok(lock)
 	}
-	
+
 	fn specs_mut(&mut self) -> hash_map::ValuesMut<Key, Spec> {
 		self.lock.specs.values_mut()
 	}
-	
+
 	fn finalize(self) -> Lock {
 		self.lock
 	}
 }
 
 #[derive(Debug, Clone)]
-struct OpamMeta {
-	manifest: command::Manifest,
+struct EsyMeta {
+	opam_name: Option<String>,
+	manifest_path: Option<String>,
+	manifest: Option<command::Manifest>,
 }
 
-#[derive(Debug, Clone)]
-struct EsyMeta(Option<OpamMeta>);
+impl EsyMeta {
+	fn empty() -> Self {
+		Self {
+			opam_name: None,
+			manifest_path: None,
+			manifest: None,
+		}
+	}
+}
 
 struct EsyVisitor;
 
@@ -62,17 +71,26 @@ impl<'de> Visitor<'de> for EsyVisitor {
 	where
 		A: MapAccess<'de>,
 	{
-		let mut lock = Lock::new(LockContext::new(lock::Type::Esy));
+		let mut ret = EsyLock {
+			lock: Lock::new(LockContext::new(lock::Type::Esy)),
+			meta: HashMap::new(),
+		};
 		while let Some(key) = map.next_key::<&str>()? {
 			match key {
 				"root" => {
-					lock.context.add_toplevel(map.next_value::<Key>()?);
+					ret.lock.context.add_toplevel(map.next_value::<Key>()?);
 				}
 				"node" => {
-					lock.specs = map
+					ret.lock.specs = map
 						.next_value::<HashMap<Key, EsySpec>>()?
 						.into_iter()
-						.map(|(k, v)| (k, v.0))
+						.map(|(k, v)| {
+							// flatten EsyImpl into Impl, shoving the extra `meta` field into
+							// the EsyLock.meta side channel
+							let EsySpec { spec, meta } = v;
+							ret.meta.insert(k.clone(), meta);
+							(k, spec)
+						})
 						.collect();
 				}
 				_ => {
@@ -80,11 +98,15 @@ impl<'de> Visitor<'de> for EsyVisitor {
 				}
 			}
 		}
-		Ok(EsyLock{ lock, meta: HashMap::new() })
+		Ok(ret)
 	}
 }
 
-pub struct EsySpec(Spec);
+pub struct EsySpec {
+	spec: Spec,
+	meta: EsyMeta,
+}
+
 struct EsySpecVisitor;
 
 impl<'de> Deserialize<'de> for EsySpec {
@@ -108,21 +130,30 @@ impl<'de> Visitor<'de> for EsySpecVisitor {
 		A: MapAccess<'de>,
 	{
 		let mut partial = PartialSpec::empty();
+		let mut meta = EsyMeta::empty();
 		while let Some(key) = map.next_key::<&str>()? {
 			match key {
-				// TODO strip @opam/?
-				// TODO strip opam: from version
 				// TODO populate opamName / opamVersion to enable substs
-				"name" => partial.id.set_name(map.next_value::<String>()?),
-				"version" => partial.id.set_version(map.next_value::<String>()?),
+				"name" => {
+					let name = map.next_value::<&str>()?;
+					let name = if let Some(opam_name) = name.strip_prefix("@opam/") {
+						meta.opam_name = Some(opam_name.to_owned());
+						opam_name.to_owned()
+					} else {
+						name.to_owned()
+					};
+					partial.id.set_name(name)
+				}
+				"version" => {
+					let version = map.next_value::<&str>()?;
+					let version = version.strip_prefix("opam:").unwrap_or(version).to_owned();
+					partial.id.set_version(version);
+				}
 				"source" => {
 					let EsySrc { src, manifest } = map.next_value::<EsySrc>()?;
 					partial.set_src(src);
 					if let Some(manifest) = manifest {
-						// TODO may not need to actually expose this
-						partial
-							.extra
-							.insert("manifest".to_owned(), Expr::Str(manifest));
+						meta.manifest_path = Some(manifest);
 					}
 				}
 				"dependencies" => {
@@ -134,7 +165,7 @@ impl<'de> Visitor<'de> for EsySpecVisitor {
 				}
 			}
 		}
-		err::into_serde(partial.build()).map(EsySpec)
+		err::into_serde(partial.build()).map(|spec| EsySpec { spec, meta })
 	}
 }
 

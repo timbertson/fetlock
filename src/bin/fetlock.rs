@@ -6,6 +6,7 @@ use std::io::Write;
 use std::writeln;
 
 use fetlock::esy;
+use fetlock::Backend;
 use fetlock::fetch;
 use fetlock::nix_serialize::{WriteContext, Writeable};
 
@@ -48,9 +49,10 @@ async fn run() -> Result<()> {
 	if matches.opt_present("h") {
 		return Ok(print_usage(&program, opts));
 	}
-	let mut lock = esy::load("sample/esy.json")?;
-	debug!("{:?}", lock);
-	fetch::populate_source_digests(&mut lock).await?;
+	let mut esy_lock = esy::EsyLock::load("sample/esy.json")?;
+	debug!("{:?}", esy_lock);
+	fetch::populate_source_digests(esy_lock.specs_mut()).await?;
+	let lock = esy_lock.finalize();
 	let out_path = "sample/esy.nix";
 	fetlock::fs::write_atomically(out_path, |mut out_file| {
 		let mut out = WriteContext::initial(&mut out_file);

@@ -1,12 +1,14 @@
 // common interface followed by all backends
-use crate::lock::Lock;
+use crate::lock::{Lock, Impl, Key};
+use std::collections::hash_map;
 use anyhow::*;
 
 pub trait Backend: Sized {
 	fn load(path: &str) -> Result<Self>;
 
-	// access the underlying lock held by Self
-	fn lock_mut(&mut self) -> &mut Lock;
+	// access the underlying specs mutably (for populating sources)
+	// TODO make this generic
+	fn specs_mut(&mut self) -> hash_map::ValuesMut<Key, Impl>;
 
 	// after sources have been resolved, some backends
 	// perform additional mutation.

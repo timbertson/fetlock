@@ -11,8 +11,8 @@ use std::str;
 use tokio::fs;
 use tokio::process::Command;
 
-pub async fn populate_source_digests(lock: &mut Lock) -> Result<()> {
-	let mut stream = futures::stream::iter(lock.specs.values_mut())
+pub async fn populate_source_digests<'a, I: Iterator<Item=&'a mut Impl>>(impls: I) -> Result<()> {
+	let mut stream = futures::stream::iter(impls)
 		.map(|i| ensure_digest(i))
 		.buffer_unordered(8);
 

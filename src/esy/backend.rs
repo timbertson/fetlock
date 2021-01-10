@@ -4,18 +4,29 @@ use crate::*;
 use anyhow::{anyhow, Result};
 use log::*;
 use serde::de::*;
-use std::collections::HashMap;
+use std::collections::{HashMap,hash_map};
 use std::fmt;
 
-pub fn load(path: &str) -> Result<Lock> {
-	let context = LockContext::new(lock::Type::Esy);
-	info!("loading {}", path);
-	let contents = std::fs::read_to_string(path)?;
-	let lock: EsyLock = serde_json::from_str(&contents)?;
-	Ok(lock.0)
+#[derive(Clone, Debug)]
+pub struct EsyLock(Lock);
+impl Backend for EsyLock {
+	fn load(path: &str) -> Result<Self> {
+		let context = LockContext::new(lock::Type::Esy);
+		info!("loading {}", path);
+		let contents = std::fs::read_to_string(path)?;
+		let lock: EsyLock = serde_json::from_str(&contents)?;
+		Ok(lock)
+	}
+	
+	fn specs_mut(&mut self) -> hash_map::ValuesMut<Key, Impl> {
+		self.0.specs.values_mut()
+	}
+	
+	fn finalize(self) -> Lock {
+		self.0
+	}
 }
 
-struct EsyLock(Lock);
 struct EsyVisitor;
 
 impl<'de> Deserialize<'de> for EsyLock {
@@ -60,7 +71,7 @@ impl<'de> Visitor<'de> for EsyVisitor {
 	}
 }
 
-struct EsyImpl(Impl);
+pub struct EsyImpl(Impl);
 struct EsyImplVisitor;
 
 impl<'de> Deserialize<'de> for EsyImpl {

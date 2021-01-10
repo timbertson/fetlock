@@ -139,6 +139,30 @@ pub enum Src {
 	None,
 }
 
+impl Src {
+	pub fn requires_digest(&self) -> bool {
+		match self {
+			Src::None => false,
+			_ => true,
+		}
+	}
+	
+	pub fn extension(&self) -> Option<&str> {
+		match self {
+			Src::Archive(url) => {
+				let mut it = url.0.rsplit("/").next().expect("empty split").rsplit(".");
+				let ext_or_filename = it.next();
+				if let Some(filename) = it.next() {
+					ext_or_filename
+				} else {
+					None
+				}
+			},
+			_ => None,
+		}
+	}
+}
+
 #[derive(Debug, Clone)]
 pub struct Sha256(String);
 
@@ -175,6 +199,7 @@ impl SrcDigest<'_> {
 	}
 }
 
+// TODO rename to Spec
 #[derive(Debug, Clone)]
 pub struct Impl {
 	pub id: Id,
@@ -224,15 +249,15 @@ impl PartialImpl {
 #[derive(Debug, Clone)]
 pub struct Lock {
 	pub context: LockContext,
-	pub implementations: HashMap<Key, Impl>,
+	pub specs: HashMap<Key, Impl>,
 }
 
 impl Lock {
 	pub fn new(context: LockContext) -> Lock {
-		Lock { context, implementations: HashMap::new() }
+		Lock { context, specs: HashMap::new() }
 	}
 	
 	pub fn add_impl(&mut self, k: Key, v: Impl) {
-		self.implementations.insert(k, v);
+		self.specs.insert(k, v);
 	}
 }

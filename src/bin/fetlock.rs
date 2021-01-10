@@ -6,6 +6,7 @@ use std::io::Write;
 use getopts::Options;
 
 use fetlock::esy;
+use fetlock::fetch;
 use fetlock::nix_serialize::{WriteContext, Writeable};
 
 fn print_usage(program: &str, opts: Options) {
@@ -15,7 +16,7 @@ Usage: {} LOCKFILE [options]
     print!("{}", opts.usage(&brief));
 }
 
-fn run() -> Result<()> {
+async fn run() -> Result<()> {
   env_logger::from_env(env_logger::Env::default().default_filter_or("info"))
     .format(|buf, record| {
       let level = buf.default_styled_level(record.level());
@@ -34,8 +35,9 @@ fn run() -> Result<()> {
   if matches.opt_present("h") {
     return Ok(print_usage(&program, opts));
   }
-  let lock = esy::load("sample/esy.json")?;
+  let mut lock = esy::load("sample/esy.json")?;
   debug!("{:?}", lock);
+  fetch::populate_source_digests(&mut lock).await?;
   let out_path = "sample/esy.nix";
   fetlock::fs::write_atomically(out_path, |mut out_file| {
     let mut out = WriteContext::initial(&mut out_file);
@@ -46,11 +48,12 @@ fn run() -> Result<()> {
   Ok(())
 }
 
-fn main() -> () {
-	match run() {
+#[tokio::main]
+async fn main() {
+	match run().await {
 		Ok(()) => (),
 		Err(e) => {
-			error!("{}", e);
+			error!("{:?}", e);
 			std::process::exit(1)
 		}
 	}

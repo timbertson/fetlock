@@ -42,7 +42,7 @@ impl<'de> Visitor<'de> for EsyVisitor {
           lock.context.add_toplevel(map.next_value::<Key>()?);
         }
         "node" => {
-          lock.implementations = map
+          lock.specs = map
             .next_value::<HashMap<Key,EsyImpl>>()?
             .into_iter()
             .map(|(k,v)| (k,v.0))
@@ -78,9 +78,18 @@ impl<'de> Visitor<'de> for EsyImplVisitor {
     let mut partial = PartialImpl::empty();
 		while let Some(key) = map.next_key::<&str>()? {
 			match key {
+        // TODO strip @opam/?
+        // TODO strip opam: from version
+        // TODO populate opamName / opamVersion to enable substs
         "name" => partial.id.set_name(map.next_value::<String>()?),
         "version" => partial.id.set_version(map.next_value::<String>()?),
-        "source" => partial.set_src(map.next_value::<EsySrc>()?.0),
+        "source" => {
+          let EsySrc { src, manifest } = map.next_value::<EsySrc>()?;
+          partial.set_src(src);
+          if let Some(manifest) = manifest {
+            partial.extra.insert("manifest".to_owned(), Expr::Str(manifest));
+          }
+        },
         "dependencies" => {
           let keys = map.next_value::<Vec<String>>()?.into_iter().map(Key::new);
           partial.add_deps(&mut keys.collect())
@@ -92,7 +101,11 @@ impl<'de> Visitor<'de> for EsyImplVisitor {
 	}
 }
 
-struct EsySrc(Src);
+#[derive(Debug, Clone)]
+struct EsySrc {
+  src: Src,
+  manifest: Option<String>,
+}
 
 impl<'de> Deserialize<'de> for EsySrc {
 	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -105,41 +118,57 @@ impl<'de> Deserialize<'de> for EsySrc {
 struct EsySrcVisitor;
 
 impl EsySrcVisitor {
-  fn parse(spec: &str) -> Result<Src> {
-    let mut it = spec.splitn(2, ":");
-    let typ = it.next().ok_or_else(||anyhow!("type missing"))?;
-    let src = it.next().ok_or_else(||anyhow!("invalid spec"))?;
+	fn split_one<'a>(sep: &'static str, spec: &'a str) -> (&'a str, Option<&'a str>) {
+    let mut it = spec.splitn(2, sep);
+    let start = it.next().expect("split returned no results");
+    let end = it.next();
+    (start, end)
+  }
+
+  fn parse(spec: &str) -> Result<EsySrc> {
+    let (typ, src) = Self::split_one(":", spec);
+    let src = src.ok_or_else(||anyhow!("invalid spec"))?;
     match typ {
       "github" => {
-        let mut it = src.splitn(2, "#");
-        let owner_repo = it.next().unwrap().to_owned();
-        let git_ref = it.next().ok_or_else(||anyhow!("ref missing"))?.to_owned();
+        let (owner_repo_manifest, git_ref) = Self::split_one("#", src);
+        let (owner_repo, manifest) = Self::split_one(":", owner_repo_manifest);
 
-        let mut it = owner_repo.splitn(2, "/");
-        let owner = it.next().unwrap().to_owned();
-        let repo = it.next().ok_or_else(||anyhow!("repo missing"))?.to_owned();
-        Ok(Src::Github(Github { owner, repo, git_ref }))
+        let (owner, repo) = Self::split_one("/", owner_repo);
+        let git_ref = git_ref.ok_or_else(||anyhow!("ref missing"))?.to_owned();
+        let owner = owner.to_owned();
+        let repo = repo.ok_or_else(||anyhow!("repo missing"))?.to_owned();
+        let manifest = manifest.map(|m| m.to_owned());
+        Ok(EsySrc { src: Src::Github(Github { owner, repo, git_ref }), manifest })
       },
       "archive" => {
         let mut it = src.splitn(2, "#");
         let url = it.next().unwrap().to_owned();
         // TODO handle (optional?) digest after hash
-        Ok(Src::Archive(Url::new(url)))
+        // TODO handle (optional) manifest
+        Ok(EsySrc { src: Src::Archive(Url::new(url)), manifest: None })
       },
-      "no-source" => Ok(Src::None),
+      "no-source" => Ok(EsySrc { src: Src::None, manifest: None }),
       other => Err(anyhow!("Unknown archive type: {}", other)),
     }
   }
 
-  fn extract(sources: Vec<String>) -> Result<Src> {
-    match sources.first() {
-      Some(source) => {
-        if sources.len() > 1 {
-          debug!("using only first source of array: {:?}", sources);
-        }
-        Self::parse(source)
-      },
-      None => Err(anyhow!("Empty source array")),
+  fn extract(sources: Vec<String>) -> Result<EsySrc> {
+    let mut parsed : Vec<EsySrc> = sources.iter().map(|s| Self::parse(s))
+      .collect::<Result<Vec<EsySrc>>>()?;
+
+    // To aid filetype detection, we prefer sources with an extension
+    parsed.sort_by_key(|v| v.src.extension().unwrap_or("").to_owned());
+    parsed.reverse();
+
+    let mut it = parsed.into_iter();
+
+    if let Some(source) = it.next() {
+      while let Some(extra) = it.next() {
+        debug!("ignoring additional source: {:?}", extra);
+      }
+      Ok(source)
+    } else {
+      Err(anyhow!("Empty source array"))
     }
   }
 }
@@ -163,8 +192,7 @@ impl<'de> Visitor<'de> for EsySrcVisitor {
 		while let Some(key) = map.next_key::<&str>()? {
 		  match key {
         // source.source is an array of archives.
-        // Multiple archives appear to be for redundancy, so we just take the first
-        // (and warn until I confirm this behaviour is correct)
+        // Multiple archives appear to be for redundancy, so we just pick one.
         "source" => {
           let archives = map.next_value::<Vec<String>>()?;
           src = Some(err::into_serde(Self::extract(archives))?);
@@ -181,9 +209,9 @@ impl<'de> Visitor<'de> for EsySrcVisitor {
     }
     err::into_serde(match typ {
       Some(SrcType::Install) => src.ok_or_else(||anyhow!("Missing `source.source`")),
-      Some(SrcType::LinkDev) => Ok(Src::None),
+      Some(SrcType::LinkDev) => Ok(EsySrc { src: Src::None, manifest: None }),
       Some(SrcType::Unknown(u)) => Err(anyhow!("Unknown source type: {}", u)),
       None => Err(anyhow!("Missing `source.type`")),
-    }).map(EsySrc)
+    })
   }
 }

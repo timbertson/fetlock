@@ -15,9 +15,10 @@ serde_yaml = "0.8"
 # pretty = "0.10"
 futures = "0.3"
 anyhow = "1.0"
-tokio = { version = "1.0", features = ["rt", "process", "fs"] }
+tokio = { version = "1.0", features = ["full"] }
 getopts = "0.2"
 sha2 = "0.9"
+hex = "0.4"
 log = "0.4"
 regex = "1.4"
 lazy_static = "1"

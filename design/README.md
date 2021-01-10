@@ -33,14 +33,14 @@ Exported attributes:
  - `context`: an attrset for information about the lock solution itself
    - `type`: the type of project (e.g. opam, gem, npm)
    - `version`: the version of fetlock used
-   - `toplevel`: a list of toplevel implementation keys (i.e. the actual requested packages)
+   - `toplevel`: a list of toplevel spec keys (i.e. the actual requested packages)
    - other attrs provided by backends
- - `implementations`: a flat attrset of implementations. The key is implementation-dependent, but typically `${name}-{version}`
+ - `specs`: a flat attrset of specs. The key is implementation-dependent, but typically `${name}-{version}`
    - Each implementation exports:
      - `name`
      - `version` (may be null)
      - `src`: fetch* expression
-     - `depKeys`: list of attribute names corresponding to keys in `implementations`
+     - `depKeys`: list of attribute names corresponding to keys in `specs`
      - additional attributes may be exported by language-specific backends, e.g:
        - `depexts` (opam)
        - `ocaml-version`
@@ -51,7 +51,7 @@ The loader is written in Nix, and wraps the minimal nix lock format to provide s
 
  - base fixpoint
  - overriding dependencies / sources
-   - `overrideImpl: { name, version } -> attrSet -> attrSet`
+   - `overrideSpec: { name, version } -> attrSet -> attrSet`
    - should overrides be function or attrset-based? function seems more powerful.
  - 
 

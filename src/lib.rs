@@ -9,3 +9,5 @@ pub mod err;
 pub mod fetch;
 pub mod fs;
 pub mod nix_serialize;
+mod backend;
+pub use backend::Backend;

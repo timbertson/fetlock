@@ -1,9 +1,10 @@
 // writes Expr objects to a stream
 
-use std::io::{Result,Write,Error,ErrorKind};
+use std::io::{Result,Write};
 use std::fmt;
 use std::ops::Deref;
 use std::collections::HashMap;
+use log::*;
 use regex::Regex;
 use lazy_static::lazy_static;
 use crate::lock::*;
@@ -180,16 +181,13 @@ impl Writeable for Impl {
       c.attr(&"version", &DrvName::new(version))?;
       c.attr(&"depKeys", dep_keys)?;
 
-      // let digest: &Sha256 = digest.as_ref().ok_or_else(||
-      //   Error::new(
-      //     ErrorKind::Other,
-      //     format!("implementation is missing a sha256 digest: {:?}", src)
-      //   )
-      // )?;
-
-      // TODO uncomment above code
-      let digest: &Sha256 = digest.as_ref().unwrap_or_else(|| Sha256::dummy());
-      c.attr(&"src", &SrcDigest::new(src, digest))?;
+      if let Some(digest) = digest.as_ref() {
+				c.attr(&"src", &SrcDigest::new(src, digest))?;
+      } else {
+      	if src.requires_digest() {
+          warn!("digest missing for source: {:?}", src);
+        }
+      }
 
       for (k,v) in extra.iter() {
         c.attr(k, v)?;
@@ -302,7 +300,7 @@ impl<K: fmt::Display, V: Writeable> Writeable for HashMap<K, V> {
 
 impl Writeable for Lock {
   fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
-    let Lock { context, implementations } = self;
+    let Lock { context, specs } = self;
     c.write_str("final: prev:")?;
     c.nl()?;
     c.write_str("let")?;
@@ -316,7 +314,7 @@ impl Writeable for Lock {
 
     c.bracket_attrs(|c| {
       c.attr(&"context", context)?;
-      c.attr(&"implementations", implementations)?;
+      c.attr(&"specs", specs)?;
       Ok(())
     })
   }

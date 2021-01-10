@@ -2,6 +2,7 @@ use anyhow::*;
 use log::*;
 use tokio::process::Command;
 use tokio::fs;
+use futures::StreamExt;
 use std::str;
 use std::path::PathBuf;
 use std::io::{ErrorKind, Write};
@@ -10,29 +11,56 @@ use regex::Regex;
 use crate::lock::*;
 use crate::nix_serialize::*;
 
-fn cache_filename(src: &Src) -> Result<String> {
-  use sha2::{Sha256, Digest};
+pub async fn populate_source_digests(lock: &mut Lock) -> Result<()> {
+  let mut stream = futures::stream::iter(lock.specs.values_mut())
+    .map(|i| ensure_digest(i))
+    .buffer_unordered(8);
 
+  // TODO surely there's some `drain` method?
+  while let Some(response) = stream.next().await {
+    response?
+  }
+  Ok(())
+}
+
+async fn ensure_digest(implementation: &mut Impl) -> Result<()> {
+	if implementation.src.requires_digest() && implementation.digest.is_none() {
+    let fetched = fetch(&implementation.src).await
+      .with_context(||format!("fetching source for {:?}", &implementation))?;
+    implementation.digest = Some(fetched);
+  }
+  Ok(())
+}
+
+fn cache_filename(src: &Src) -> String {
+  use sha2::{Sha256, Digest};
   let mut hasher = Sha256::new();
   // using Debug formatting is lazy, but easy :shrug:
   hasher.update(format!("{:?}", src));
-  let result = hasher.finalize();
-
-  Ok(String::from_utf8(result.to_vec())?)
+  let mut hex = hex::encode(hasher.finalize());
+  hex.truncate(24);
+  hex
 }
 
 async fn fetch(src: &Src) -> Result<Sha256> {
+  // let cache_dir = Path::new(&format!("{}/.cache/fetlock/digests", home));
+  let cache_filename = cache_filename(src);
+  let cache_shard = &cache_filename[0..2];
+
   let mut cache_dir = PathBuf::from(std::env::var("HOME").unwrap());
   cache_dir.push(".cache/fetlock/digests");
-  // let cache_dir = Path::new(&format!("{}/.cache/fetlock/digests", home));
-  let cache_path = cache_dir.join(cache_filename(src)?);
+  cache_dir.push(cache_shard);
+
+  let cache_path = cache_dir.join(cache_filename);
   debug!("checking cached contents ({:?}) for src {:?}", &cache_path, src);
   match fs::read(&cache_path).await {
     Ok(bytes) => {
+      debug!("bytes: {:?}", bytes);
       Ok(Sha256::new(String::from_utf8(bytes)?.trim_end().to_owned()))
     },
     Err(e) => {
       if e.kind() == ErrorKind::NotFound {
+        info!("fetch: {:?}", src);
         fs::create_dir_all(&cache_dir).await?;
         let digest = do_fetch(src).await?;
         crate::fs::write_atomically(&cache_path,
@@ -40,7 +68,7 @@ async fn fetch(src: &Src) -> Result<Sha256> {
         )?;
         Ok(digest)
       } else {
-        Ok(Err(e)?)
+        Ok(Err(e).with_context(||format!("reading {:?}", &cache_path))?)
       }
     }
   }
@@ -55,8 +83,10 @@ async fn do_fetch(src: &Src) -> Result<Sha256> {
   dummy.write_to(&mut out)?;
   let expr = str::from_utf8(&expr)?;
 
-  let mut command = Command::new("nix-instantiate");
+  let mut command = Command::new("nix-build");
   command
+    .arg("--no-out-link")
+    .arg("--show-trace")
     .arg("--expr")
     .arg(expr)
     .kill_on_drop(true)
@@ -80,9 +110,12 @@ async fn do_fetch(src: &Src) -> Result<Sha256> {
   let mut it = EXPECTED_SHA.captures_iter(stderr);
   let capture = it.next().ok_or_else(||
     anyhow!("Unable to extract expected sha from output:\n{}", stderr)
-  )?;
+  ).with_context(||
+    format!("{:?}", &command)
+  )?[1].to_owned();
+  debug!("first capture: {}", &capture);
   if it.next().is_some() {
     return Err(anyhow!("Extracted multiple expected digests from output:\n{}", stderr));
   }
-  Ok(Sha256::new(capture[1].to_owned()))
+  Ok(Sha256::new(capture))
 }

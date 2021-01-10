@@ -23,7 +23,7 @@ impl Backend for EsyLock {
 		Ok(lock)
 	}
 	
-	fn specs_mut(&mut self) -> hash_map::ValuesMut<Key, Impl> {
+	fn specs_mut(&mut self) -> hash_map::ValuesMut<Key, Spec> {
 		self.lock.specs.values_mut()
 	}
 	
@@ -70,7 +70,7 @@ impl<'de> Visitor<'de> for EsyVisitor {
 				}
 				"node" => {
 					lock.specs = map
-						.next_value::<HashMap<Key, EsyImpl>>()?
+						.next_value::<HashMap<Key, EsySpec>>()?
 						.into_iter()
 						.map(|(k, v)| (k, v.0))
 						.collect();
@@ -84,20 +84,20 @@ impl<'de> Visitor<'de> for EsyVisitor {
 	}
 }
 
-pub struct EsyImpl(Impl);
-struct EsyImplVisitor;
+pub struct EsySpec(Spec);
+struct EsySpecVisitor;
 
-impl<'de> Deserialize<'de> for EsyImpl {
+impl<'de> Deserialize<'de> for EsySpec {
 	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
 	where
 		D: Deserializer<'de>,
 	{
-		deserializer.deserialize_any(EsyImplVisitor)
+		deserializer.deserialize_any(EsySpecVisitor)
 	}
 }
 
-impl<'de> Visitor<'de> for EsyImplVisitor {
-	type Value = EsyImpl;
+impl<'de> Visitor<'de> for EsySpecVisitor {
+	type Value = EsySpec;
 
 	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
 		formatter.write_str("esy package")
@@ -107,7 +107,7 @@ impl<'de> Visitor<'de> for EsyImplVisitor {
 	where
 		A: MapAccess<'de>,
 	{
-		let mut partial = PartialImpl::empty();
+		let mut partial = PartialSpec::empty();
 		while let Some(key) = map.next_key::<&str>()? {
 			match key {
 				// TODO strip @opam/?
@@ -134,7 +134,7 @@ impl<'de> Visitor<'de> for EsyImplVisitor {
 				}
 			}
 		}
-		err::into_serde(partial.build()).map(EsyImpl)
+		err::into_serde(partial.build()).map(EsySpec)
 	}
 }
 

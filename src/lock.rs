@@ -214,7 +214,7 @@ impl SrcDigest<'_> {
 
 // TODO rename to Spec
 #[derive(Debug, Clone)]
-pub struct Impl {
+pub struct Spec {
 	pub id: Id,
 	pub dep_keys: Vec<Key>,
 	pub src: Src,
@@ -222,21 +222,21 @@ pub struct Impl {
 	pub extra: HashMap<String, Expr>,
 }
 
-impl Impl {
+impl Spec {
 	pub fn src_digest(&self) -> Option<SrcDigest> {
 		self.digest.as_ref().map(|digest| SrcDigest { src: &self.src, digest })
 	}
 }
 
 #[derive(Debug, Clone)]
-pub struct PartialImpl {
+pub struct PartialSpec {
 	pub id: PartialId,
 	pub dep_keys: Vec<Key>,
 	pub src: Option<Src>,
 	pub extra: HashMap<String, Expr>,
 }
 
-impl PartialImpl {
+impl PartialSpec {
 	pub fn empty() -> Self {
 		Self {
 			id: PartialId::empty(),
@@ -246,7 +246,7 @@ impl PartialImpl {
 		}
 	}
 
-	pub fn build(self) -> Result<Impl> {
+	pub fn build(self) -> Result<Spec> {
 		match self {
 			Self {
 				id,
@@ -256,7 +256,7 @@ impl PartialImpl {
 			} => {
 				let id = id.build()?;
 				let src = src.ok_or_else(|| anyhow!("src required"))?;
-				Ok(Impl {
+				Ok(Spec {
 					id,
 					dep_keys,
 					src,
@@ -279,7 +279,7 @@ impl PartialImpl {
 #[derive(Debug, Clone)]
 pub struct Lock {
 	pub context: LockContext,
-	pub specs: HashMap<Key, Impl>,
+	pub specs: HashMap<Key, Spec>,
 }
 
 impl Lock {
@@ -290,7 +290,7 @@ impl Lock {
 		}
 	}
 
-	pub fn add_impl(&mut self, k: Key, v: Impl) {
+	pub fn add_impl(&mut self, k: Key, v: Spec) {
 		self.specs.insert(k, v);
 	}
 }

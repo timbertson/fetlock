@@ -11,7 +11,7 @@ use std::str;
 use tokio::fs;
 use tokio::process::Command;
 
-pub async fn populate_source_digests<'a, I: Iterator<Item=&'a mut Impl>>(impls: I) -> Result<()> {
+pub async fn populate_source_digests<'a, I: Iterator<Item=&'a mut Spec>>(impls: I) -> Result<()> {
 	let mut stream = futures::stream::iter(impls)
 		.map(|i| ensure_digest(i))
 		.buffer_unordered(8);
@@ -23,7 +23,7 @@ pub async fn populate_source_digests<'a, I: Iterator<Item=&'a mut Impl>>(impls: 
 	Ok(())
 }
 
-async fn ensure_digest(implementation: &mut Impl) -> Result<()> {
+async fn ensure_digest(implementation: &mut Spec) -> Result<()> {
 	if implementation.src.requires_digest() && implementation.digest.is_none() {
 		let digest = calculate_digest(&implementation.src)
 			.await
@@ -138,7 +138,7 @@ async fn do_prefetch(src: &Src) -> Result<Sha256> {
 	Ok(Sha256::new(capture))
 }
 
-async fn realise_source(spec: &Impl) -> Result<Option<PathBuf>> {
+async fn realise_source(spec: &Spec) -> Result<Option<PathBuf>> {
 	if let Some(src_digest) = spec.src_digest() {
 		info!("realise: {:?}", &spec.src);
 		let mut command = fetch_command(&src_digest)?;

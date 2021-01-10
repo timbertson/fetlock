@@ -179,9 +179,9 @@ impl Writeable for LockContext {
 	}
 }
 
-impl Writeable for Impl {
+impl Writeable for Spec {
 	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
-		let Impl {
+		let Spec {
 			id,
 			dep_keys,
 			extra,

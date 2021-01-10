@@ -32,19 +32,6 @@ async fn run() -> Result<()> {
 
 	let mut opts = Options::new();
 	opts.optflag("h", "help", "print this help menu");
-	opts.optflag("", "full", "reload all track metadata, ignoring `mtime`");
-	opts.optflagopt(
-		"",
-		"export-limit",
-		"per-playlist export limit, in GB (not applied to entire export)",
-		"SIZE",
-	);
-	opts.optflagopt(
-		"",
-		"min-tracks",
-		"minimum track filter for artist subcommand",
-		"NUM",
-	);
 	let matches = opts.parse(&args[1..])?;
 	if matches.opt_present("h") {
 		return Ok(print_usage(&program, opts));

@@ -3,6 +3,7 @@
 use crate::esy::command;
 use crate::fetch;
 use crate::*;
+use crate::nix_serialize::{Writeable, WriteContext};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use log::*;
@@ -11,6 +12,7 @@ use futures::StreamExt;
 use std::borrow::{Borrow,BorrowMut};
 use std::collections::HashMap;
 use std::fmt;
+use std::io::Write;
 
 #[derive(Clone, Debug)]
 pub struct EsyLock {
@@ -129,6 +131,13 @@ impl Borrow<Spec> for EsySpec {
 impl BorrowMut<Spec> for EsySpec {
 	fn borrow_mut(&mut self) -> &mut Spec {
 		&mut self.spec
+	}
+}
+
+// TODO seems like this should be possible as an implementation on Borrow<Spec>, but no luck
+impl Writeable for EsySpec {
+	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> std::io::Result<()> {
+		self.spec.write_to(c)
 	}
 }
 

@@ -8,12 +8,11 @@ use regex::Regex;
 use std::io::{ErrorKind, Write};
 use std::path::PathBuf;
 use std::str;
-use std::fmt::Debug;
 use std::borrow::BorrowMut;
 use tokio::fs;
 use tokio::process::Command;
 
-pub async fn populate_source_digests<S: BorrowMut<Spec> + Clone + Debug>(lock: &mut Lock<S>) -> Result<()> {
+pub async fn populate_source_digests<S: BorrowMut<Spec> + Writeable>(lock: &mut Lock<S>) -> Result<()> {
 	let impls = lock.specs.values_mut().map(|x| x.borrow_mut());
 	let mut stream = futures::stream::iter(impls)
 		.map(|i| ensure_digest(i))

@@ -1,4 +1,5 @@
 use crate::expr::Expr;
+use crate::nix_serialize::Writeable;
 use anyhow::*;
 use lazy_static::lazy_static;
 use serde::de::{Deserialize, Deserializer};
@@ -280,12 +281,12 @@ impl PartialSpec {
 }
 
 #[derive(Debug, Clone)]
-pub struct Lock<Spec: Debug + Clone> {
+pub struct Lock<Spec: Writeable> {
 	pub context: LockContext,
 	pub specs: HashMap<Key, Spec>,
 }
 
-impl<Spec: Debug + Clone> Lock<Spec> {
+impl<Spec: Writeable> Lock<Spec> {
 	pub fn new(context: LockContext) -> Lock<Spec> {
 		Lock {
 			context,

@@ -32,6 +32,7 @@ pub enum Expr {
 	List(Vec<Box<Expr>>),
 }
 
+#[derive(Debug, Clone)]
 pub struct DrvName<'a>(&'a str); // any string used as part of a drvname
 
 impl DrvName<'_> {

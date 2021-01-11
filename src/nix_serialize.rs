@@ -8,7 +8,6 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Debug;
-use std::borrow::Borrow;
 use std::io::{Result, Write};
 use std::ops::Deref;
 
@@ -124,7 +123,7 @@ impl<W: Write> WriteContext<'_, W> {
 	}
 }
 
-pub trait Writeable {
+pub trait Writeable: Debug + Clone {
 	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()>;
 }
 
@@ -263,12 +262,6 @@ impl<T: Writeable> Writeable for &T {
 	}
 }
 
-impl<T: Writeable> Writeable for dyn Borrow<T> {
-	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
-		self.borrow().write_to(c)
-	}
-}
-
 impl Writeable for Sha256 {
 	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
 		c.write_nix_string(self)
@@ -310,7 +303,7 @@ impl<V: Writeable> Writeable for Box<V> {
 	}
 }
 
-impl<K: fmt::Display, V: Writeable> Writeable for HashMap<K, V> {
+impl<K: fmt::Display + Debug + Clone, V: Writeable> Writeable for HashMap<K, V> {
 	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
 		// TODO: sort keys
 		c.bracket_attrs(|c| {

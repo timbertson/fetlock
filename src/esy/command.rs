@@ -4,7 +4,7 @@ use anyhow::*;
 #[derive(Debug, Clone)]
 pub enum Manifest {
 	Path(String),
-	Coments(String),
+	Contents(String),
 	Unknown, // TODO can we ever drop this?
 }
 

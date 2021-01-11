@@ -1,20 +1,26 @@
 // esy.lock backend
 
 use crate::esy::command;
+use crate::fetch;
 use crate::*;
 use anyhow::{anyhow, Result};
+use async_trait::async_trait;
 use log::*;
 use serde::de::*;
-use std::collections::{hash_map, HashMap};
+use futures::StreamExt;
+use std::borrow::{Borrow,BorrowMut};
+use std::collections::HashMap;
 use std::fmt;
 
 #[derive(Clone, Debug)]
 pub struct EsyLock {
-	lock: Lock,
-	meta: HashMap<Key, EsyMeta>,
+	lock: Lock<EsySpec>,
 }
 
+#[async_trait(?Send)]
 impl Backend for EsyLock {
+	type Spec = EsySpec;
+
 	fn load(path: &str) -> Result<Self> {
 		let context = LockContext::new(lock::Type::Esy);
 		info!("loading {}", path);
@@ -22,13 +28,27 @@ impl Backend for EsyLock {
 		let lock: EsyLock = serde_json::from_str(&contents)?;
 		Ok(lock)
 	}
-
-	fn specs_mut(&mut self) -> hash_map::ValuesMut<Key, Spec> {
-		self.lock.specs.values_mut()
+	
+	fn lock_mut(&mut self) -> &mut Lock<Self::Spec> {
+		&mut self.lock
 	}
 
-	fn finalize(self) -> Lock {
-		self.lock
+	async fn finalize(mut self) -> Result<Lock<Self::Spec>> {
+		let specs = self.lock.specs.iter_mut()
+			.filter(|(_, spec)| spec.meta.opam_name.is_some())
+			.map(|(_, spec)| spec);
+
+		let mut stream = futures::stream::iter(specs)
+			.map(|esy_spec| fetch::realise_source(&esy_spec.spec))
+			.buffer_unordered(8);
+
+		// TODO surely there's some `drain` method?
+		while let Some(response) = stream.next().await {
+			let path = response?;
+			info!("TODO: manifest from {:?}", path);
+		}
+		drop(stream);
+		Ok(self.lock)
 	}
 }
 
@@ -73,7 +93,6 @@ impl<'de> Visitor<'de> for EsyVisitor {
 	{
 		let mut ret = EsyLock {
 			lock: Lock::new(LockContext::new(lock::Type::Esy)),
-			meta: HashMap::new(),
 		};
 		while let Some(key) = map.next_key::<&str>()? {
 			match key {
@@ -84,13 +103,6 @@ impl<'de> Visitor<'de> for EsyVisitor {
 					ret.lock.specs = map
 						.next_value::<HashMap<Key, EsySpec>>()?
 						.into_iter()
-						.map(|(k, v)| {
-							// flatten EsyImpl into Impl, shoving the extra `meta` field into
-							// the EsyLock.meta side channel
-							let EsySpec { spec, meta } = v;
-							ret.meta.insert(k.clone(), meta);
-							(k, spec)
-						})
 						.collect();
 				}
 				_ => {
@@ -102,9 +114,22 @@ impl<'de> Visitor<'de> for EsyVisitor {
 	}
 }
 
+#[derive(Debug, Clone)]
 pub struct EsySpec {
 	spec: Spec,
 	meta: EsyMeta,
+}
+
+impl Borrow<Spec> for EsySpec {
+	fn borrow(&self) -> &Spec {
+		&self.spec
+	}
+}
+
+impl BorrowMut<Spec> for EsySpec {
+	fn borrow_mut(&mut self) -> &mut Spec {
+		&mut self.spec
+	}
 }
 
 struct EsySpecVisitor;

@@ -7,6 +7,8 @@ use log::*;
 use regex::Regex;
 use std::collections::HashMap;
 use std::fmt;
+use std::fmt::Debug;
+use std::borrow::Borrow;
 use std::io::{Result, Write};
 use std::ops::Deref;
 
@@ -261,6 +263,12 @@ impl<T: Writeable> Writeable for &T {
 	}
 }
 
+impl<T: Writeable> Writeable for dyn Borrow<T> {
+	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
+		self.borrow().write_to(c)
+	}
+}
+
 impl Writeable for Sha256 {
 	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
 		c.write_nix_string(self)
@@ -314,7 +322,7 @@ impl<K: fmt::Display, V: Writeable> Writeable for HashMap<K, V> {
 	}
 }
 
-impl Writeable for Lock {
+impl<Spec: Writeable + Debug + Clone> Writeable for Lock<Spec> {
 	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
 		let Lock { context, specs } = self;
 		c.write_str("final: prev:")?;

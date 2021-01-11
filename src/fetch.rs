@@ -8,10 +8,13 @@ use regex::Regex;
 use std::io::{ErrorKind, Write};
 use std::path::PathBuf;
 use std::str;
+use std::fmt::Debug;
+use std::borrow::BorrowMut;
 use tokio::fs;
 use tokio::process::Command;
 
-pub async fn populate_source_digests<'a, I: Iterator<Item = &'a mut Spec>>(impls: I) -> Result<()> {
+pub async fn populate_source_digests<S: BorrowMut<Spec> + Clone + Debug>(lock: &mut Lock<S>) -> Result<()> {
+	let impls = lock.specs.values_mut().map(|x| x.borrow_mut());
 	let mut stream = futures::stream::iter(impls)
 		.map(|i| ensure_digest(i))
 		.buffer_unordered(8);
@@ -138,16 +141,16 @@ async fn do_prefetch(src: &Src) -> Result<Sha256> {
 	Ok(Sha256::new(capture))
 }
 
-async fn realise_source(spec: &Spec) -> Result<Option<PathBuf>> {
+pub async fn realise_source(spec: &Spec) -> Result<Option<PathBuf>> {
 	if let Some(src_digest) = spec.src_digest() {
 		info!("realise: {:?}", &spec.src);
 		let mut command = fetch_command(&src_digest)?;
 		let output: std::process::Output = command.output().await?;
-		warn_output("nix stderr", &output.stderr);
 		if output.status.success() {
 			let stdout = String::from_utf8(output.stdout)?;
 			Ok(Some(PathBuf::from(stdout.trim())))
 		} else {
+			warn_output("nix stderr", &output.stderr);
 			Err(anyhow!("Process failed: {:?}", command))
 		}
 	} else {

@@ -280,13 +280,13 @@ impl PartialSpec {
 }
 
 #[derive(Debug, Clone)]
-pub struct Lock {
+pub struct Lock<Spec: Debug + Clone> {
 	pub context: LockContext,
 	pub specs: HashMap<Key, Spec>,
 }
 
-impl Lock {
-	pub fn new(context: LockContext) -> Lock {
+impl<Spec: Debug + Clone> Lock<Spec> {
+	pub fn new(context: LockContext) -> Lock<Spec> {
 		Lock {
 			context,
 			specs: HashMap::new(),

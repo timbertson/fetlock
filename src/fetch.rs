@@ -8,7 +8,9 @@ use regex::Regex;
 use std::io::{ErrorKind, Write};
 use std::path::PathBuf;
 use std::str;
+use std::fmt;
 use std::borrow::BorrowMut;
+use std::process::Stdio;
 use tokio::fs;
 use tokio::process::Command;
 
@@ -60,7 +62,6 @@ async fn calculate_digest(src: &Src) -> Result<Sha256> {
 	);
 	match fs::read(&cache_path).await {
 		Ok(bytes) => {
-			debug!("bytes: {:?}", bytes);
 			Ok(Sha256::new(String::from_utf8(bytes)?.trim_end().to_owned()))
 		}
 		Err(e) => {
@@ -154,5 +155,97 @@ pub async fn realise_source(spec: &Spec) -> Result<Option<PathBuf>> {
 		}
 	} else {
 		Ok(None)
+	}
+}
+
+#[derive(Clone)]
+struct ArchiveListing {
+	first_component: String,
+	raw_listing: String,
+}
+
+impl fmt::Debug for ArchiveListing {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
+		fmt::Debug::fmt(&self.first_component, f)
+	}
+}
+
+#[derive(Debug, Clone)]
+enum SourceType {
+	Archive(ArchiveListing),
+	Directory
+}
+
+#[derive(Debug, Clone)]
+pub struct ExtractSource<'a> {
+	root: &'a PathBuf,
+	source_type: SourceType,
+}
+
+impl ExtractSource<'_> {
+	pub async fn from(root: &PathBuf) -> Result<ExtractSource<'_>> {
+		let source_type = if fs::metadata(root).await?.is_dir() {
+			SourceType::Directory
+		} else {
+			(|| async {
+				let root_str = root.to_str().ok_or_else(||anyhow!("non-utf8 root path"))?;
+				// assume it's some kind of tarball.
+				// first grab the root directory
+				let mut cmd = Command::new("tar");
+				cmd
+					.arg("tf")
+					.arg(root_str)
+					.stdout(Stdio::piped())
+					.kill_on_drop(true);
+				debug!("{:?}", cmd);
+				let output = cmd.spawn()?.wait_with_output().await?;
+				if !output.status.success() {
+					Err(anyhow!("Process failed: {:?}", cmd))
+				} else {
+					let raw_listing = String::from_utf8(output.stdout)?;
+					let first_line = raw_listing.lines().next().ok_or_else(|| anyhow!("no output received from `tar`"))?;
+					let first_component = first_line.split("/").next().expect("empty split").to_owned();
+					Ok(SourceType::Archive(ArchiveListing { raw_listing, first_component }))
+				}
+			})().await.with_context(||format!("getting archive root for {:?}", root))?
+		};
+		Ok(ExtractSource { root, source_type })
+	}
+
+	pub async fn exists(&self, file: &str) -> bool {
+		match &self.source_type {
+			SourceType::Directory => fs::metadata(self.root.join(file)).await.is_ok(),
+			SourceType::Archive(listing) => {
+				let expected = format!("{}/{}", listing.first_component, file);
+				listing.raw_listing.lines().any(|line| line == expected)
+			},
+		}
+	}
+
+	pub async fn file_contents(&self, file: &str) -> Result<String> {
+		let bytes = (|| async move { match &self.source_type {
+			SourceType::Directory => Ok(fs::read(self.root.join(file)).await?),
+			SourceType::Archive(listing) => {
+				let root_str = self.root.to_str().ok_or_else(||anyhow!("non-utf8 root path"))?;
+				let archive_path = format!("{}/{}", listing.first_component, file);
+				let mut cmd = Command::new("tar");
+				cmd
+					.arg("xf")
+					.arg(root_str)
+					.arg("--to-stdout")
+					.arg("--extract")
+					.arg(&archive_path)
+					.stdout(Stdio::piped())
+					.kill_on_drop(true);
+				debug!("{:?}", cmd);
+				let output = cmd.spawn()?.wait_with_output().await?;
+				if !output.status.success() {
+					Err(anyhow!("Process `tar` failed to extract {} from {:?}", file, self))
+				} else {
+					Ok(output.stdout)
+				}
+			},
+		}})().await?;
+		Ok(String::from_utf8(bytes)?)
 	}
 }

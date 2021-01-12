@@ -41,13 +41,30 @@ impl Backend for EsyLock {
 			.map(|(_, spec)| spec);
 
 		let mut stream = futures::stream::iter(specs)
-			.map(|esy_spec| fetch::realise_source(&esy_spec.spec))
+			.map(|esy_spec| async move {
+				if let Some(path) = fetch::realise_source(&esy_spec.spec).await? {
+					let extract = fetch::ExtractSource::from(&path).await?;
+					let manifest_path = if let Some(p) = esy_spec.meta.manifest_path.as_ref() {
+						p.clone()
+					} else {
+						// TODO get manifest from opam repository!?
+						if extract.exists("opam").await {
+							"opam".to_owned()
+						} else {
+							format!("{}.opam", esy_spec.meta.opam_name.as_ref().expect("opam name not defined"))
+						}
+					};
+					let manifest = extract.file_contents(&manifest_path).await?;
+					info!("TODO: manifest from {:?}", manifest);
+				}
+				let ret: anyhow::Result<()> = Ok(());
+				ret
+			})
 			.buffer_unordered(8);
 
 		// TODO surely there's some `drain` method?
 		while let Some(response) = stream.next().await {
-			let path = response?;
-			info!("TODO: manifest from {:?}", path);
+			response?;
 		}
 		drop(stream);
 		Ok(self.lock)
@@ -167,7 +184,6 @@ impl<'de> Visitor<'de> for EsySpecVisitor {
 		let mut meta = EsyMeta::empty();
 		while let Some(key) = map.next_key::<&str>()? {
 			match key {
-				// TODO populate opamName / opamVersion to enable substs
 				"name" => {
 					let name = map.next_value::<&str>()?;
 					let name = if let Some(opam_name) = name.strip_prefix("@opam/") {

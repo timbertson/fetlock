@@ -43,18 +43,18 @@ impl Backend for EsyLock {
 		let mut stream = futures::stream::iter(specs)
 			.map(|esy_spec| async move {
 				if let Some(path) = fetch::realise_source(&esy_spec.spec).await? {
-					let extract = fetch::ExtractSource::from(&path).await?;
-					let manifest_path = if let Some(p) = esy_spec.meta.manifest_path.as_ref() {
-						p.clone()
+					let manifest = if let Some(manifest_path) = esy_spec.meta.manifest_path.as_ref() {
+						let extract = fetch::ExtractSource::from(&path).await?;
+						extract.file_contents(&manifest_path).await?
 					} else {
-						// TODO get manifest from opam repository!?
-						if extract.exists("opam").await {
-							"opam".to_owned()
-						} else {
-							format!("{}.opam", esy_spec.meta.opam_name.as_ref().expect("opam name not defined"))
-						}
+						// TODO get your own checkout, stop hardcoding
+						let repo_path = std::path::PathBuf::from("/Users/tcuthbertson/.cache/opam2nix/repos/opam-repository/");
+						let repo = fetch::ExtractSource::from(&repo_path).await?;
+						let name = esy_spec.meta.opam_name.as_ref().expect("opam name");
+						let version = &esy_spec.spec.id.version;
+						let path = format!("packages/{}/{}.{}/opam", name, name, version);
+						repo.file_contents(&path).await?
 					};
-					let manifest = extract.file_contents(&manifest_path).await?;
 					info!("TODO: manifest from {:?}", manifest);
 				}
 				let ret: anyhow::Result<()> = Ok(());

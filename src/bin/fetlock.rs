@@ -36,6 +36,13 @@ async fn run() -> Result<()> {
 	if matches.opt_present("h") {
 		return Ok(print_usage(&program, opts));
 	}
+
+
+	let opam_contents = std::fs::read_to_string("sample/lwt.opam")?;
+	let opam = esy::opam::Opam::from_str(&opam_contents)?;
+	info!("sample opam: {:?}", opam);
+	Err(anyhow!("TODO"))?;
+
 	let mut esy_lock = esy::EsyLock::load("sample/esy.json")?;
 	debug!("{:?}", esy_lock);
 	fetch::populate_source_digests(esy_lock.lock_mut()).await?;

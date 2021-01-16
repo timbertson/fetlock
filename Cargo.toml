@@ -24,3 +24,7 @@ log = "0.4"
 regex = "1.4"
 lazy_static = "1"
 env_logger = "0.7"
+nom = "6"
+
+nom-tracable = "0.7"
+nom_locate = "3"

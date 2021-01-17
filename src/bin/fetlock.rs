@@ -41,7 +41,20 @@ async fn run() -> Result<()> {
 	let opam_contents = std::fs::read_to_string("sample/lwt.opam")?;
 	let opam = esy::opam::Opam::from_str(&opam_contents)?;
 	info!("sample opam: {:?}", opam);
-	Err(anyhow!("TODO"))?;
+	fn lookup_opam(name: &str) -> Option<fetlock::Key> {
+		match name {
+			"lwt" => Some(fetlock::Key::new("@opam/lwt@opam:4.5.0@542100aa".to_owned())),
+			_ => None,
+		}
+	}
+	let nix_ctx = esy::opam::NixCtx {
+		name: "lwt",
+		lookup_opam: &lookup_opam,
+	};
+	let nix = opam.into_nix(&nix_ctx)?;
+	info!(" -> as nix: {:?}", nix);
+
+	Err(anyhow!("TODO: continue fetlock#main"))?;
 
 	let mut esy_lock = esy::EsyLock::load("sample/esy.json")?;
 	debug!("{:?}", esy_lock);

@@ -40,6 +40,8 @@ build: [
     "-p"
     name
     "src/unix/config/discover.exe"
+    "--dest"
+    "%{lwt}"
     "--"
     "--save"
     "--use-libev"

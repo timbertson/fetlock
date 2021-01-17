@@ -1,6 +1,6 @@
 use anyhow::*;
 use crate::expr;
-use crate::expr::{Expr, IntoNix};
+use crate::expr::Expr;
 use crate::esy::opam::NixCtx;
 use nom::{
   *,
@@ -239,6 +239,34 @@ pub enum Value<'a> {
   Option(Box<ValueWithOption<'a>>),
 }
 
+impl<'a> Value<'a> {
+  pub fn into_nix(self, c: &NixCtx) -> Result<Expr> {
+    use Value::*;
+    Ok(match self {
+      // TODO coalesce interpolated values which collapse to a concrete string value
+      String(x) => {
+        let parts = x.into_iter()
+          .map(|x| x.into_nix(c))
+          .collect::<Result<Vec<expr::StringComponent>>>()?;
+        Expr::StrInterp(parts)
+      },
+      Bool(x) => Expr::Literal(format!("{}", x)),
+      Int(x) => Expr::Literal(format!("{}", x)),
+      Ident(x) => c.resolve(x),
+      Varident(x) => todo!(), // lookup in ctx
+      Op(x) => todo!(), // unsupported
+      Logop(x) => todo!(), // unsupported
+      Option(x) => todo!(), // unsupported
+      List(x) => {
+        let exprs = x.into_iter().map(|x| x.into_nix(c)).collect::<Result<Vec<Expr>>>()?;
+        Expr::List(exprs)
+      }
+    })
+  }
+}
+
+
+
 // <value>         ::= <bool> | <int> | <string> | <ident> | <varident>
 //                   | <operator> | <list> | <option> | "(" <value> ")"
 // For convenience, value is also used to express filters & dependency filters:
@@ -431,31 +459,6 @@ pub fn parse<'a, T, F>(mut p: F, contents: &'a str) -> Result<T>
   })?;
   Ok(ret)
 }
-
-impl<'a> IntoNix for Value<'a> {
-  type Ctx = NixCtx;
-  fn into_nix(self, c: &NixCtx) -> Result<Expr> {
-    use Value::*;
-    Ok(match self {
-      // TODO coalesce interpolated values which collapse to a concrete string value
-      String(x) => {
-        let parts = x.into_iter()
-          .map(|x| x.into_nix(c))
-          .collect::<Result<Vec<expr::StringComponent>>>()?;
-        Expr::StrInterp(parts)
-      },
-      Bool(x) => Expr::Literal(format!("{}", x)),
-      Int(x) => Expr::Literal(format!("{}", x)),
-      Ident(x) => todo!(), // lookup in ctx
-      Varident(x) => todo!(), // lookup in ctx
-      Op(x) => todo!(), // unsupported
-      Logop(x) => todo!(), // unsupported
-      Option(x) => todo!(), // unsupported
-      List(x) => todo!(), // unsupported
-    })
-  }
-}
-
 
 #[cfg(test)]
 mod tests {

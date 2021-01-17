@@ -1,4 +1,3 @@
-use anyhow::*;
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::collections::HashMap;
@@ -37,7 +36,7 @@ pub enum Expr {
 	FunCall(Box<FunCall>),
 	AttrPath(Box<AttrPath>),
 	AttrSet(HashMap<String, Box<Expr>>),
-	List(Vec<Box<Expr>>),
+	List(Vec<Expr>),
 }
 
 #[derive(Debug, Clone)]
@@ -56,9 +55,4 @@ impl fmt::Display for DrvName<'_> {
 		}
 		f.write_str(&UNSAFE_CHARS.replace_all(&self.0, "-"))
 	}
-}
-
-pub trait IntoNix {
-	type Ctx;
-	fn into_nix(self, c: &Self::Ctx) -> Result<Expr>;
 }

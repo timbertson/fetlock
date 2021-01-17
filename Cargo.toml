@@ -1,3 +1,7 @@
+[features]
+default = ["nom-tracable/trace"]
+trace   = ["nom-tracable/trace"]
+
 [package]
 name = "fetlock"
 version = "0.1.0"

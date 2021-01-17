@@ -53,10 +53,14 @@ impl<W: Write> WriteContext<'_, W> {
 	}
 
 	fn write_nix_string<V: fmt::Display>(&mut self, v: &V) -> Result<()> {
-		// TODO escape special chars
 		self.write_str("\"")?;
-		self.write(format_args!("{}", v))?;
+		self.write_nix_string_inner(v)?;
 		self.write_str("\"")
+	}
+
+	fn write_nix_string_inner<V: fmt::Display>(&mut self, v: &V) -> Result<()> {
+		// TODO escape special chars
+		self.write(format_args!("{}", v))
 	}
 
 	fn bracketed_with(
@@ -132,6 +136,21 @@ impl Writeable for Expr {
 		match self {
 			Expr::Literal(s) => c.write_str(s),
 			Expr::Str(s) => c.write_nix_string(s),
+			Expr::StrInterp(s) => {
+				c.write_str("\"")?;
+				for part in s {
+					match part {
+						StringComponent::Literal(s) =>
+							c.write_nix_string_inner(s)?,
+						StringComponent::Expr(e) => {
+							c.write_str("${")?;
+							e.write_to(c)?;
+							c.write_str("}")?;
+						},
+					}
+				}
+				Ok(())
+			},
 			Expr::Identifier(s) => c.write_str(s),
 			Expr::AttrSet(h) => h.write_to(c),
 			Expr::FunCall(fc) => {

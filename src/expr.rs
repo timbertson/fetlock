@@ -1,3 +1,4 @@
+use anyhow::*;
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::collections::HashMap;
@@ -22,9 +23,16 @@ pub struct AttrPath {
 }
 
 #[derive(Debug, Clone)]
+pub enum StringComponent {
+	Literal(String),
+	Expr(Expr),
+}
+
+#[derive(Debug, Clone)]
 pub enum Expr {
 	Literal(String),
 	Str(String),
+	StrInterp(Vec<StringComponent>),
 	Identifier(String),
 	FunCall(Box<FunCall>),
 	AttrPath(Box<AttrPath>),
@@ -48,4 +56,9 @@ impl fmt::Display for DrvName<'_> {
 		}
 		f.write_str(&UNSAFE_CHARS.replace_all(&self.0, "-"))
 	}
+}
+
+pub trait IntoNix {
+	type Ctx;
+	fn into_nix(self, c: &Self::Ctx) -> Result<Expr>;
 }

@@ -159,16 +159,16 @@ fn triplequote_string(s: Src) -> Res<Vec<StringComponent>> {
     |(content, _delim)| content)(s)
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StringComponent<'a> {
-  Literal(String),
+  Char(char),
   Expr(Value<'a>),
 }
 
 fn string_component(s: Src) -> Res<StringComponent> {
   alt((
     map(interpolation, StringComponent::Expr),
-    map(many1(string_char), |v| StringComponent::Literal(v.into_iter().collect()))
+    map(string_char, StringComponent::Char),
   ))(s)
 }
 
@@ -176,7 +176,8 @@ impl StringComponent<'_> {
   fn into_nix(self, c: &NixCtx) -> Result<expr::StringComponent> {
     use StringComponent::*;
     match self {
-      Literal(s) => Ok(expr::StringComponent::Literal(s)),
+      // TODO this is inefficient, we should coalesce chars
+      Char(c) => Ok(expr::StringComponent::Literal(c.to_string())),
       Expr(e) => Ok(expr::StringComponent::Expr(e.into_nix(c)?)),
     }
   }
@@ -212,20 +213,20 @@ fn discard<'a, F: 'a, O>(inner: F) -> impl FnMut(Src<'a>) -> Res<()>
   map(inner, |_| ())
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Logop<'a> {
   pub a: Value<'a>,
   pub op: Src<'a>,
   pub b: Value<'a>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValueWithOption<'a> {
   pub value: Value<'a>,
   pub options: Vec<Value<'a>>
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value<'a> {
   String(Vec<StringComponent<'a>>),
   Bool(bool),
@@ -244,6 +245,7 @@ impl<'a> Value<'a> {
     use Value::*;
     Ok(match self {
       // TODO coalesce interpolated values which collapse to a concrete string value
+      // TODO coalesce adjacent char values
       String(x) => {
         let parts = x.into_iter()
           .map(|x| x.into_nix(c))
@@ -333,7 +335,7 @@ fn value(s: Src) -> Res<Value> {
   )(s)
 }
 
-// #[derive(Debug, Clone)]
+// #[derive(Debug, Clone, PartialEq, Eq)]
 // pub enum ValueSuffix<'a> {
 //   Logop(Src<'a>, Value<'a>),
 //   Option(Vec<Value<'a>>),
@@ -355,7 +357,7 @@ fn list(s: Src) -> Res<Vec<Value>> {
   )(s)
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FieldBinding<'a> {
   pub ident: Src<'a>,
   pub value: Value<'a>,
@@ -392,13 +394,13 @@ fn comment(s: Src) -> Res<()> {
   alt((ocaml_comment, line_comment))(s)
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FileItem<'a> {
   Section(Section<'a>),
   FieldBinding(FieldBinding<'a>),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Section<'a> {
   pub ident: Src<'a>,
   pub string: Option<Vec<StringComponent<'a>>>,
@@ -426,7 +428,7 @@ fn file_contents(s: Src) -> Res<Vec<FileItem>> {
     map(section, FileItem::Section))))(s)
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Term<'a> {
   String(Vec<StringComponent<'a>>),
   Varident(Src<'a>)
@@ -473,16 +475,38 @@ mod tests {
       }
   }
 
+  fn p<'a, T, F>(p: F, contents: &'a str) -> T
+    where F: FnMut(Src<'a>) -> Res<T>, T: std::fmt::Debug {
+      match parse(all_consuming(p), contents) {
+        Ok(result) => {
+          info!("{:?}", result);
+          result
+        },
+        Err(p) => panic!(format!("{}", p)),
+      }
+  }
+
   #[test]
   fn test_string_subparsers() {
     valid(quote_string, r#""hello""#);
     valid(triplequote_string, r#""""hello""""#);
+    valid(interpolation, "%{1}%");
+    valid(interpolation, "%{id}%");
   }
 
   #[test]
   fn test_string() {
     valid(string, r#""""hello""""#);
     valid(string, r#""hello""#);
+    use StringComponent::*;
+    assert_eq!(
+      p(string, "\"%{1}%\""),
+      vec!(Expr(Value::Int(1)))
+    );
+    assert_eq!(
+      p(string, "\"hi %{there}%\""),
+      vec!(Char('h'), Char('i'), Char(' '), Expr(Value::Ident("there")))
+    );
   }
 
   #[test]

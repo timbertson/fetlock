@@ -71,6 +71,10 @@ impl<W: Write> WriteContext<'_, W> {
 		self.write(format_args!("{}", s))
 	}
 
+	fn write_char(&mut self, c: char) -> Result<()> {
+		self.write(format_args!("{}", c))
+	}
+
 	fn space(&mut self) -> Result<()> {
 		if !self.empty_line {
 			write!(self.file, " ")?
@@ -128,33 +132,31 @@ impl<W: Write> WriteContext<'_, W> {
 				while let Some(ch) = chars.next() {
 					match ch {
 						'\n' => {
-							// apply newline with indentation
 							self.nl()?;
-							self.write(format_args!(""))?;
 						},
 						'$' => {
 							let next = chars.next();
 							if next == Some('{') {
-								write!(self.file, "{}", "''${")?;
+								self.write_str("''${")?;
 							} else {
-								write!(self.file, "{}", ch)?;
+								self.write_char(ch)?;
 								if let Some(n) = next {
-									write!(self.file, "{}", n)?;
+									self.write_char(n)?;
 								}
 							}
 						},
 						'\'' => {
 							let next = chars.next();
 							if next == Some('\'') {
-								write!(self.file, "{}", "'''")?;
+								self.write_str("'''")?;
 							} else {
-								write!(self.file, "{}", ch)?;
+								self.write_char(ch)?;
 								if let Some(n) = next {
-									write!(self.file, "{}", n)?;
+									self.write_char(n)?;
 								}
 							}
 						},
-						other => write!(self.file, "{}", ch)?,
+						other => self.write_char(ch)?,
 					}
 				}
 				Ok(())

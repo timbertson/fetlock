@@ -53,6 +53,11 @@ async fn run() -> Result<()> {
 	};
 	let nix = opam.into_nix(&nix_ctx)?;
 	info!(" -> as nix: {:?}", nix);
+	let mut out_buf = Vec::new();
+	let mut out = WriteContext::initial(&mut out_buf);
+	nix.expr().write_to(&mut out)?;
+	info!("Nix:\n{}", String::from_utf8(out_buf)?);
+
 
 	Err(anyhow!("TODO: continue fetlock#main"))?;
 

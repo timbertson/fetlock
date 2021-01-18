@@ -17,6 +17,37 @@ pub struct WriteContext<'a, W: Write> {
 	empty_line: bool, // after `nl`, no indent or content written
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum StringMode {
+	DoubleQuote,
+	Multiline,
+}
+
+impl StringMode {
+	pub fn preferred(s: &str) -> StringMode {
+		if s.contains('\n') {
+			StringMode::Multiline
+		} else {
+			StringMode::DoubleQuote
+		}
+	}
+	
+	pub fn preferred_v(s: &Vec<StringComponent>) -> StringMode {
+		let mut preferred = s.iter().map(|part|
+			match part {
+				StringComponent::Literal(s) => Self::preferred(s),
+				StringComponent::Expr(_) => StringMode::DoubleQuote,
+			}
+		);
+		if preferred.any(|p| p == StringMode::Multiline) {
+			StringMode::Multiline
+		} else {
+			StringMode::DoubleQuote
+		}
+	}
+}
+
+
 impl<W: Write> WriteContext<'_, W> {
 	pub fn initial<'a>(file: &'a mut W) -> WriteContext<'a, W> {
 		WriteContext {
@@ -52,15 +83,105 @@ impl<W: Write> WriteContext<'_, W> {
 		write!(self.file, "\n")
 	}
 
-	fn write_nix_string<V: fmt::Display>(&mut self, v: &V) -> Result<()> {
-		self.write_str("\"")?;
-		self.write_nix_string_inner(v)?;
-		self.write_str("\"")
+	fn write_nix_string_inner<V: fmt::Display>(&mut self, mode: StringMode, v: &V) -> Result<()> {
+		let s = format!("{}", v);
+		match mode {
+			StringMode::DoubleQuote => {
+				/*
+				The special characters " and \ and the character sequence ${ must be escaped by prefixing them with a backslash (\).
+				Newlines, carriage returns and tabs can be written as \n, \r and \t, respectively.
+				*/
+				let mut chars = s.chars();
+				while let Some(ch) = chars.next() {
+					match ch {
+						'\n' => write!(self.file, "\\n")?,
+						'\r' => write!(self.file, "\\r")?,
+						'\t' => write!(self.file, "\\t")?,
+						'"' | '\\' => {
+							write!(self.file, "\\")?;
+							write!(self.file, "{}", ch)?;
+						},
+						'$' => {
+							let next = chars.next();
+							if next == Some('{') {
+								write!(self.file, "{}", "\\${")?;
+							} else {
+								write!(self.file, "{}", ch)?;
+								if let Some(n) = next {
+									write!(self.file, "{}", n)?;
+								}
+							}
+						},
+						other => write!(self.file, "{}", ch)?,
+					}
+				}
+				Ok(())
+			},
+			StringMode::Multiline => {
+				/* TODO
+				$ can be escaped by prefixing it with '' (that is, two single quotes), i.e., ''$.
+				'' can be escaped by prefixing it with ', i.e., '''.
+				$ removes any special meaning from the following  (i.e. $$).
+				Linefeed, carriage-return and tab characters can be written as ''\n, ''\r, ''\t, and ''\ escapes any other character.
+				*/
+				let mut chars = s.chars();
+				while let Some(ch) = chars.next() {
+					match ch {
+						'\n' => {
+							// apply newline with indentation
+							self.nl()?;
+							self.write(format_args!(""))?;
+						},
+						'$' => {
+							let next = chars.next();
+							if next == Some('{') {
+								write!(self.file, "{}", "''${")?;
+							} else {
+								write!(self.file, "{}", ch)?;
+								if let Some(n) = next {
+									write!(self.file, "{}", n)?;
+								}
+							}
+						},
+						'\'' => {
+							let next = chars.next();
+							if next == Some('\'') {
+								write!(self.file, "{}", "'''")?;
+							} else {
+								write!(self.file, "{}", ch)?;
+								if let Some(n) = next {
+									write!(self.file, "{}", n)?;
+								}
+							}
+						},
+						other => write!(self.file, "{}", ch)?,
+					}
+				}
+				Ok(())
+			},
+		}
 	}
 
-	fn write_nix_string_inner<V: fmt::Display>(&mut self, v: &V) -> Result<()> {
-		// TODO escape special chars
-		self.write(format_args!("{}", v))
+	fn write_nix_string<V: fmt::Display>(&mut self, v: &V) -> Result<()> {
+		let mode = StringMode::DoubleQuote;
+		self.wrap_nix_string(mode, |c| {
+			c.write_nix_string_inner(mode, v)
+		})
+	}
+
+	fn wrap_nix_string(
+		&mut self,
+		mode: StringMode,
+		f: impl Fn(&mut WriteContext<W>) -> Result<()>,
+	) -> Result<()> {
+		match mode {
+			StringMode::DoubleQuote => {
+				self.bracketed_with(false, "\"", "\"", f)
+			},
+			StringMode::Multiline => {
+				self.bracketed_with(true, "''", "''", f)
+			},
+		}
 	}
 
 	fn bracketed_with(
@@ -135,21 +256,28 @@ impl Writeable for Expr {
 	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
 		match self {
 			Expr::Literal(s) => c.write_str(s),
-			Expr::Str(s) => c.write_nix_string(s),
+			Expr::Str(s) => {
+				let mode = StringMode::preferred(&s);
+				c.wrap_nix_string(mode, |c| {
+					c.write_nix_string_inner(mode, s)
+				})
+			},
 			Expr::StrInterp(s) => {
-				c.write_str("\"")?;
-				for part in s {
-					match part {
-						StringComponent::Literal(s) =>
-							c.write_nix_string_inner(s)?,
-						StringComponent::Expr(e) => {
-							c.write_str("${")?;
-							e.write_to(c)?;
-							c.write_str("}")?;
-						},
+				let mode = StringMode::preferred_v(&s);
+				c.wrap_nix_string(mode, |c| {
+					for part in s {
+						match part {
+							StringComponent::Literal(s) =>
+								c.write_nix_string_inner(mode, s)?,
+							StringComponent::Expr(e) => {
+								c.write_str("${")?;
+								e.write_to(c)?;
+								c.write_str("}")?;
+							},
+						}
 					}
-				}
-				Ok(())
+					Ok(())
+				})
 			},
 			Expr::Identifier(s) => c.write_str(s),
 			Expr::AttrSet(h) => h.write_to(c),

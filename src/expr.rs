@@ -30,6 +30,7 @@ pub enum StringComponent {
 #[derive(Debug, Clone)]
 pub enum Expr {
 	Literal(String),
+	Bool(bool),
 	// TODO combine two string types
 	Str(String),
 	StrInterp(Vec<StringComponent>),

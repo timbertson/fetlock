@@ -258,6 +258,7 @@ impl Writeable for Expr {
 	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
 		match self {
 			Expr::Literal(s) => c.write_str(s),
+			Expr::Bool(b) => c.write(format_args!("{}", b)),
 			Expr::Str(s) => {
 				let mode = StringMode::preferred(&s);
 				c.wrap_nix_string(mode, |c| {

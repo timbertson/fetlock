@@ -1,7 +1,7 @@
 use anyhow::*;
 use std::collections::HashMap;
 use crate::esy::opam_parser::*;
-use crate::{Expr, Key};
+use crate::{Expr, Key, FunCall};
 
 // public struct, containing only what we need for fetlock purposes
 #[derive(Clone, Debug)]
@@ -11,18 +11,93 @@ pub struct Opam<'a> {
   depexts: Vec<Value<'a>>,
 }
 
-pub struct NixCtx<'a> {
-  pub name: &'a str,
-  pub lookup_opam: &'a dyn Fn(&str) -> Option<Key>,
+pub trait NixCtx<'a> {
+  fn name(&self) -> &'a str;
+  fn lookup_opam(&self, opam_name: &'a str) -> Option<&'a Key>;
 }
 
-impl NixCtx<'_> {
-  pub fn resolve(&self, ident: &str) -> Expr {
-    match ident {
-      "name" => Expr::Str(self.name.to_owned()),
-      "jobs" => Expr::Str("$NIX_BUILD_CORES".to_owned()),
-      _ => panic!(format!("TODO resolve {}", ident)),
+pub struct NixCtxMap<'a> {
+  name: &'a str,
+  map: &'a HashMap<String, Key>
+}
+
+impl<'a> NixCtx<'a> for NixCtxMap<'a> {
+  fn name(&self) -> &'a str { self.name }
+  fn lookup_opam(&self, opam_name: &str) -> Option<&'a Key> {
+    self.map.get(opam_name)
+  }
+}
+
+pub enum VarScope<'a> {
+  Global,
+  SelfScope,
+  Package(Option<&'a Key>),
+}
+
+pub struct Ctx;
+impl Ctx {
+  // for testing
+  pub fn from_map<'a>(name: &'a str, map: &'a HashMap<String, Key>) -> NixCtxMap<'a> {
+    NixCtxMap { name, map }
+  }
+
+  pub fn resolve<'a, 'expr: 'a, Ctx: NixCtx<'a>>(ctx: &Ctx, scope: VarScope<'a>, ident: &'expr str) -> Expr {
+    match scope {
+      VarScope::Global => match ident {
+        // re-resolve specials against Self
+        "name" => Self::resolve(ctx, VarScope::SelfScope, ident),
+        "version" => Self::resolve(ctx, VarScope::SelfScope, ident),
+
+        "jobs" => Expr::Str("$NIX_BUILD_CORES".to_owned()),
+        other if other == ctx.name() => Expr::Str("$out".to_owned()),
+        other => {
+          match ctx.lookup_opam(other) {
+            Some(key) => Expr::FunCall(Box::new(FunCall {
+              subject: Expr::Literal("getDrv".to_owned()),
+              args: vec!(Expr::Str(key.as_str().to_owned()))
+            })),
+            None => panic!("TODO unknown global: {:?}", other),
+          }
+        }
+      },
+      VarScope::SelfScope => match ident {
+        "name" => Expr::Str(ctx.name().to_owned()),
+        "version" => todo!(),
+        other => panic!("TODO unknown self: {:?}", other),
+      },
+      VarScope::Package(key) => match ident {
+        "installed" => Expr::Str(format!("{}", key.is_some())), // TODO this only works as a flag, not a filter
+        other => match key {
+          None => todo!("need to suppress entire surrounding expression (undefined)"),
+          Some(key) => match ident {
+            other => panic!("TODO unknown pakckage[{:?}] var: {:?}", key, other),
+          }
+        }
+      },
     }
+  }
+
+  fn scope<'a, 'expr : 'a, Ctx: NixCtx<'a>>(ctx: &Ctx, scope: &'expr str) -> VarScope<'a> {
+    match scope {
+      "_" => VarScope::SelfScope,
+      name if name == ctx.name() => VarScope::SelfScope,
+      other => VarScope::Package(ctx.lookup_opam(other))
+    }
+  }
+
+  pub fn resolve_ident<'a, Ctx: NixCtx<'a>>(ctx: &Ctx, ident: &'a str) -> Expr {
+    Self::resolve(ctx, VarScope::Global, ident)
+  }
+
+  pub fn resolve_varident<'a, Ctx: NixCtx<'a>>(ctx: &Ctx, ident: &Varident<'a>) -> Expr {
+    if ident.additional_scopes.len() > 0 {
+      todo!("support additional scopes");
+    }
+    let scope = match ident.scope {
+      "_" => VarScope::SelfScope,
+      name => Self::scope(ctx, name),
+    };
+    Self::resolve(ctx, scope, ident.ident)
   }
 }
 
@@ -112,12 +187,12 @@ impl<'a> Opam<'a> {
     Ok(Expr::StrInterp(buf))
   }
 
-  pub fn into_nix(self, ctx: &NixCtx) -> Result<Nix> {
+  pub fn into_nix<'c, Ctx: NixCtx<'c>>(self, ctx: &Ctx) -> Result<Nix> where 'a : 'c {
     let Self { build, install, depexts } = self;
     Ok(Nix {
-      build: build.map_or(Ok(None), |x| x.into_nix(&ctx).and_then(Self::bash_of_commands).map(Some))?,
-      install: install.map_or(Ok(None), |x| x.into_nix(&ctx).and_then(Self::bash_of_commands).map(Some))?,
-      depexts: depexts.into_iter().map(|x| x.into_nix(&ctx)).collect::<Result<Vec<Expr>>>()?,
+      build: build.map_or(Ok(None), |x| x.into_nix(ctx).and_then(Self::bash_of_commands).map(Some))?,
+      install: install.map_or(Ok(None), |x| x.into_nix(ctx).and_then(Self::bash_of_commands).map(Some))?,
+      depexts: depexts.into_iter().map(|x| x.into_nix(ctx)).collect::<Result<Vec<Expr>>>()?,
     })
   }
 }

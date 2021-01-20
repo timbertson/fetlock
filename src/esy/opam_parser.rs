@@ -1,7 +1,7 @@
 use anyhow::*;
 use crate::expr;
 use crate::expr::Expr;
-use crate::esy::opam::NixCtx;
+use crate::esy::opam::{NixCtx, Ctx};
 use nom::{
   *,
   error::VerboseError,
@@ -73,13 +73,24 @@ fn ident(s: Src) -> Res<Src> {
   ))(s)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Varident<'a> {
+  pub scope: Src<'a>,
+  pub additional_scopes: Vec<Src<'a>>,
+  pub ident: Src<'a>,
+}
+
 // <varident>      ::= [ ( <ident> | "_" ) { "+" ( <ident> | "_" ) }* : ] <ident>
-fn varident(s: Src) -> Res<Src> {
-  recognize(
+// TODO treat a+b+c:d as a:d & b:d & c:d
+fn varident(s: Src) -> Res<Varident> {
+  map(
     tuple((
       alt((ident, underscore_s)),
-      many0(tuple((plus, alt((ident, underscore_s)))))
-    ))
+      many0(preceded(plus, alt((ident, underscore_s)))),
+      char(':'),
+      ident
+    )),
+    |(scope, additional_scopes, _, ident)| Varident { scope, additional_scopes, ident }
   )(s)
 }
 
@@ -172,8 +183,8 @@ fn string_component(s: Src) -> Res<StringComponent> {
   ))(s)
 }
 
-impl StringComponent<'_> {
-  fn into_nix(self, c: &NixCtx) -> Result<expr::StringComponent> {
+impl<'a> StringComponent<'a> {
+  fn into_nix<'c, Ctx: NixCtx<'c>>(self, c: &Ctx) -> Result<expr::StringComponent> where 'a : 'c {
     use StringComponent::*;
     match self {
       // TODO this is inefficient, we should coalesce chars
@@ -232,7 +243,7 @@ pub enum Value<'a> {
   Bool(bool),
   Int(isize),
   Ident(Src<'a>),
-  Varident(Src<'a>),
+  Varident(Varident<'a>),
   Op(Src<'a>),
   List(Vec<Value<'a>>),
   // Composite(Box<Value<'a>>, Vec<ValueSuffix<'a>>),
@@ -241,7 +252,7 @@ pub enum Value<'a> {
 }
 
 impl<'a> Value<'a> {
-  pub fn into_nix(self, c: &NixCtx) -> Result<Expr> {
+  pub fn into_nix<'c, C: NixCtx<'c>>(self, c: &C) -> Result<Expr> where 'a: 'c {
     use Value::*;
     Ok(match self {
       // TODO coalesce interpolated values which collapse to a concrete string value
@@ -254,8 +265,8 @@ impl<'a> Value<'a> {
       },
       Bool(x) => Expr::Literal(format!("{}", x)),
       Int(x) => Expr::Literal(format!("{}", x)),
-      Ident(x) => c.resolve(x),
-      Varident(x) => todo!(), // lookup in ctx
+      Ident(x) => Ctx::resolve_ident(c, x),
+      Varident(x) => Ctx::resolve_varident(c, &x),
       Op(x) => todo!(), // unsupported
       Logop(x) => todo!(), // unsupported
       Option(x) => todo!(), // unsupported
@@ -304,8 +315,8 @@ fn value(s: Src) -> Res<Value> {
         map(string, Value::String),
         map(bool_, Value::Bool),
         map(int, Value::Int),
-        map(ident, Value::Ident),
         map(varident, Value::Varident),
+        map(ident, Value::Ident),
         map(binary_op, Value::Op),
         map(unary_op, Value::Op),
         // map(logop, Value::Op),
@@ -431,7 +442,7 @@ fn file_contents(s: Src) -> Res<Vec<FileItem>> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Term<'a> {
   String(Vec<StringComponent<'a>>),
-  Varident(Src<'a>)
+  Varident(Varident<'a>)
 }
 // <term>          ::= <string> | <varident>
 fn term(s: Src) -> Res<Term> {
@@ -492,6 +503,9 @@ mod tests {
     valid(triplequote_string, r#""""hello""""#);
     valid(interpolation, "%{1}%");
     valid(interpolation, "%{id}%");
+    valid(varident, "lwt:installed");
+    valid(interpolation, "%{lwt:installed}%");
+    valid(interpolation, "%{conf-m4:installed}%");
   }
 
   #[test]

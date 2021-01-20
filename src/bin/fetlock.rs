@@ -41,17 +41,10 @@ async fn run() -> Result<()> {
 	let opam_contents = std::fs::read_to_string("sample/lwt.opam")?;
 	let opam = esy::opam::Opam::from_str(&opam_contents)?;
 	info!("sample opam: {:?}", opam);
-	fn lookup_opam(name: &str) -> Option<fetlock::Key> {
-		match name {
-			"lwt" => Some(fetlock::Key::new("@opam/lwt@opam:4.5.0@542100aa".to_owned())),
-			_ => None,
-		}
-	}
-	let nix_ctx = esy::opam::NixCtx {
-		name: "lwt",
-		lookup_opam: &lookup_opam,
-	};
-	let nix = opam.into_nix(&nix_ctx)?;
+	let mut pkg_map = std::collections::HashMap::new();
+	pkg_map.insert("lwt".to_owned(), fetlock::Key::new("@opam/lwt@opam:4.5.0@542100aa".to_owned()));
+	let ctx = esy::opam::Ctx::from_map("lwt", &pkg_map);
+	let nix = opam.into_nix(&ctx)?;
 	info!(" -> as nix: {:?}", nix);
 	let mut out_buf = Vec::new();
 	let mut out = WriteContext::initial(&mut out_buf);

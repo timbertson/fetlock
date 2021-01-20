@@ -255,13 +255,12 @@ impl<'a> Value<'a> {
   pub fn into_nix<'c, C: NixCtx<'c>>(self, c: &C) -> Result<Expr> where 'a: 'c {
     use Value::*;
     Ok(match self {
-      // TODO coalesce interpolated values which collapse to a concrete string value
       // TODO coalesce adjacent char values
       String(x) => {
         let parts = x.into_iter()
           .map(|x| x.into_nix(c))
           .collect::<Result<Vec<expr::StringComponent>>>()?;
-        Expr::StrInterp(parts)
+        Expr::StrInterp(parts).canonicalize()
       },
       Bool(x) => Expr::Literal(format!("{}", x)),
       Int(x) => Expr::Literal(format!("{}", x)),

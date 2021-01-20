@@ -41,6 +41,28 @@ pub enum Expr {
 	List(Vec<Expr>),
 }
 
+impl Expr {
+	pub fn canonicalize(self) -> Self {
+		use Expr::*;
+		match self {
+			StrInterp(components) => {
+				let as_plain_string: Result<Vec<&str>, ()> = components.iter().map(|part|
+					match part {
+						StringComponent::Literal(s) => Ok(s.as_str()),
+						StringComponent::Expr(Expr::Str(s)) => Ok(s.as_str()),
+						StringComponent::Expr(_) => Err(()),
+					}
+				).collect();
+				match as_plain_string {
+					Ok(parts) => Expr::Str(parts.join("")),
+					Err(()) => StrInterp(components),
+				}
+			},
+			other => other
+		}
+	}
+}
+
 #[derive(Debug, Clone)]
 pub struct DrvName<'a>(&'a str); // any string used as part of a drvname
 

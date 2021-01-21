@@ -28,6 +28,7 @@ impl<'a> NixCtx<'a> for NixCtxMap<'a> {
   }
 }
 
+#[derive(Debug, Clone)]
 pub enum VarScope<'a> {
   Global,
   SelfScope,
@@ -41,40 +42,41 @@ impl Ctx {
     NixCtxMap { name, map }
   }
 
-  pub fn resolve<'a, 'expr: 'a, Ctx: NixCtx<'a>>(ctx: &Ctx, scope: VarScope<'a>, ident: &'expr str) -> Expr {
-    match scope {
+  pub fn resolve<'a, 'expr: 'a, Ctx: NixCtx<'a>>(ctx: &Ctx, scope: VarScope<'a>, ident: &'expr str) -> Result<Expr> {
+    let resolved = match scope {
       VarScope::Global => match ident {
         // re-resolve specials against Self
         "name" => Self::resolve(ctx, VarScope::SelfScope, ident),
         "version" => Self::resolve(ctx, VarScope::SelfScope, ident),
 
-        "jobs" => Expr::Str("$NIX_BUILD_CORES".to_owned()),
-        other if other == ctx.name() => Expr::Str("$out".to_owned()),
+        "jobs" => Ok(Expr::Str("$NIX_BUILD_CORES".to_owned())),
+        other if other == ctx.name() => Ok(Expr::Str("$out".to_owned())),
         other => {
           match ctx.lookup_opam(other) {
-            Some(key) => Expr::FunCall(Box::new(FunCall {
+            Some(key) => Ok(Expr::FunCall(Box::new(FunCall {
               subject: Expr::Literal("getDrv".to_owned()),
               args: vec!(Expr::Str(key.as_str().to_owned()))
-            })),
-            None => panic!("TODO unknown global: {:?}", other),
+            }))),
+            None => Err(anyhow!("TODO unknown global: {:?}", other)),
           }
         }
       },
       VarScope::SelfScope => match ident {
-        "name" => Expr::Str(ctx.name().to_owned()),
-        "version" => todo!(),
-        other => panic!("TODO unknown self: {:?}", other),
+        "name" => Ok(Expr::Str(ctx.name().to_owned())),
+        "version" => Err(anyhow!("TODO: version")),
+        other => Err(anyhow!("TODO unknown self: {:?}", other)),
       },
       VarScope::Package(key) => match ident {
-        "installed" => Expr::Str(format!("{}", key.is_some())), // TODO this only works as a flag, not a filter
+        "installed" => Ok(Expr::Str(format!("{}", key.is_some()))), // TODO this only works as a flag, not a filter
         other => match key {
-          None => todo!("need to suppress entire surrounding expression (undefined)"),
+          None => Err(anyhow!("TODO: need to suppress entire surrounding expression for: ({:?})", other)),
           Some(key) => match ident {
-            other => panic!("TODO unknown pakckage[{:?}] var: {:?}", key, other),
+            other => Err(anyhow!("TODO unknown package[{:?}] var: {:?}", key, other)),
           }
         }
       },
-    }
+    };
+    resolved.with_context(|| format!("resolving {:?} in scope {:?}", ident, &scope))
   }
 
   fn scope<'a, 'expr : 'a, Ctx: NixCtx<'a>>(ctx: &Ctx, scope: &'expr str) -> VarScope<'a> {
@@ -85,11 +87,11 @@ impl Ctx {
     }
   }
 
-  pub fn resolve_ident<'a, Ctx: NixCtx<'a>>(ctx: &Ctx, ident: &'a str) -> Expr {
+  pub fn resolve_ident<'a, Ctx: NixCtx<'a>>(ctx: &Ctx, ident: &'a str) -> Result<Expr> {
     Self::resolve(ctx, VarScope::Global, ident)
   }
 
-  pub fn resolve_varident<'a, Ctx: NixCtx<'a>>(ctx: &Ctx, ident: &Varident<'a>) -> Expr {
+  pub fn resolve_varident<'a, Ctx: NixCtx<'a>>(ctx: &Ctx, ident: &Varident<'a>) -> Result<Expr> {
     if ident.additional_scopes.len() > 0 {
       todo!("support additional scopes");
     }

@@ -163,32 +163,82 @@ fn string_char(s: Src) -> Res<char> {
 
 // <string>        ::= ( (") { <char> }* (") ) | ( (""") { <char> }* (""") )
 fn quote_string(s: Src) -> Res<Vec<StringComponent>> {
-  delimited(char('"'), many0(string_component), char('"'))(s)
+  delimited(char('"'), map(many0(string_atom), StringAtom::coalesce), char('"'))(s)
 }
 fn triplequote_string(s: Src) -> Res<Vec<StringComponent>> {
-  map(preceded(tag("\"\"\""), many_till(string_component, tag("\"\"\""))),
-    |(content, _delim)| content)(s)
+  map(
+    preceded(tag("\"\"\""), many_till(string_atom, tag("\"\"\""))),
+    |(content, _delim)| StringAtom::coalesce(content)
+  )(s)
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum StringComponent<'a> {
+pub enum StringAtom<'a> {
   Char(char),
   Expr(Value<'a>),
 }
 
-fn string_component(s: Src) -> Res<StringComponent> {
+fn string_atom(s: Src) -> Res<StringAtom> {
   alt((
-    map(interpolation, StringComponent::Expr),
-    map(string_char, StringComponent::Char),
+    map(interpolation, StringAtom::Expr),
+    map(string_char, StringAtom::Char),
   ))(s)
+}
+
+struct CoalesceState<'a> {
+  _result: Vec<StringComponent<'a>>,
+  _pending: Option<String>,
+}
+
+impl<'a> CoalesceState<'a> {
+  pub fn drain_pending(&mut self) {
+    if let Some(prev) = self._pending.take() {
+      self._result.push(StringComponent::Str(prev));
+    }
+  }
+
+  pub fn push_expr(&mut self, v: Value<'a>) {
+    self.drain_pending();
+    self._result.push(StringComponent::Expr(v));
+  }
+
+  pub fn push_char(&mut self, c: char) {
+    self._pending.get_or_insert_with(|| String::new()).push(c);
+  }
+
+  pub fn result(mut self) -> Vec<StringComponent<'a>> {
+    self.drain_pending();
+    self._result
+  }
+  
+  pub fn new() -> Self {
+    Self { _result: Vec::new(), _pending: None }
+  }
+}
+
+impl<'a> StringAtom<'a> {
+  fn coalesce(atoms: Vec<Self>) -> Vec<StringComponent<'a>> {
+    let mut state = CoalesceState::new();
+    for atom in atoms {
+      match atom {
+        StringAtom::Expr(e) => state.push_expr(e),
+        StringAtom::Char(c) => state.push_char(c),
+      }
+    }
+    state.result()
+  }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StringComponent<'a> {
+  Str(String),
+  Expr(Value<'a>),
 }
 
 impl<'a> StringComponent<'a> {
   fn into_nix<'c, Ctx: NixCtx<'c>>(self, c: &Ctx) -> Result<expr::StringComponent> where 'a : 'c {
     use StringComponent::*;
     match self {
-      // TODO this is inefficient, we should coalesce chars
-      Char(c) => Ok(expr::StringComponent::Literal(c.to_string())),
+      Str(s) => Ok(expr::StringComponent::Literal(s)),
       Expr(e) => Ok(expr::StringComponent::Expr(e.into_nix(c)?)),
     }
   }
@@ -255,7 +305,6 @@ impl<'a> Value<'a> {
   pub fn into_nix<'c, C: NixCtx<'c>>(self, c: &C) -> Result<Expr> where 'a: 'c {
     use Value::*;
     Ok(match self {
-      // TODO coalesce adjacent char values
       String(x) => {
         let parts = x.into_iter()
           .map(|x| x.into_nix(c))
@@ -264,11 +313,11 @@ impl<'a> Value<'a> {
       },
       Bool(x) => Expr::Literal(format!("{}", x)),
       Int(x) => Expr::Literal(format!("{}", x)),
-      Ident(x) => Ctx::resolve_ident(c, x),
-      Varident(x) => Ctx::resolve_varident(c, &x),
-      Op(x) => todo!(), // unsupported
-      Logop(x) => todo!(), // unsupported
-      Option(x) => todo!(), // unsupported
+      Ident(x) => Ctx::resolve_ident(c, x)?,
+      Varident(x) => Ctx::resolve_varident(c, &x)?,
+      Op(x) => Err(anyhow!("Unimplemented: Op({:?}).into_nix()", x))?,
+      Logop(x) => Err(anyhow!("Unimplemented: Logop({:?}).into_nix()", x))?,
+      Option(x) => Err(anyhow!("Unimplemented: Logop({:?}).into_nix()", x))?,
       List(x) => {
         let exprs = x.into_iter().map(|x| x.into_nix(c)).collect::<Result<Vec<Expr>>>()?;
         Expr::List(exprs)
@@ -518,7 +567,7 @@ mod tests {
     );
     assert_eq!(
       p(string, "\"hi %{there}%\""),
-      vec!(Char('h'), Char('i'), Char(' '), Expr(Value::Ident("there")))
+      vec!(Str("hi ".to_owned()), Expr(Value::Ident("there")))
     );
   }
 

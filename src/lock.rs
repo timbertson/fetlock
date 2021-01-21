@@ -50,7 +50,7 @@ impl<'de> Deserialize<'de> for Key {
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Id {
 	pub name: String,
 	pub version: String,
@@ -217,7 +217,6 @@ impl SrcDigest<'_> {
 	}
 }
 
-// TODO rename to Spec
 #[derive(Debug, Clone)]
 pub struct Spec {
 	pub id: Id,

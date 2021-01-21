@@ -1,10 +1,10 @@
 // esy.lock backend
 
-use crate::esy::command;
+use crate::esy::{command, opam};
 use crate::fetch;
 use crate::*;
 use crate::nix_serialize::{Writeable, WriteContext};
-use anyhow::{anyhow, Result};
+use anyhow::*;
 use async_trait::async_trait;
 use log::*;
 use serde::de::*;
@@ -17,6 +17,45 @@ use std::io::Write;
 #[derive(Clone, Debug)]
 pub struct EsyLock {
 	lock: Lock<EsySpec>,
+}
+
+impl EsyLock {
+	fn opam_specs(&mut self) -> (Vec<&mut EsySpec>, HashMap<String,Key>) {
+		let mut specs = Vec::new();
+		let mut map = HashMap::new();
+		for (key, spec) in self.lock.specs.iter_mut() {
+			if let Some(name) = spec.meta.opam_name.as_ref() {
+				map.insert(name.to_owned(), key.clone());
+				specs.push(spec);
+			}
+		}
+		(specs, map)
+	}
+	
+	async fn finalize_spec(esy_spec: &mut EsySpec, opam_map: &HashMap<String, Key>) -> Result<()> {
+		if let Some(path) = fetch::realise_source(&esy_spec.spec).await? {
+			let name = esy_spec.meta.opam_name.as_ref().expect("opam name");
+			let manifest = if let Some(manifest_path) = esy_spec.meta.manifest_path.as_ref() {
+				let extract = fetch::ExtractSource::from(&path).await?;
+				extract.file_contents(&manifest_path).await?
+			} else {
+				// TODO get your own checkout, stop hardcoding
+				let repo_path = std::path::PathBuf::from("/Users/tcuthbertson/.cache/opam2nix/repos/opam-repository/");
+				let repo = fetch::ExtractSource::from(&repo_path).await?;
+				let version = &esy_spec.spec.id.version;
+				let path = format!("packages/{}/{}.{}/opam", name, name, version);
+				repo.file_contents(&path).await?
+			};
+			let nix_ctx = opam::Ctx::from_map(&name, &opam_map);
+			let opam = esy::opam::Opam::from_str(&manifest)
+				.with_context(|| format!("parsing opam manifest:\n{}", &manifest))?;
+			info!("parsed opam: {:?}", opam);
+			let nix = opam.into_nix(&nix_ctx)?;
+			info!(" -> as nix: {:?}", nix);
+			esy_spec.spec.extra.insert("opam".to_owned(), nix.expr());
+		}
+		Ok(())
+	}
 }
 
 #[async_trait(?Send)]
@@ -36,31 +75,19 @@ impl Backend for EsyLock {
 	}
 
 	async fn finalize(mut self) -> Result<Lock<Self::Spec>> {
-		let specs = self.lock.specs.iter_mut()
-			.filter(|(_, spec)| spec.meta.opam_name.is_some())
-			.map(|(_, spec)| spec);
+		let (mut specs, opam_map) = self.opam_specs();
+		let opam_map_ref = &opam_map;
+		
+		// TODO sorting and no parallelism makes ordering deterministic for testing
+		let parallelism = 1;
+		specs.sort_by(|a,b| a.spec.id.cmp(&b.spec.id));
 
 		let mut stream = futures::stream::iter(specs)
 			.map(|esy_spec| async move {
-				if let Some(path) = fetch::realise_source(&esy_spec.spec).await? {
-					let manifest = if let Some(manifest_path) = esy_spec.meta.manifest_path.as_ref() {
-						let extract = fetch::ExtractSource::from(&path).await?;
-						extract.file_contents(&manifest_path).await?
-					} else {
-						// TODO get your own checkout, stop hardcoding
-						let repo_path = std::path::PathBuf::from("/Users/tcuthbertson/.cache/opam2nix/repos/opam-repository/");
-						let repo = fetch::ExtractSource::from(&repo_path).await?;
-						let name = esy_spec.meta.opam_name.as_ref().expect("opam name");
-						let version = &esy_spec.spec.id.version;
-						let path = format!("packages/{}/{}.{}/opam", name, name, version);
-						repo.file_contents(&path).await?
-					};
-					info!("TODO: manifest from {:?}", manifest);
-				}
-				let ret: anyhow::Result<()> = Ok(());
-				ret
+				Self::finalize_spec(esy_spec, opam_map_ref).await
+					.with_context(|| format!("Finalizing spec: {:?}", &esy_spec))
 			})
-			.buffer_unordered(8);
+			.buffer_unordered(parallelism);
 
 		// TODO surely there's some `drain` method?
 		while let Some(response) = stream.next().await {

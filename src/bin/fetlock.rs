@@ -37,23 +37,6 @@ async fn run() -> Result<()> {
 		return Ok(print_usage(&program, opts));
 	}
 
-
-	let opam_contents = std::fs::read_to_string("sample/lwt.opam")?;
-	let opam = esy::opam::Opam::from_str(&opam_contents)?;
-	info!("sample opam: {:?}", opam);
-	let mut pkg_map = std::collections::HashMap::new();
-	pkg_map.insert("lwt".to_owned(), fetlock::Key::new("@opam/lwt@opam:4.5.0@542100aa".to_owned()));
-	let ctx = esy::opam::Ctx::from_map("lwt", &pkg_map);
-	let nix = opam.into_nix(&ctx)?;
-	info!(" -> as nix: {:?}", nix);
-	let mut out_buf = Vec::new();
-	let mut out = WriteContext::initial(&mut out_buf);
-	nix.expr().write_to(&mut out)?;
-	info!("Nix:\n{}", String::from_utf8(out_buf)?);
-
-
-	Err(anyhow!("TODO: continue fetlock#main"))?;
-
 	let mut esy_lock = esy::EsyLock::load("sample/esy.json")?;
 	debug!("{:?}", esy_lock);
 	fetch::populate_source_digests(esy_lock.lock_mut()).await?;

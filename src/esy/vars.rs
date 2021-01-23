@@ -1,22 +1,28 @@
 use anyhow::*;
 use std::collections::HashMap;
 use crate::esy::opam_parser::*;
-use crate::{Expr, Key, FunCall, StringComponent};
+use crate::esy::opam::{Name, NameRef, Pkg};
+use crate::{Expr, FunCall, StringComponent};
 
 pub trait NixCtx<'a> {
-  fn name(&self) -> &'a str;
-  fn lookup_opam(&self, opam_name: &'a str) -> Option<&'a Key>;
+  fn name(&self) -> &'a Name;
+  fn get<'b>(&self, name: NameRef<'b>) -> Option<&'a Pkg>;
+  //fn get<K: Hash + Eq>(&self, name: &'a K) -> Option<&'a Pkg>
+  //  where Name: Borrow<K>;
 }
 
 pub struct NixCtxMap<'a> {
-  name: &'a str,
-  map: &'a HashMap<String, Key>
+  name: &'a Name,
+  map: &'a HashMap<Name, Pkg>
 }
 
 impl<'a> NixCtx<'a> for NixCtxMap<'a> {
-  fn name(&self) -> &'a str { self.name }
-  fn lookup_opam(&self, opam_name: &str) -> Option<&'a Key> {
-    self.map.get(opam_name)
+  fn name(&self) -> &'a Name { self.name }
+  //fn get<K: Hash + Eq>(&self, name: &K) -> Option<&'a Pkg> where Name: Borrow<K> {
+  //  self.map.get(name)
+  //}
+  fn get<'b>(&self, name: NameRef<'b>) -> Option<&'a Pkg> {
+    self.map.get(name.0)
   }
 }
 
@@ -24,13 +30,12 @@ impl<'a> NixCtx<'a> for NixCtxMap<'a> {
 pub enum VarScope<'a> {
   Unknown,
   SelfScope,
-  Package(Option<&'a Key>),
+  Package(Option<&'a Pkg>),
 }
 
 pub struct Ctx;
 impl Ctx {
-  // for testing
-  pub fn from_map<'a>(name: &'a str, map: &'a HashMap<String, Key>) -> NixCtxMap<'a> {
+  pub fn from_map<'a>(name: &'a Name, map: &'a HashMap<Name, Pkg>) -> NixCtxMap<'a> {
     NixCtxMap { name, map }
   }
 
@@ -38,25 +43,25 @@ impl Ctx {
     let resolved = match scope {
       VarScope::Unknown => match ident {
         "jobs" => Ok(Eval::Str("$NIX_BUILD_CORES".to_owned())),
-        other if other == ctx.name() => Ok(Eval::Str("$out".to_owned())),
+        ident if ident == ctx.name().0 => Ok(Eval::Str("$out".to_owned())),
         
         // is it a package variable implicitly on `self`?
-        other => Self::resolve(ctx, VarScope::SelfScope, other).or_else(|_| {
+        ident => Self::resolve(ctx, VarScope::SelfScope, ident).or_else(|_| {
           // otherwise try looking it up as a package name
-          match ctx.lookup_opam(other) {
-            Some(key) => Self::resolve(ctx, VarScope::Package(Some(key)), "path"),
+          match ctx.get(NameRef(ident)) {
+            Some(pkg) => Self::resolve(ctx, VarScope::Package(Some(pkg)), "path"),
             
             // otherwise it might either be an uninstalled package,
             // an unknown global or possibly a dynamic var, which we don't support
             // TODO quietly return undefined once this is more mature
-            None => Err(anyhow!("TODO unknown global: {:?}", other)),
+            None => Err(anyhow!("TODO unknown global: {:?}", ident)),
           }
         })
       },
       VarScope::SelfScope => match ident {
-        "name" => Ok(Eval::Str(ctx.name().to_owned())),
+        "name" => Ok(Eval::Str(ctx.name().0.to_owned())),
         "version" => Err(anyhow!("TODO: version")),
-        other => Self::resolve_against(Expr::Str("$out".to_owned()), other),
+        ident => Self::resolve_against(Expr::Str("$out".to_owned()), ident),
       },
       VarScope::Package(key) => match ident {
         "installed" => Ok(Eval::Bool(key.is_some())),
@@ -64,14 +69,14 @@ impl Ctx {
           let s = if key.is_some() { "enable" } else { "disable" };
           Ok(Eval::Str(s.to_owned()))
         },
-        other => match key {
-          None => Err(anyhow!("TODO: need to suppress entire surrounding expression for: ({:?})", other)),
-          Some(key) => {
+        ident => match key {
+          None => Err(anyhow!("TODO: need to suppress entire surrounding expression for: ({:?})", ident)),
+          Some(pkg) => {
             let drv = Expr::FunCall(Box::new(FunCall {
               subject: Expr::Literal("getDrv".to_owned()),
-              args: vec!(Expr::Str(key.as_str().to_owned()))
+              args: vec!(Expr::Str(pkg.key.as_str().to_owned()))
             }));
-            Self::resolve_against(drv, other)
+            Self::resolve_against(drv, ident)
           },
         }
       },
@@ -100,15 +105,15 @@ impl Ctx {
       // dev: true if this is a development package, i.e. it was not built from a release archive
       // build-id: a hash identifying the precise package version and metadata, and that of all its dependencies
       // opamfile: if the package is installed, path of its opam file, from opam internals, otherwise not defined
-      other => Err(anyhow!("TODO unknown package[{:?}] var: {:?}", path, other)),
+      ident => Err(anyhow!("TODO unknown package[{:?}] var: {:?}", path, ident)),
     }
   }
 
   fn scope<'a, 'expr : 'a, Ctx: NixCtx<'a>>(ctx: &Ctx, scope: &'expr str) -> VarScope<'a> {
     match scope {
       "_" => VarScope::SelfScope,
-      name if name == ctx.name() => VarScope::SelfScope,
-      other => VarScope::Package(ctx.lookup_opam(other))
+      name if name == ctx.name().0 => VarScope::SelfScope,
+      scope => VarScope::Package(ctx.get(NameRef(scope)))
     }
   }
 

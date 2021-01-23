@@ -1,10 +1,52 @@
 use anyhow::*;
 use std::collections::HashMap;
+use std::borrow::Borrow;
 use crate::esy::opam_parser::*;
 use crate::esy::vars::*;
-use crate::Expr;
+use crate::{Key, Expr};
 
-pub struct Name(String);
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Name(pub String);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct NameRef<'a>(pub &'a str);
+
+// TODO should be impl Borrow<NameRef> when I can figure that out...
+impl Borrow<str> for Name {
+  fn borrow(&self) -> &str {
+    self.0.as_str()
+  }
+}
+
+// impl<'b> Borrow<NameRef<'b>> for Name {
+//   fn borrow<'a>(&'a self) -> &'a NameRef<'b> {
+//     // todo!()
+//     let s: &'a String = &self.0;
+//     let ret: &'a NameRef<'b> = &NameRef(s);
+//     ret
+//   }
+// }
+
+/*
+
+
+   let n = Name(s);
+   let b: &NameRef = name.borrow()
+   {
+
+
+    ...
+
+   }
+
+
+*/
+
+#[derive(Debug, Clone)]
+pub struct Pkg {
+  pub name: Name,
+  pub key: Key,
+}
 
 // public struct, containing only what we need for fetlock purposes
 #[derive(Clone, Debug)]

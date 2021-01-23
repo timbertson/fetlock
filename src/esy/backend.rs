@@ -20,19 +20,23 @@ pub struct EsyLock {
 }
 
 impl EsyLock {
-	fn opam_specs(&mut self) -> (Vec<&mut EsySpec>, HashMap<String,Key>) {
+	fn opam_specs(&mut self) -> (Vec<&mut EsySpec>, HashMap<opam::Name, opam::Pkg>) {
 		let mut specs = Vec::new();
 		let mut map = HashMap::new();
 		for (key, spec) in self.lock.specs.iter_mut() {
 			if let Some(name) = spec.meta.opam_name.as_ref() {
-				map.insert(name.to_owned(), key.clone());
+				let pkg = opam::Pkg {
+					name: name.to_owned(),
+					key: key.clone(),
+				};
+				map.insert(name.to_owned(), pkg);
 				specs.push(spec);
 			}
 		}
 		(specs, map)
 	}
 	
-	async fn finalize_spec(esy_spec: &mut EsySpec, opam_map: &HashMap<String, Key>) -> Result<()> {
+	async fn finalize_spec(esy_spec: &mut EsySpec, opam_map: &HashMap<opam::Name, opam::Pkg>) -> Result<()> {
 		if let Some(path) = fetch::realise_source(&esy_spec.spec).await? {
 			let name = esy_spec.meta.opam_name.as_ref().expect("opam name");
 			let manifest = if let Some(manifest_path) = esy_spec.meta.manifest_path.as_ref() {
@@ -43,7 +47,7 @@ impl EsyLock {
 				let repo_path = std::path::PathBuf::from("/Users/tcuthbertson/.cache/opam2nix/repos/opam-repository/");
 				let repo = fetch::ExtractSource::from(&repo_path).await?;
 				let version = &esy_spec.spec.id.version;
-				let path = format!("packages/{}/{}.{}/opam", name, name, version);
+				let path = format!("packages/{}/{}.{}/opam", name.0, name.0, version);
 				repo.file_contents(&path).await?
 			};
 			let nix_ctx = vars::Ctx::from_map(&name, &opam_map);
@@ -101,7 +105,7 @@ impl Backend for EsyLock {
 
 #[derive(Debug, Clone)]
 struct EsyMeta {
-	opam_name: Option<String>,
+	opam_name: Option<opam::Name>,
 	manifest_path: Option<String>,
 	manifest: Option<command::Manifest>,
 }
@@ -215,7 +219,7 @@ impl<'de> Visitor<'de> for EsySpecVisitor {
 				"name" => {
 					let name = map.next_value::<&str>()?;
 					let name = if let Some(opam_name) = name.strip_prefix("@opam/") {
-						meta.opam_name = Some(opam_name.to_owned());
+						meta.opam_name = Some(opam::Name(opam_name.to_owned()));
 						opam_name.to_owned()
 					} else {
 						name.to_owned()

@@ -2,7 +2,7 @@ use anyhow::*;
 use std::collections::HashMap;
 use std::borrow::Borrow;
 use crate::esy::opam_parser::*;
-use crate::esy::vars::*;
+use crate::esy::eval::*;
 use crate::{Key, Expr};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -26,21 +26,6 @@ impl Borrow<str> for Name {
 //     ret
 //   }
 // }
-
-/*
-
-
-   let n = Name(s);
-   let b: &NameRef = name.borrow()
-   {
-
-
-    ...
-
-   }
-
-
-*/
 
 #[derive(Debug, Clone)]
 pub struct Pkg {

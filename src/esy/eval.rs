@@ -1,5 +1,6 @@
 use anyhow::*;
 use std::collections::HashMap;
+use crate::expr;
 use crate::esy::opam_parser::*;
 use crate::esy::opam::{Name, NameRef, Pkg};
 use crate::{Expr, FunCall, StringComponent};
@@ -146,5 +147,100 @@ impl Ctx {
       name => Self::scope(ctx, name),
     };
     Self::resolve(ctx, scope, ident.ident)
+  }
+}
+
+// Eval is used to reduce formulas down to primitives, where possible
+#[derive(Debug, Clone)]
+pub enum Eval<'a> {
+  Complex(Value<'a>), // TODO: remove?
+  Nix(Expr), // opaque nix expression (e.g. function call)
+  Undefined,
+  Bool(bool),
+  Str(String),
+  List(Vec<Eval<'a>>),
+}
+
+impl<'a> Eval<'a> {
+  pub fn truthy(&self) -> bool {
+    use Eval::*;
+    match self {
+      Complex(_) | Nix(_) | Str(_) => true,
+      Undefined => false,
+      Bool(b) => *b,
+      List(l) => l.iter().filter(|x| x.truthy()).count() > 0,
+    }
+  }
+
+  pub fn evaluate<C: NixCtx<'a>>(v: Value<'a>, c: &C) -> Result<Eval<'a>> {
+    use Value::*;
+    Ok(match v {
+      // TODO could canonicalize() a string to turn it into a Str, but it's unclear if that
+      // is ever needed
+      // TODO need to dive into string components
+      Int(_) | String(_) => Eval::Complex(v),
+
+      List(l) => Eval::List(
+        l.into_iter()
+        .map(|v| Eval::evaluate(v, c))
+        // drop all elements which evaluate to false / undefined
+        .filter(|result| result.as_ref().map(Eval::truthy).unwrap_or(true /* include failed */))
+        .collect::<Result<Vec<Eval<'a>>>>()?
+      ),
+
+      Bool(x) => Eval::Bool(x),
+      Ident(x) => Ctx::resolve_ident(c, x)?,
+      Varident(x) => Ctx::resolve_varident(c, &x)?,
+      UnaryOp(_, _) => Err(anyhow!("Unimplemented: evaluate({:?})", v))?,
+      Binop(x) => Err(anyhow!("Unimplemented: evaluate({:?})", x))?,
+      Option(x) => {
+        let ValueWithOption { value, option } = *x;
+        let filter = Eval::evaluate(option, c)?;
+        match filter {
+          Eval::Bool(b) => if b {
+            Eval::evaluate(value, c)?
+          } else {
+            Eval::Undefined
+          }
+          other => other
+        }
+      },
+    })
+  }
+
+  
+  pub fn into_nix<C: NixCtx<'a>>(self, c: &C) -> Result<Expr> {
+    match self {
+      Eval::Complex(value) => {
+        use Value::*;
+        match value {
+          // TODO does this belong here? Or should it be hoisted to Eval?
+          String(x) => {
+            let parts = x.into_iter()
+              .map(|x| x.into_nix(c))
+              .collect::<Result<Vec<expr::StringComponent>>>()?;
+            Ok(Expr::StrInterp(parts).canonicalize())
+          },
+          Int(x) => Ok(Expr::Literal(format!("{}", x))),
+
+          // all of these should have been replaced by `eval`, or make no sense at the toplevel
+          Bool(_) |
+          List(_) |
+          Varident(_) |
+          Ident(_) |
+          UnaryOp(_, _) |
+          Binop(_) |
+          Option(_) => Err(anyhow!("Unimplemented: {:?}.into_nix()", value))?,
+        }
+      },
+      Eval::Nix(expr) => Ok(expr),
+      Eval::Undefined => Err(anyhow!("TODO: undefined")),
+      Eval::Bool(b) => Ok(Expr::Literal(format!("{}", b))),
+      Eval::Str(s) => Ok(Expr::Str(s)),
+      Eval::List(l) => {
+        let exprs = l.into_iter().map(|x| x.into_nix(c)).collect::<Result<Vec<Expr>>>()?;
+        Ok(Expr::List(exprs))
+      },
+    }
   }
 }

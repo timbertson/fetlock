@@ -1,7 +1,7 @@
 use anyhow::*;
 use crate::expr;
 use crate::expr::Expr;
-use crate::esy::opam::{NixCtx, Ctx};
+use crate::esy::vars::{NixCtx, Ctx};
 use nom::{
   *,
   error::VerboseError,
@@ -98,6 +98,7 @@ fn varident(s: Src) -> Res<Varident> {
 // TODO I don't understand the [":"] ... part. Does it mean optionally preceded and optionally followed?
 // Note operator seems unused in practice, this is essentially relop from a package formula / version formula
 // <relop>           ::= "=" | "!=" | "<" | "<=" | ">" | ">="
+// <logop>           ::= "&" | "|"
 fn binary_op(s: Src) -> Res<Src> {
   context("binop", alt((
     tag("="),
@@ -106,12 +107,9 @@ fn binary_op(s: Src) -> Res<Src> {
     tag(">="),
     tag("<"),
     tag(">"),
+    tag("&"),
+    tag("|"),
   )))(s)
-}
-
-// <logop>           ::= "&" | "|"
-fn logop(s: Src) -> Res<Src> {
-  alt((tag("&"), tag("|")))(s)
 }
 
 // #[derive(Debug, Clone)]
@@ -167,7 +165,7 @@ fn quote_string(s: Src) -> Res<Vec<StringComponent>> {
 }
 fn triplequote_string(s: Src) -> Res<Vec<StringComponent>> {
   map(
-    preceded(tag("\"\"\""), many_till(string_atom, tag("\"\"\""))),
+    preceded(tag("\"\"\""), many_till(triplequote_string_atom, tag("\"\"\""))),
     |(content, _delim)| StringAtom::coalesce(content)
   )(s)
 }
@@ -175,6 +173,13 @@ fn triplequote_string(s: Src) -> Res<Vec<StringComponent>> {
 pub enum StringAtom<'a> {
   Char(char),
   Expr(Value<'a>),
+}
+
+fn triplequote_string_atom(s: Src) -> Res<StringAtom> {
+  alt((
+    map(char('"'), StringAtom::Char),
+		string_atom
+  ))(s)
 }
 
 fn string_atom(s: Src) -> Res<StringAtom> {
@@ -275,7 +280,7 @@ fn discard<'a, F: 'a, O>(inner: F) -> impl FnMut(Src<'a>) -> Res<()>
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Logop<'a> {
+pub struct Binop<'a> {
   pub a: Value<'a>,
   pub op: Src<'a>,
   pub b: Value<'a>,
@@ -284,7 +289,7 @@ pub struct Logop<'a> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValueWithOption<'a> {
   pub value: Value<'a>,
-  pub options: Vec<Value<'a>>
+  pub option: Value<'a>
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -294,35 +299,110 @@ pub enum Value<'a> {
   Int(isize),
   Ident(Src<'a>),
   Varident(Varident<'a>),
-  Op(Src<'a>),
   List(Vec<Value<'a>>),
   // Composite(Box<Value<'a>>, Vec<ValueSuffix<'a>>),
-  Logop(Box<Logop<'a>>),
+  UnaryOp(Src<'a>, Box<Value<'a>>),
+  Binop(Box<Binop<'a>>),
   Option(Box<ValueWithOption<'a>>),
 }
 
+// Eval is used to reduce formulas down to primitives, where possible
+#[derive(Debug, Clone)]
+pub enum Eval<'a> {
+  Complex(Value<'a>), // unchanged
+  Nix(Expr), // opaque nix expression (e.g. function call)
+  Undefined,
+  Bool(bool),
+  Str(String),
+  List(Vec<Eval<'a>>),
+}
+
+impl<'a> Eval<'a> {
+  fn truthy(&self) -> bool {
+    use Eval::*;
+    match self {
+      Complex(_) | Nix(_) | Str(_) => true,
+      Undefined => false,
+      Bool(b) => *b,
+      List(l) => l.iter().filter(|x| x.truthy()).count() > 0,
+    }
+  }
+  
+  pub fn into_nix<C: NixCtx<'a>>(self, c: &C) -> Result<Expr> {
+    match self {
+      Eval::Complex(value) => {
+        use Value::*;
+        match value {
+          // TODO does this belong here? Or should it be hoisted to Eval?
+          String(x) => {
+            let parts = x.into_iter()
+              .map(|x| x.into_nix(c))
+              .collect::<Result<Vec<expr::StringComponent>>>()?;
+            Ok(Expr::StrInterp(parts).canonicalize())
+          },
+          Int(x) => Ok(Expr::Literal(format!("{}", x))),
+
+          // all of these should have been replaced by `eval`, or make no sense at the toplevel
+          Bool(_) |
+          List(_) |
+          Varident(_) |
+          Ident(_) |
+          UnaryOp(_, _) |
+          Binop(_) |
+          Option(_) => Err(anyhow!("Unimplemented: {:?}.into_nix()", value))?,
+        }
+      },
+      Eval::Nix(expr) => Ok(expr),
+      Eval::Undefined => Err(anyhow!("TODO: undefined")),
+      Eval::Bool(b) => Ok(Expr::Literal(format!("{}", b))),
+      Eval::Str(s) => Ok(Expr::Str(s)),
+      Eval::List(l) => {
+        let exprs = l.into_iter().map(|x| x.into_nix(c)).collect::<Result<Vec<Expr>>>()?;
+        Ok(Expr::List(exprs))
+      },
+    }
+  }
+}
+
 impl<'a> Value<'a> {
-  pub fn into_nix<'c, C: NixCtx<'c>>(self, c: &C) -> Result<Expr> where 'a: 'c {
+  pub fn evaluate<C: NixCtx<'a>>(self, c: &C) -> Result<Eval<'a>> {
     use Value::*;
     Ok(match self {
-      String(x) => {
-        let parts = x.into_iter()
-          .map(|x| x.into_nix(c))
-          .collect::<Result<Vec<expr::StringComponent>>>()?;
-        Expr::StrInterp(parts).canonicalize()
-      },
-      Bool(x) => Expr::Literal(format!("{}", x)),
-      Int(x) => Expr::Literal(format!("{}", x)),
+      // TODO could canonicalize() a string to turn it into a Str, but it's unclear if that
+      // is ever needed
+      // TODO need to dive into string components
+      Int(_) | String(_) => Eval::Complex(self),
+
+      List(l) => Eval::List(
+        l.into_iter()
+        .map(|v| v.evaluate(c))
+        // drop all elements which evaluate to false / undefined
+        .filter(|result| result.as_ref().map(Eval::truthy).unwrap_or(true /* include failed */))
+        .collect::<Result<Vec<Eval<'a>>>>()?
+      ),
+
+      Bool(x) => Eval::Bool(x),
       Ident(x) => Ctx::resolve_ident(c, x)?,
       Varident(x) => Ctx::resolve_varident(c, &x)?,
-      Op(x) => Err(anyhow!("Unimplemented: Op({:?}).into_nix()", x))?,
-      Logop(x) => Err(anyhow!("Unimplemented: Logop({:?}).into_nix()", x))?,
-      Option(x) => Err(anyhow!("Unimplemented: Logop({:?}).into_nix()", x))?,
-      List(x) => {
-        let exprs = x.into_iter().map(|x| x.into_nix(c)).collect::<Result<Vec<Expr>>>()?;
-        Expr::List(exprs)
-      }
+      UnaryOp(_, _) => Err(anyhow!("Unimplemented: {:?}.into_nix()", self))?,
+      Binop(x) => Err(anyhow!("Unimplemented: {:?}.into_nix()", x))?,
+      Option(x) => {
+        let ValueWithOption { value, option } = *x;
+        let filter = option.evaluate(c)?;
+        match filter {
+          Eval::Bool(b) => if b {
+            value.evaluate(c)?
+          } else {
+            Eval::Undefined
+          }
+          other => other
+        }
+      },
     })
+  }
+
+  pub fn into_nix<'c, C: NixCtx<'c>>(self, c: &C) -> Result<Expr> where 'a: 'c {
+    self.evaluate(c)?.into_nix(c)
   }
 }
 
@@ -354,7 +434,11 @@ impl<'a> Value<'a> {
 //                              | <filter>
 //                              | <relop> <filter>
 fn unary_op(s: Src) -> Res<Src> {
-  alt((tag("!"), tag("?")))(s)
+  alt((
+    tag("!"),
+    tag("?"),
+    binary_op // `build & >= 1.0.0` is seemingly valid, so just allow all binops as unops too :shrug:
+  ))(s)
 }
 fn value(s: Src) -> Res<Value> {
   map(
@@ -365,25 +449,28 @@ fn value(s: Src) -> Res<Value> {
         map(int, Value::Int),
         map(varident, Value::Varident),
         map(ident, Value::Ident),
-        map(binary_op, Value::Op),
-        map(unary_op, Value::Op),
+        // map(binary_op, Value::Binop),
+        map(
+          tuple((unary_op, ws(value))),
+          |(op, value)| Value::UnaryOp(op, Box::new(value))
+        ),
         // map(logop, Value::Op),
         map(list, Value::List),
         // map(version_formula, Value::VersionFormula),
         delimited(ws(char('(')), value, ws(char(')'))),
       )),
-      opt(ws(value_options)),
-      opt(tuple((ws(logop), value))),
+      opt(ws(value_option)),
+      opt(tuple((ws(binary_op), value))),
     )),
-    |(mut value, options, logop)| {
-      match options {
-        Some(options) => value = Value::Option(Box::new(ValueWithOption {
-          value, options
+    |(mut value, option, op)| {
+      match option {
+        Some(option) => value = Value::Option(Box::new(ValueWithOption {
+          value, option
         })),
         None => (),
       }
-      match logop {
-        Some((op, value2)) => Value::Logop(Box::new(Logop {
+      match op {
+        Some((op, value2)) => Value::Binop(Box::new(Binop {
           a: value,
           op,
           b: value2,
@@ -402,8 +489,8 @@ fn value(s: Src) -> Res<Value> {
 // <option>        ::= <value> "{" { <value> }* "}"
 // We implement this as "value optionally followed by value_suffix", otherwise
 // the value parse is ambiguous
-fn value_options(s: Src) -> Res<Vec<Value>> {
-  delimited(ws(char('{')), many0(ws(value)), ws(char('}')))(s)
+fn value_option(s: Src) -> Res<Value> {
+  delimited(ws(char('{')), value, ws(char('}')))(s)
 }
 
 // <list>          ::= "[" { <value> }* "]"
@@ -601,10 +688,15 @@ mod tests {
   }
 
   #[test]
+  fn test_options() {
+    valid(value_option, "{ foo }");
+    valid(value_option, "{ foo & bar }");
+    valid(value_option, "{ foo & >= bar }");
+  }
+
+  #[test]
   fn test_value() {
     valid(value, r#""cppo" {build & >= "1.1.0"}"#);
-    valid(binary_op, ">=");
-    valid(value, r#">="#);
     valid(many0(ws(value)), r#">= "4.08.0""#);
     valid(value, r#""ocaml" {>= "4.08.0"}"#);
     valid(value, "1 | 2");
@@ -612,6 +704,7 @@ mod tests {
     valid(value, r#""pkga" | "pkgb""#);
     valid(value, r#""pkga" {>= "4.10.0"} | "pkgb""#);
     valid(value, r#""ocaml" {>= "4.10.0"} | "ocaml-syntax-shims""#);
+    valid(value, r#"arch != "ppc64""#);
     valid(value, r#"[
       "cppo" {build & >= "1.1.0"}
       "dune" {>= "1.8.0"}

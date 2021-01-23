@@ -467,13 +467,19 @@ impl<K: fmt::Display + Debug + Clone, V: Writeable> Writeable for HashMap<K, V> 
 
 impl<Spec: Writeable + Debug + Clone> Writeable for Lock<Spec> {
 	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
-		let Lock { context, specs } = self;
+		let Lock { context, vars, specs } = self;
 		c.write_str("final: prev:")?;
 		c.nl()?;
 		c.write_str("let")?;
-		c.nl()?;
 		c.indent += 1;
+		c.nl()?;
 		c.write_str("pkgs = final.pkgs;")?;
+		for (k, v) in vars {
+			c.nl()?;
+			c.write(format_args!("{} = ", k))?;
+			v.write_to(c)?;
+			c.write_char(';')?;
+		}
 		c.indent -= 1;
 		c.nl()?;
 		c.write_str("in")?;

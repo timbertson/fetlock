@@ -287,6 +287,7 @@ impl PartialSpec {
 pub struct Lock<Spec: Writeable> {
 	pub context: LockContext,
 	pub specs: HashMap<Key, Spec>,
+	pub vars: HashMap<&'static str, Expr>,
 }
 
 impl<Spec: Writeable> Lock<Spec> {
@@ -294,6 +295,7 @@ impl<Spec: Writeable> Lock<Spec> {
 		Lock {
 			context,
 			specs: HashMap::new(),
+			vars: HashMap::new(),
 		}
 	}
 

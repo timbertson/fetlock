@@ -1,6 +1,6 @@
 // esy.lock backend
 
-use crate::esy::{command, opam};
+use crate::esy::{command, vars, opam};
 use crate::fetch;
 use crate::*;
 use crate::nix_serialize::{Writeable, WriteContext};
@@ -46,8 +46,8 @@ impl EsyLock {
 				let path = format!("packages/{}/{}.{}/opam", name, name, version);
 				repo.file_contents(&path).await?
 			};
-			let nix_ctx = opam::Ctx::from_map(&name, &opam_map);
-			let opam = esy::opam::Opam::from_str(&manifest)
+			let nix_ctx = vars::Ctx::from_map(&name, &opam_map);
+			let opam = opam::Opam::from_str(&manifest)
 				.with_context(|| format!("parsing opam manifest:\n{}", &manifest))?;
 			info!("parsed opam: {:?}", opam);
 			let nix = opam.into_nix(&nix_ctx)?;
@@ -75,6 +75,7 @@ impl Backend for EsyLock {
 	}
 
 	async fn finalize(mut self) -> Result<Lock<Self::Spec>> {
+		self.lock.vars.insert("siteLib", Expr::Literal("prefix: prefix + self.siteLib".to_owned()));
 		let (mut specs, opam_map) = self.opam_specs();
 		let opam_map_ref = &opam_map;
 		

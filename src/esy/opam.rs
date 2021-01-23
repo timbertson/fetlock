@@ -1,7 +1,10 @@
 use anyhow::*;
 use std::collections::HashMap;
 use crate::esy::opam_parser::*;
-use crate::{Expr, Key, FunCall};
+use crate::esy::vars::*;
+use crate::Expr;
+
+pub struct Name(String);
 
 // public struct, containing only what we need for fetlock purposes
 #[derive(Clone, Debug)]
@@ -9,98 +12,6 @@ pub struct Opam<'a> {
   build: Option<Value<'a>>,
   install: Option<Value<'a>>,
   depexts: Vec<Value<'a>>,
-}
-
-pub trait NixCtx<'a> {
-  fn name(&self) -> &'a str;
-  fn lookup_opam(&self, opam_name: &'a str) -> Option<&'a Key>;
-}
-
-pub struct NixCtxMap<'a> {
-  name: &'a str,
-  map: &'a HashMap<String, Key>
-}
-
-impl<'a> NixCtx<'a> for NixCtxMap<'a> {
-  fn name(&self) -> &'a str { self.name }
-  fn lookup_opam(&self, opam_name: &str) -> Option<&'a Key> {
-    self.map.get(opam_name)
-  }
-}
-
-#[derive(Debug, Clone)]
-pub enum VarScope<'a> {
-  Global,
-  SelfScope,
-  Package(Option<&'a Key>),
-}
-
-pub struct Ctx;
-impl Ctx {
-  // for testing
-  pub fn from_map<'a>(name: &'a str, map: &'a HashMap<String, Key>) -> NixCtxMap<'a> {
-    NixCtxMap { name, map }
-  }
-
-  pub fn resolve<'a, 'expr: 'a, Ctx: NixCtx<'a>>(ctx: &Ctx, scope: VarScope<'a>, ident: &'expr str) -> Result<Expr> {
-    let resolved = match scope {
-      VarScope::Global => match ident {
-        // re-resolve specials against Self
-        "name" => Self::resolve(ctx, VarScope::SelfScope, ident),
-        "version" => Self::resolve(ctx, VarScope::SelfScope, ident),
-
-        "jobs" => Ok(Expr::Str("$NIX_BUILD_CORES".to_owned())),
-        other if other == ctx.name() => Ok(Expr::Str("$out".to_owned())),
-        other => {
-          match ctx.lookup_opam(other) {
-            Some(key) => Ok(Expr::FunCall(Box::new(FunCall {
-              subject: Expr::Literal("getDrv".to_owned()),
-              args: vec!(Expr::Str(key.as_str().to_owned()))
-            }))),
-            None => Err(anyhow!("TODO unknown global: {:?}", other)),
-          }
-        }
-      },
-      VarScope::SelfScope => match ident {
-        "name" => Ok(Expr::Str(ctx.name().to_owned())),
-        "version" => Err(anyhow!("TODO: version")),
-        other => Err(anyhow!("TODO unknown self: {:?}", other)),
-      },
-      VarScope::Package(key) => match ident {
-        "installed" => Ok(Expr::Str(format!("{}", key.is_some()))), // TODO this only works as a flag, not a filter
-        other => match key {
-          None => Err(anyhow!("TODO: need to suppress entire surrounding expression for: ({:?})", other)),
-          Some(key) => match ident {
-            other => Err(anyhow!("TODO unknown package[{:?}] var: {:?}", key, other)),
-          }
-        }
-      },
-    };
-    resolved.with_context(|| format!("resolving {:?} in scope {:?}", ident, &scope))
-  }
-
-  fn scope<'a, 'expr : 'a, Ctx: NixCtx<'a>>(ctx: &Ctx, scope: &'expr str) -> VarScope<'a> {
-    match scope {
-      "_" => VarScope::SelfScope,
-      name if name == ctx.name() => VarScope::SelfScope,
-      other => VarScope::Package(ctx.lookup_opam(other))
-    }
-  }
-
-  pub fn resolve_ident<'a, Ctx: NixCtx<'a>>(ctx: &Ctx, ident: &'a str) -> Result<Expr> {
-    Self::resolve(ctx, VarScope::Global, ident)
-  }
-
-  pub fn resolve_varident<'a, Ctx: NixCtx<'a>>(ctx: &Ctx, ident: &Varident<'a>) -> Result<Expr> {
-    if ident.additional_scopes.len() > 0 {
-      todo!("support additional scopes");
-    }
-    let scope = match ident.scope {
-      "_" => VarScope::SelfScope,
-      name => Self::scope(ctx, name),
-    };
-    Self::resolve(ctx, scope, ident.ident)
-  }
 }
 
 #[derive(Clone, Debug)]

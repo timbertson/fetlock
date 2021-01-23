@@ -26,6 +26,13 @@ impl<'a> NixCtx<'a> for NixCtxMap<'a> {
   }
 }
 
+
+#[derive(Debug, Clone)]
+pub struct PkgImpl<'a> {
+  name: &'a Name,
+  path: Expr,
+}
+
 #[derive(Debug, Clone)]
 pub enum VarScope<'a> {
   Unknown,
@@ -61,22 +68,28 @@ impl Ctx {
       VarScope::SelfScope => match ident {
         "name" => Ok(Eval::Str(ctx.name().0.to_owned())),
         "version" => Err(anyhow!("TODO: version")),
-        ident => Self::resolve_against(Expr::Str("$out".to_owned()), ident),
+        ident => Self::resolve_against(PkgImpl {
+          path: Expr::Str("$out".to_owned()),
+          name: ctx.name(),
+        }, ident),
       },
-      VarScope::Package(key) => match ident {
-        "installed" => Ok(Eval::Bool(key.is_some())),
+      VarScope::Package(pkg) => match ident {
+        "installed" => Ok(Eval::Bool(pkg.is_some())),
         "enable" => {
-          let s = if key.is_some() { "enable" } else { "disable" };
+          let s = if pkg.is_some() { "enable" } else { "disable" };
           Ok(Eval::Str(s.to_owned()))
         },
-        ident => match key {
+        ident => match pkg {
           None => Err(anyhow!("TODO: need to suppress entire surrounding expression for: ({:?})", ident)),
           Some(pkg) => {
             let drv = Expr::FunCall(Box::new(FunCall {
               subject: Expr::Literal("getDrv".to_owned()),
               args: vec!(Expr::Str(pkg.key.as_str().to_owned()))
             }));
-            Self::resolve_against(drv, ident)
+            Self::resolve_against(PkgImpl {
+              path: drv,
+              name: &pkg.name,
+            }, ident)
           },
         }
       },
@@ -84,18 +97,21 @@ impl Ctx {
     resolved.with_context(|| format!("resolving {:?} in scope {:?}", ident, &scope))
   }
   
-  fn resolve_against(path: Expr, ident: &str) -> Result<Eval> {
+  fn resolve_against(pkg: PkgImpl, ident: &str) -> Result<Eval<'static>> {
     match ident {
       "pinned" // TODO do we ever want to pretend to be pinned?
       | "with-test"
       | "with-doc"
         => Ok(Eval::Bool(false)),
  
-      "path" => Ok(Eval::Nix(path)),
-      "share" => Ok(Eval::Nix(Expr::StrInterp(vec!(
-        StringComponent::Expr(path),
-        StringComponent::Literal("TODO:OPAM_NAME".to_owned())
-      )))),
+      "path" => Ok(Eval::Nix(pkg.path)),
+      "share" => {
+        let PkgImpl { name, path } = pkg;
+        Ok(Eval::Nix(Expr::StrInterp(vec!(
+          StringComponent::Expr(path),
+          StringComponent::Literal(name.0.to_owned())
+        ))))
+      },
 
       // depends: resolved direct dependencies of the package
       // enable: takes the value "enable" or "disable" depending on whether the package is installed
@@ -105,7 +121,7 @@ impl Ctx {
       // dev: true if this is a development package, i.e. it was not built from a release archive
       // build-id: a hash identifying the precise package version and metadata, and that of all its dependencies
       // opamfile: if the package is installed, path of its opam file, from opam internals, otherwise not defined
-      ident => Err(anyhow!("TODO unknown package[{:?}] var: {:?}", path, ident)),
+      ident => Err(anyhow!("TODO unknown package[{:?}] var: {:?}", &pkg, ident)),
     }
   }
 

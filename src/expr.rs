@@ -1,3 +1,4 @@
+use anyhow::*;
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::collections::HashMap;
@@ -25,10 +26,32 @@ pub struct AttrPath {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum StringComponent {
+pub enum StringComponentOf<T: fmt::Debug + Clone + PartialEq + Eq> {
 	Literal(String),
-	Expr(Expr),
+	Expr(T),
 }
+
+impl<T: fmt::Debug + Clone + Eq> StringComponentOf<T> {
+	pub fn map_result<R, F>(self, f: F) -> Result<StringComponentOf<R>> 
+		where F: Fn(T) -> Result<R>, R: fmt::Debug + Clone + Eq
+	{
+		match self {
+			StringComponentOf::Literal(s) => Ok(StringComponentOf::Literal(s)),
+			StringComponentOf::Expr(t) => Ok(StringComponentOf::Expr(f(t)?)),
+		}
+	}
+
+	pub fn map<R, F>(self, f: F) -> StringComponentOf<R> 
+		where F: Fn(T) -> R, R: fmt::Debug + Clone + Eq
+	{
+		match self {
+			StringComponentOf::Literal(s) => StringComponentOf::Literal(s),
+			StringComponentOf::Expr(t) => StringComponentOf::Expr(f(t)),
+		}
+	}
+}
+
+pub type StringComponent = StringComponentOf<Expr>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr {
@@ -53,31 +76,36 @@ impl Expr {
 		}))
 	}
 
-  pub fn as_str_opt(&self) -> Option<&str> {
-    use Expr::*;
-    match self {
-      Bool(b) => Some(if *b { S_TRUE } else { S_FALSE }),
-      Str(s) => Some(s.as_str()),
-      _ => None,
-    }
-  }
+  //pub fn as_str_opt(&self) -> Option<&str> {
+  //  use Expr::*;
+  //  match self {
+  //    Bool(b) => Some(if *b { S_TRUE } else { S_FALSE }),
+  //    Str(s) => Some(s.as_str()),
+  //    _ => None,
+  //  }
+  //}
 
 	pub fn canonicalize(self) -> Self {
 		use Expr::*;
 		match self {
 			StrInterp(components) => {
-				let as_plain_string: Result<Vec<&str>, ()> = components.iter().map(|part|
+				let coerced_to_string = components.into_iter().map(|part|
+					part.map(|expr| match expr.canonicalize() {
+						Expr::Bool(b) => Expr::Str(format!("{}", b)),
+						other => other,
+					})
+				).collect::<Vec<StringComponent>>();
+
+				let as_plain_string: Result<Vec<&str>, ()> = coerced_to_string.iter().map(|part|
 					match part {
 						StringComponent::Literal(s) => Ok(s.as_str()),
 						StringComponent::Expr(Expr::Str(s)) => Ok(s.as_str()),
-						StringComponent::Expr(expr) => {
-							expr.as_str_opt().map(Ok).unwrap_or(Err(()))
-						},
+						StringComponent::Expr(_) => Err(()),
 					}
 				).collect();
 				match as_plain_string {
 					Ok(parts) => Expr::Str(parts.join("")),
-					Err(()) => StrInterp(components),
+					Err(()) => StrInterp(coerced_to_string),
 				}
 			},
 			other => other

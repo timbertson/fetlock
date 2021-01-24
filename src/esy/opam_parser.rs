@@ -1,6 +1,5 @@
 use anyhow::*;
-use crate::expr;
-use crate::expr::Expr;
+use crate::expr::{Expr, StringComponentOf};
 use crate::esy::eval::{NixCtx, Eval};
 use nom::{
   *,
@@ -175,10 +174,10 @@ fn string_char(s: Src) -> Res<char> {
 }
 
 // <string>        ::= ( (") { <char> }* (") ) | ( (""") { <char> }* (""") )
-fn quote_string(s: Src) -> Res<Vec<StringComponent>> {
+fn quote_string(s: Src) -> Res<Vec<OpamSC>> {
   delimited(char('"'), map(many0(string_atom), StringAtom::coalesce), char('"'))(s)
 }
-fn triplequote_string(s: Src) -> Res<Vec<StringComponent>> {
+fn triplequote_string(s: Src) -> Res<Vec<OpamSC>> {
   map(
     preceded(tag("\"\"\""), many_till(triplequote_string_atom, tag("\"\"\""))),
     |(content, _delim)| StringAtom::coalesce(content)
@@ -205,27 +204,28 @@ fn string_atom(s: Src) -> Res<StringAtom> {
 }
 
 struct CoalesceState<'a> {
-  _result: Vec<StringComponent<'a>>,
+  _result: Vec<OpamSC<'a>>,
   _pending: Option<String>,
 }
 
+// TODO can this be generalised so that we can also coalesce nix strings?
 impl<'a> CoalesceState<'a> {
   pub fn drain_pending(&mut self) {
     if let Some(prev) = self._pending.take() {
-      self._result.push(StringComponent::Str(prev));
+      self._result.push(OpamSC::Literal(prev));
     }
   }
 
   pub fn push_expr(&mut self, v: Value<'a>) {
     self.drain_pending();
-    self._result.push(StringComponent::Expr(v));
+    self._result.push(OpamSC::Expr(v));
   }
 
   pub fn push_char(&mut self, c: char) {
     self._pending.get_or_insert_with(|| String::new()).push(c);
   }
 
-  pub fn result(mut self) -> Vec<StringComponent<'a>> {
+  pub fn result(mut self) -> Vec<OpamSC<'a>> {
     self.drain_pending();
     self._result
   }
@@ -236,7 +236,7 @@ impl<'a> CoalesceState<'a> {
 }
 
 impl<'a> StringAtom<'a> {
-  fn coalesce(atoms: Vec<Self>) -> Vec<StringComponent<'a>> {
+  fn coalesce(atoms: Vec<Self>) -> Vec<OpamSC<'a>> {
     let mut state = CoalesceState::new();
     for atom in atoms {
       match atom {
@@ -248,27 +248,13 @@ impl<'a> StringAtom<'a> {
   }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum StringComponent<'a> {
-  Str(String),
-  Expr(Value<'a>),
-}
-
-impl<'a> StringComponent<'a> {
-  pub fn into_nix<'c, Ctx: NixCtx<'c>>(self, c: &Ctx) -> Result<expr::StringComponent> where 'a : 'c {
-    use StringComponent::*;
-    match self {
-      Str(s) => Ok(expr::StringComponent::Literal(s)),
-      Expr(e) => Ok(expr::StringComponent::Expr(e.into_nix(c)?)),
-    }
-  }
-}
+pub type OpamSC<'a> = StringComponentOf<Value<'a>>;
 
 fn interpolation(s: Src) -> Res<Value> {
   delimited(tag("%{"), ws(value), tag("}%"))(s)
 }
 
-fn string(s: Src) -> Res<Vec<StringComponent>> {
+fn string(s: Src) -> Res<Vec<OpamSC>> {
   context("string",
     alt((triplequote_string, quote_string)),
   )(s)
@@ -309,7 +295,7 @@ pub struct ValueWithOption<'a> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value<'a> {
-  String(Vec<StringComponent<'a>>),
+  String(Vec<OpamSC<'a>>),
   Bool(bool),
   Int(isize),
   Ident(Src<'a>),
@@ -462,7 +448,7 @@ pub enum FileItem<'a> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Section<'a> {
   pub ident: Src<'a>,
-  pub string: Option<Vec<StringComponent<'a>>>,
+  pub string: Option<Vec<OpamSC<'a>>>,
   pub contents: Vec<FileItem<'a>>,
 }
 // <section>       ::= <ident> [ <string> ] "{" <file-contents> "}"
@@ -489,7 +475,7 @@ fn file_contents(s: Src) -> Res<Vec<FileItem>> {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Term<'a> {
-  String(Vec<StringComponent<'a>>),
+  String(Vec<OpamSC<'a>>),
   Varident(Varident<'a>)
 }
 // <term>          ::= <string> | <varident>
@@ -560,14 +546,14 @@ mod tests {
   fn test_string() {
     valid(string, r#""""hello""""#);
     valid(string, r#""hello""#);
-    use StringComponent::*;
+    use StringComponentOf::*;
     assert_eq!(
       p(string, "\"%{1}%\""),
       vec!(Expr(Value::Int(1)))
     );
     assert_eq!(
       p(string, "\"hi %{there}%\""),
-      vec!(Str("hi ".to_owned()), Expr(Value::Ident("there")))
+      vec!(Literal("hi ".to_owned()), Expr(Value::Ident("there")))
     );
   }
 

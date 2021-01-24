@@ -1,7 +1,6 @@
 use anyhow::*;
 use log::*;
 use std::collections::HashMap;
-use crate::expr;
 use crate::esy::opam_parser::*;
 use crate::esy::opam_parser;
 use crate::esy::opam::{Name, NameRef, Pkg};
@@ -213,6 +212,21 @@ impl Ctx {
   }
 }
 
+#[derive(Debug, Clone)]
+pub enum EvalSC {
+  Literal(String),
+  Expr(Eval),
+}
+
+impl EvalSC {
+  fn into_nix(self) -> Result<StringComponent> {
+    todo!()
+    // match self {
+    //   EvalSC::Literal(s) => Ok(Expr::Literal(s)),
+    //   EvalSC::Expr(e) => Expr
+  }
+}
+
 // Eval is used to reduce formulas down to primitives, where possible
 #[derive(Debug, Clone)]
 pub enum Eval {
@@ -220,6 +234,7 @@ pub enum Eval {
   Undefined,
   Bool(bool),
   Str(String),
+  StrInterp(Vec<EvalSC>),
   List(Vec<Eval>),
 }
 
@@ -228,7 +243,7 @@ use Eval::*;
 impl Eval {
   fn truthy(&self) -> bool {
     match self {
-      Nix(_) | Str(_) => true,
+      Nix(_) | Str(_) | StrInterp(_) => true,
       Undefined => false,
       Bool(b) => *b,
       List(l) => l.iter().filter(|x| x.truthy()).count() > 0,
@@ -248,8 +263,13 @@ impl Eval {
     match v {
       // TODO could canonicalize() a string to turn it into a Str, but it's unclear if that
       // is ever needed
-      // TODO need to dive into string components
-      Int(_) | String(_) => Self::nix_of_value(v, c).map(Eval::Nix),
+      Int(x) => Ok(Eval::Nix(Expr::Literal(format!("{}", x)))),
+      String(parts) => {
+        let parts = parts.into_iter()
+          .map(|component| component.map_result(|v| v.into_nix(c)))
+          .collect::<Result<Vec<StringComponent>>>()?;
+        Ok(Eval::Nix(Expr::StrInterp(parts).canonicalize()))
+      },
 
       List(l) => Ok(Eval::List(
         l.into_iter()
@@ -333,36 +353,18 @@ impl Eval {
     }
   }
 
-  // transform a value straight into nix (i.e. when it doesn't have an Eval representation)
-  fn nix_of_value<'a, C: NixCtx<'a>>(v: Value<'a>, c: &C) -> Result<Expr> {
-    use Value::*;
-    match v {
-      // TODO does this belong here? Or should it be hoisted to Eval?
-      String(x) => {
-        let parts = x.into_iter()
-          .map(|x| x.into_nix(c))
-          .collect::<Result<Vec<expr::StringComponent>>>()?;
-        Ok(Expr::StrInterp(parts).canonicalize())
-      },
-      Int(x) => Ok(Expr::Literal(format!("{}", x))),
-
-      // all of these should have been replaced by `eval`, or make no sense at the toplevel
-      Bool(_) |
-      List(_) |
-      Varident(_) |
-      Ident(_) |
-      UnaryOp(_, _) |
-      Binop(_) |
-      Option(_) => Err(anyhow!("Unimplemented: nix_of_value({:?})", v))?,
-    }
-  }
-
   pub fn into_nix<'a, C: NixCtx<'a>>(self, c: &C) -> Result<Expr> {
     match self {
       Eval::Nix(expr) => Ok(expr),
       Eval::Undefined => Err(anyhow!("TODO: undefined")),
-      Eval::Bool(b) => Ok(Expr::Literal(format!("{}", b))),
+      Eval::Bool(b) => Ok(Expr::Bool(b)),
       Eval::Str(s) => Ok(Expr::Str(s)),
+      Eval::StrInterp(parts) => {
+        let nix_parts = parts.into_iter()
+          .map(|part| part.into_nix())
+          .collect::<Result<Vec<StringComponent>>>();
+        Ok(Expr::StrInterp(nix_parts?))
+      },
       Eval::List(l) => {
         let exprs = l.into_iter().map(|x| x.into_nix(c)).collect::<Result<Vec<Expr>>>()?;
         Ok(Expr::List(exprs))

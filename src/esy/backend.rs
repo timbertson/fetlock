@@ -37,6 +37,7 @@ impl EsyLock {
 	}
 	
 	async fn finalize_spec(esy_spec: &mut EsySpec, opam_map: &HashMap<opam::Name, opam::Pkg>) -> Result<()> {
+		info!("[esy]: {}", esy_spec.spec.id.name);
 		if let Some(path) = fetch::realise_source(&esy_spec.spec).await? {
 			let name = esy_spec.meta.opam_name.as_ref().expect("opam name");
 			let manifest = if let Some(manifest_path) = esy_spec.meta.manifest_path.as_ref() {
@@ -53,10 +54,10 @@ impl EsyLock {
 			let nix_ctx = eval::Ctx::from_map(&name, &opam_map);
 			let opam = opam::Opam::from_str(&manifest)
 				.with_context(|| format!("parsing opam manifest:\n{}", &manifest))?;
-			info!("parsed opam: {:?}", opam);
+			debug!("parsed opam: {:?}", opam);
 			let nix = opam.into_nix(&nix_ctx)
 				.with_context(|| format!("evaluating opam:\n{:?}", &manifest))?;
-			info!(" -> as nix: {:?}", nix);
+			debug!(" -> as nix: {:?}", nix);
 			esy_spec.spec.extra.insert("opam".to_owned(), nix.expr());
 		}
 		Ok(())

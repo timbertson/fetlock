@@ -143,7 +143,7 @@ async fn do_prefetch(src: &Src) -> Result<Sha256> {
 
 pub async fn realise_source(spec: &Spec) -> Result<Option<PathBuf>> {
 	if let Some(src_digest) = spec.src_digest() {
-		info!("realise: {:?}", &spec.src);
+		debug!("realise: {:?}", &spec.src);
 		let mut command = fetch_command(&src_digest)?;
 		let output: std::process::Output = command.output().await?;
 		if output.status.success() {

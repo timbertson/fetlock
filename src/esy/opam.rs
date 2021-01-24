@@ -101,10 +101,7 @@ impl<'a> Opam<'a> {
         match arg {
           Expr::Str(s) => buf.push(StringComponent::Literal(s)),
           Expr::StrInterp(s) => buf.extend(s),
-          other => match other.as_str_opt() {
-            Some(s) => buf.push(StringComponent::Literal(s.to_owned())),
-            None => Err(anyhow!("Invalid command argument: {:?}", other))?,
-          },
+          other => Err(anyhow!("Invalid command argument: {:?}", other))?,
         };
       }
       Ok(())
@@ -182,9 +179,10 @@ mod tests {
   type StringComponent = crate::StringComponent;
   
   fn bash(cmds: Expr) -> Expr {
+    let cmds = cmds.canonicalize();
     match Opam::bash_of_commands(cmds.clone())
-      .with_context(||format!("{:?}", cmds)) {
-      Ok(expr) => expr,
+      .with_context(||format!("Processing commands: {:?}", cmds)) {
+      Ok(expr) => expr.canonicalize(),
       Err(e) => panic!("{:?}", e),
     }
   }
@@ -196,21 +194,25 @@ mod tests {
   #[test]
   fn test_bash_commands() {
     assert_eq!(
-      cmd(vec!(Expr::Bool(true))),
-      StrInterp(vec!(
-        StringComponent::Literal("true".to_string())
-      ))
-    );
-
-    assert_eq!(
       cmd(vec!(
         StrInterp(vec!(
           StringComponent::Expr(Bool(false))
         )).canonicalize()
       )),
-      StrInterp(vec!(
-        StringComponent::Literal("false".to_string())
-      ))
+      Str("false".to_string())
+    );
+    
+    assert_eq!(
+      cmd(vec!(
+        Expr::Str("ocaml".to_owned()),
+        Expr::Str("pkg/pkg.ml".to_owned()),
+        Expr::Str("build".to_owned()),
+        Expr::Str("--with-js_of_ocaml".to_owned()),
+        StrInterp(vec!(
+          StringComponent::Expr(Bool(true))
+        )).canonicalize()
+      )),
+      Str("ocaml pkg/pkg.ml build --with-js_of_ocaml true".to_owned())
     );
   }
 }

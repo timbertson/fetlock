@@ -80,7 +80,16 @@ impl Backend for EsyLock {
 	}
 
 	async fn finalize(mut self) -> Result<Lock<Self::Spec>> {
-		self.lock.vars.insert("siteLib", Expr::Literal("prefix: prefix + self.siteLib".to_owned()));
+		match self.lock.specs.iter().find(|(key, esy_spec)| esy_spec.spec.id.name == "ocaml") {
+			Some((key, esy_spec)) => {
+				self.lock.context.extra.insert(
+					"ocaml".to_owned(),
+					Expr::get_drv(key.to_string())
+				);
+			},
+			None => warn!("no `ocaml` implementation found, you will need to supply one at import time"),
+		}
+
 		let (mut specs, opam_map) = self.opam_specs();
 		let opam_map_ref = &opam_map;
 		
@@ -101,6 +110,7 @@ impl Backend for EsyLock {
 			response?;
 		}
 		drop(stream);
+
 		Ok(self.lock)
 	}
 }

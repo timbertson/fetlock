@@ -61,7 +61,7 @@ impl Ctx {
     NixCtxMap { name, map }
   }
 
-  pub fn resolve<'a, 'expr: 'a, Ctx: NixCtx<'a>>(ctx: &Ctx, scope: VarScope<'a>, ident: &'expr str) -> Result<Eval<'a>> {
+  pub fn resolve<'a, 'expr: 'a, Ctx: NixCtx<'a>>(ctx: &Ctx, scope: VarScope<'a>, ident: &'expr str) -> Result<Eval> {
     let resolved = match scope {
       VarScope::Unknown => match ident {
         "jobs" => Ok(Eval::Str("$NIX_BUILD_CORES".to_owned())),
@@ -105,23 +105,17 @@ impl Ctx {
         // opamfile: if the package is installed, path of its opam file, from opam internals, otherwise not defined
         match pkg {
           None => Ok(Eval::Undefined),
-          Some(pkg) => {
-            let drv = Expr::FunCall(Box::new(FunCall {
-              subject: Expr::Literal("getDrv".to_owned()),
-              args: vec!(Expr::Str(pkg.key.as_str().to_owned()))
-            }));
-            Self::resolve_path(PkgImpl {
-              path: drv,
-              name: &pkg.name,
-            }, ident)
-          },
+          Some(pkg) => Self::resolve_path(PkgImpl {
+            path: Expr::get_drv(pkg.key.to_string()),
+            name: &pkg.name,
+          }, ident),
         }
       }),
     };
     resolved.with_context(|| format!("resolving {:?} in scope {:?}", ident, &scope))
   }
   
-  fn resolve_bool(installed: bool, ident: &str) -> Option<Eval<'static>> {
+  fn resolve_bool(installed: bool, ident: &str) -> Option<Eval> {
     match ident {
       "installed" => Some(Eval::Bool(installed)),
 
@@ -147,7 +141,7 @@ impl Ctx {
     }
   }
 
-  fn resolve_path(pkg: PkgImpl, ident: &str) -> Result<Eval<'static>> {
+  fn resolve_path(pkg: PkgImpl, ident: &str) -> Result<Eval> {
     let simple = PathType::Simple;
     let named = PathScope::Named;
     let rel_lib_and_scope = match ident {
@@ -180,12 +174,11 @@ impl Ctx {
         PathType::Lib => {
           let PkgImpl { path, name } = pkg;
           Expr::StrInterp(vec!(
-            StringComponent::Expr(path),
-            StringComponent::Literal("/".to_owned()),
             StringComponent::Expr(Expr::FunCall(Box::new(FunCall {
-              subject: Expr::Literal("siteLib".to_owned()),
-              args: vec!(Expr::Str(name.0.clone())),
+              subject: Expr::Literal("final.siteLib".to_owned()),
+              args: vec!(path),
             }))),
+            StringComponent::Literal(format!("/{}", name.0)),
           ))
         },
         PathType::Simple => Expr::StrInterp(vec!(
@@ -204,11 +197,11 @@ impl Ctx {
     }
   }
 
-  pub fn resolve_ident<'a, Ctx: NixCtx<'a>>(ctx: &Ctx, ident: &'a str) -> Result<Eval<'a>> {
+  pub fn resolve_ident<'a, Ctx: NixCtx<'a>>(ctx: &Ctx, ident: &'a str) -> Result<Eval> {
     Self::resolve(ctx, VarScope::Unknown, ident)
   }
 
-  pub fn resolve_varident<'a, Ctx: NixCtx<'a>>(ctx: &Ctx, ident: &Varident<'a>) -> Result<Eval<'a>> {
+  pub fn resolve_varident<'a, Ctx: NixCtx<'a>>(ctx: &Ctx, ident: &Varident<'a>) -> Result<Eval> {
     if ident.additional_scopes.len() > 0 {
       todo!("support additional scopes");
     }
@@ -222,21 +215,20 @@ impl Ctx {
 
 // Eval is used to reduce formulas down to primitives, where possible
 #[derive(Debug, Clone)]
-pub enum Eval<'a> {
-  Complex(Value<'a>), // TODO: remove?
+pub enum Eval {
   Nix(Expr), // opaque nix expression (e.g. function call)
   Undefined,
   Bool(bool),
   Str(String),
-  List(Vec<Eval<'a>>),
+  List(Vec<Eval>),
 }
 
 use Eval::*;
 
-impl<'a> Eval<'a> {
+impl Eval {
   fn truthy(&self) -> bool {
     match self {
-      Complex(_) | Nix(_) | Str(_) => true,
+      Nix(_) | Str(_) => true,
       Undefined => false,
       Bool(b) => *b,
       List(l) => l.iter().filter(|x| x.truthy()).count() > 0,
@@ -251,20 +243,20 @@ impl<'a> Eval<'a> {
     }
   }
 
-  pub fn evaluate<C: NixCtx<'a>>(v: Value<'a>, c: &C) -> Result<Eval<'a>> {
+  pub fn evaluate<'a, C: NixCtx<'a>>(v: Value<'a>, c: &C) -> Result<Eval> {
     use Value::*;
     match v {
       // TODO could canonicalize() a string to turn it into a Str, but it's unclear if that
       // is ever needed
       // TODO need to dive into string components
-      Int(_) | String(_) => Ok(Eval::Complex(v)),
+      Int(_) | String(_) => Self::nix_of_value(v, c).map(Eval::Nix),
 
       List(l) => Ok(Eval::List(
         l.into_iter()
         .map(|v| Eval::evaluate(v, c))
         // drop all elements which evaluate to false / undefined
         .filter(|result| result.as_ref().map(Eval::truthy).unwrap_or(true /* include failed */))
-        .collect::<Result<Vec<Eval<'a>>>>()?
+        .collect::<Result<Vec<Eval>>>()?
       )),
 
       Bool(x) => Ok(Eval::Bool(x)),
@@ -341,31 +333,32 @@ impl<'a> Eval<'a> {
     }
   }
 
-  
-  pub fn into_nix<C: NixCtx<'a>>(self, c: &C) -> Result<Expr> {
-    match self {
-      Eval::Complex(value) => {
-        use Value::*;
-        match value {
-          // TODO does this belong here? Or should it be hoisted to Eval?
-          String(x) => {
-            let parts = x.into_iter()
-              .map(|x| x.into_nix(c))
-              .collect::<Result<Vec<expr::StringComponent>>>()?;
-            Ok(Expr::StrInterp(parts).canonicalize())
-          },
-          Int(x) => Ok(Expr::Literal(format!("{}", x))),
-
-          // all of these should have been replaced by `eval`, or make no sense at the toplevel
-          Bool(_) |
-          List(_) |
-          Varident(_) |
-          Ident(_) |
-          UnaryOp(_, _) |
-          Binop(_) |
-          Option(_) => Err(anyhow!("Unimplemented: {:?}.into_nix()", value))?,
-        }
+  // transform a value straight into nix (i.e. when it doesn't have an Eval representation)
+  fn nix_of_value<'a, C: NixCtx<'a>>(v: Value<'a>, c: &C) -> Result<Expr> {
+    use Value::*;
+    match v {
+      // TODO does this belong here? Or should it be hoisted to Eval?
+      String(x) => {
+        let parts = x.into_iter()
+          .map(|x| x.into_nix(c))
+          .collect::<Result<Vec<expr::StringComponent>>>()?;
+        Ok(Expr::StrInterp(parts).canonicalize())
       },
+      Int(x) => Ok(Expr::Literal(format!("{}", x))),
+
+      // all of these should have been replaced by `eval`, or make no sense at the toplevel
+      Bool(_) |
+      List(_) |
+      Varident(_) |
+      Ident(_) |
+      UnaryOp(_, _) |
+      Binop(_) |
+      Option(_) => Err(anyhow!("Unimplemented: nix_of_value({:?})", v))?,
+    }
+  }
+
+  pub fn into_nix<'a, C: NixCtx<'a>>(self, c: &C) -> Result<Expr> {
+    match self {
       Eval::Nix(expr) => Ok(expr),
       Eval::Undefined => Err(anyhow!("TODO: undefined")),
       Eval::Bool(b) => Ok(Expr::Literal(format!("{}", b))),

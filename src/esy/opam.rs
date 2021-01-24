@@ -94,16 +94,20 @@ impl<'a> Opam<'a> {
     let newline = StringComponent::Literal("\n".to_owned());
     let space = StringComponent::Literal(" ".to_owned());
     
-    let add_cmd = |buf: &mut Vec<StringComponent>, args| {
+    let add_cmd = |buf: &mut Vec<StringComponent>, args| -> Result<()> {
       let mut first_arg = true;
       for arg in args {
         Self::add_sep(buf, &mut first_arg, &space);
         match arg {
           Expr::Str(s) => buf.push(StringComponent::Literal(s)),
           Expr::StrInterp(s) => buf.extend(s),
-          _ => todo!(),
+          other => match other.as_str_opt() {
+            Some(s) => buf.push(StringComponent::Literal(s.to_owned())),
+            None => Err(anyhow!("Invalid command argument: {:?}", other))?,
+          },
         };
       }
+      Ok(())
     };
 
     let mut buf = Vec::new();
@@ -113,7 +117,7 @@ impl<'a> Opam<'a> {
         if !cmds.iter().any(|cmd| cmd.is_list()) {
           // canonical form is a list (script) of lists (command args)
           // but if you only have one command you can just pass a single list of args
-          add_cmd(&mut buf, cmds)
+          add_cmd(&mut buf, cmds)?
         } else {
           let mut first_cmd = true;
           if cmds.len() > 1 {
@@ -125,7 +129,7 @@ impl<'a> Opam<'a> {
             match cmd {
               Expr::List(args) => {
                 Self::add_sep(&mut buf, &mut first_cmd, &newline);
-                add_cmd(&mut buf, args);
+                add_cmd(&mut buf, args)?;
               },
               expr => Err(anyhow!("TODO: interpret command argument: {:?}", expr))?,
             }
@@ -168,5 +172,45 @@ impl Nix {
 
     map.insert("depexts".to_owned(), Box::new(Expr::List(depexts)));
     Expr::AttrSet(map)
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use Expr::*;
+  type StringComponent = crate::StringComponent;
+  
+  fn bash(cmds: Expr) -> Expr {
+    match Opam::bash_of_commands(cmds.clone())
+      .with_context(||format!("{:?}", cmds)) {
+      Ok(expr) => expr,
+      Err(e) => panic!("{:?}", e),
+    }
+  }
+
+  fn cmd(cmd: Vec<Expr>) -> Expr {
+    bash(List(cmd))
+  }
+
+  #[test]
+  fn test_bash_commands() {
+    assert_eq!(
+      cmd(vec!(Expr::Bool(true))),
+      StrInterp(vec!(
+        StringComponent::Literal("true".to_string())
+      ))
+    );
+
+    assert_eq!(
+      cmd(vec!(
+        StrInterp(vec!(
+          StringComponent::Expr(Bool(false))
+        )).canonicalize()
+      )),
+      StrInterp(vec!(
+        StringComponent::Literal("false".to_string())
+      ))
+    );
   }
 }

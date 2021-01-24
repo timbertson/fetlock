@@ -3,7 +3,10 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::fmt;
 
-#[derive(Debug, Clone)]
+static S_TRUE: &str = "true";
+static S_FALSE: &str = "false";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunCall {
 	pub subject: Expr,
 	pub args: Vec<Expr>,
@@ -15,19 +18,19 @@ impl FunCall {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AttrPath {
 	pub subject: Expr,
 	pub attr_path: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StringComponent {
 	Literal(String),
 	Expr(Expr),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr {
 	Literal(String),
 	Bool(bool),
@@ -42,6 +45,23 @@ pub enum Expr {
 }
 
 impl Expr {
+	pub fn get_drv(key: String) -> Self {
+		// TODO this is a bit lazy, we could just inline `final.pkgs."key"` but it needs another Expr type
+		Expr::FunCall(Box::new(FunCall {
+			subject: Expr::Literal("final.getDrv".to_owned()),
+			args: vec!(Expr::Str(key))
+		}))
+	}
+
+  pub fn as_str_opt(&self) -> Option<&str> {
+    use Expr::*;
+    match self {
+      Bool(b) => Some(if *b { S_TRUE } else { S_FALSE }),
+      Str(s) => Some(s.as_str()),
+      _ => None,
+    }
+  }
+
 	pub fn canonicalize(self) -> Self {
 		use Expr::*;
 		match self {
@@ -50,7 +70,9 @@ impl Expr {
 					match part {
 						StringComponent::Literal(s) => Ok(s.as_str()),
 						StringComponent::Expr(Expr::Str(s)) => Ok(s.as_str()),
-						StringComponent::Expr(_) => Err(()),
+						StringComponent::Expr(expr) => {
+							expr.as_str_opt().map(Ok).unwrap_or(Err(()))
+						},
 					}
 				).collect();
 				match as_plain_string {

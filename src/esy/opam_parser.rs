@@ -324,7 +324,7 @@ pub enum Value<'a> {
 
 impl<'a> Value<'a> {
   pub fn into_nix<'c, C: NixCtx<'c>>(self, c: &C) -> Result<Expr> where 'a: 'c {
-    Eval::evaluate(self, c)?.into_nix(c)
+    Ok(Eval::evaluate(self, c)?.into_nix(c)?.canonicalize())
   }
 }
 

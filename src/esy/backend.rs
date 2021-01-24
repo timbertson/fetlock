@@ -54,7 +54,8 @@ impl EsyLock {
 			let opam = opam::Opam::from_str(&manifest)
 				.with_context(|| format!("parsing opam manifest:\n{}", &manifest))?;
 			info!("parsed opam: {:?}", opam);
-			let nix = opam.into_nix(&nix_ctx)?;
+			let nix = opam.into_nix(&nix_ctx)
+				.with_context(|| format!("evaluating opam:\n{:?}", &manifest))?;
 			info!(" -> as nix: {:?}", nix);
 			esy_spec.spec.extra.insert("opam".to_owned(), nix.expr());
 		}
@@ -83,8 +84,9 @@ impl Backend for EsyLock {
 		let (mut specs, opam_map) = self.opam_specs();
 		let opam_map_ref = &opam_map;
 		
+		let parallelism = 10;
 		// TODO sorting and no parallelism makes ordering deterministic for testing
-		let parallelism = 1;
+		// let parallelism = 1;
 		specs.sort_by(|a,b| a.spec.id.cmp(&b.spec.id));
 
 		let mut stream = futures::stream::iter(specs)

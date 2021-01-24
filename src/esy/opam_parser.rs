@@ -501,7 +501,7 @@ fn term(s: Src) -> Res<Term> {
 }
 
 pub fn entire_file(s: Src) -> Res<Vec<FileItem>> {
-  all_consuming(file_contents)(s)
+  all_consuming(ws(file_contents))(s)
 }
 
 pub fn parse<'a, T, F>(mut p: F, contents: &'a str) -> Result<T>
@@ -638,6 +638,7 @@ mod tests {
     valid(entire_file, r#"foo: true"#);
     valid(entire_file, r#"description: """desc""""#);
     valid(entire_file, r#"
+#leading comment
 opam-version: "2.0"
 synopsis: "Promises and event-driven I/O"
 description: """\

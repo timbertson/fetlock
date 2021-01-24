@@ -1,7 +1,9 @@
 use anyhow::*;
+use log::*;
 use std::collections::HashMap;
 use crate::expr;
 use crate::esy::opam_parser::*;
+use crate::esy::opam_parser;
 use crate::esy::opam::{Name, NameRef, Pkg};
 use crate::{Expr, FunCall, StringComponent};
 
@@ -41,6 +43,18 @@ pub enum VarScope<'a> {
   Package(Option<&'a Pkg>),
 }
 
+#[derive(Debug, Clone)]
+enum PathScope {
+  Named,
+  Root,
+}
+
+#[derive(Debug, Clone)]
+enum PathType {
+  Lib,
+  Simple,
+}
+
 pub struct Ctx;
 impl Ctx {
   pub fn from_map<'a>(name: &'a Name, map: &'a HashMap<Name, Pkg>) -> NixCtxMap<'a> {
@@ -51,79 +65,135 @@ impl Ctx {
     let resolved = match scope {
       VarScope::Unknown => match ident {
         "jobs" => Ok(Eval::Str("$NIX_BUILD_CORES".to_owned())),
+        "make" => Ok(Eval::Str("make".to_owned())),
+
+        "opam-version" => Ok(Eval::Str("2.0".to_owned())),
         ident if ident == ctx.name().0 => Ok(Eval::Str("$out".to_owned())),
         
         // is it a package variable implicitly on `self`?
         ident => Self::resolve(ctx, VarScope::SelfScope, ident).or_else(|_| {
           // otherwise try looking it up as a package name
           match ctx.get(NameRef(ident)) {
-            Some(pkg) => Self::resolve(ctx, VarScope::Package(Some(pkg)), "path"),
+            Some(pkg) => Self::resolve(ctx, VarScope::Package(Some(pkg)), "prefix"),
             
             // otherwise it might either be an uninstalled package,
             // an unknown global or possibly a dynamic var, which we don't support
             // TODO quietly return undefined once this is more mature
-            None => Err(anyhow!("TODO unknown global: {:?}", ident)),
+            None => Err(anyhow!("TODO unknown ident: {:?}", ident)),
           }
         })
       },
       VarScope::SelfScope => match ident {
         "name" => Ok(Eval::Str(ctx.name().0.to_owned())),
         "version" => Err(anyhow!("TODO: version")),
-        ident => Self::resolve_against(PkgImpl {
-          path: Expr::Str("$out".to_owned()),
-          name: ctx.name(),
-        }, ident),
+        ident => Self::resolve_bool(true, ident).map(Ok)
+          .unwrap_or_else(|| Self::resolve_path(PkgImpl {
+            path: Expr::Str("$out".to_owned()),
+            name: ctx.name(),
+          }, ident)),
       },
-      VarScope::Package(pkg) => match ident {
-        "installed" => Ok(Eval::Bool(pkg.is_some())),
-        "enable" => {
-          let s = if pkg.is_some() { "enable" } else { "disable" };
-          Ok(Eval::Str(s.to_owned()))
-        },
-        ident => match pkg {
-          None => Err(anyhow!("TODO: need to suppress entire surrounding expression for: ({:?})", ident)),
+      // TODO pseudo-package for `ocaml`?
+      VarScope::Package(pkg) => Self::resolve_bool(pkg.is_some(), ident).map(Ok).unwrap_or_else(|| {
+        // Unimplemented:
+        // depends: resolved direct dependencies of the package
+        // enable: takes the value "enable" or "disable" depending on whether the package is installed
+        // bin, sbin, lib, man, doc, share, etc: the corresponding directories for this package (similar to <pkgname>.install)
+        // build: directory where the package was built
+        // hash: hash of the package archive
+        // dev: true if this is a development package, i.e. it was not built from a release archive
+        // build-id: a hash identifying the precise package version and metadata, and that of all its dependencies
+        // opamfile: if the package is installed, path of its opam file, from opam internals, otherwise not defined
+        match pkg {
+          None => Ok(Eval::Undefined),
           Some(pkg) => {
             let drv = Expr::FunCall(Box::new(FunCall {
               subject: Expr::Literal("getDrv".to_owned()),
               args: vec!(Expr::Str(pkg.key.as_str().to_owned()))
             }));
-            Self::resolve_against(PkgImpl {
+            Self::resolve_path(PkgImpl {
               path: drv,
               name: &pkg.name,
             }, ident)
           },
         }
-      },
+      }),
     };
     resolved.with_context(|| format!("resolving {:?} in scope {:?}", ident, &scope))
   }
   
-  fn resolve_against(pkg: PkgImpl, ident: &str) -> Result<Eval<'static>> {
+  fn resolve_bool(installed: bool, ident: &str) -> Option<Eval<'static>> {
     match ident {
-      "pinned" // TODO do we ever want to pretend to be pinned?
+      "installed" => Some(Eval::Bool(installed)),
+
+      // preinstalled means packages suppose they can't write to the ocaml directory
+      // (we assume people only use this for the `ocaml` package)
+      "preinstalled"
+      | "native"
+      | "native-dynlink"
+      | "native-tools"
+        => Some(Eval::Bool(true)),
+
+      "pinned" // TODO do we ever want to pretend to be pinned / dev?
+      | "dev"
       | "with-test"
       | "with-doc"
-        => Ok(Eval::Bool(false)),
- 
-      "path" => Ok(Eval::Nix(pkg.path)),
-      "share" => {
-        let PkgImpl { name, path } = pkg;
-        Ok(Eval::Nix(Expr::StrInterp(vec!(
-          StringComponent::Expr(path),
-          StringComponent::Literal(name.0.to_owned())
-        ))))
-      },
+        => Some(Eval::Bool(false)),
 
-      // depends: resolved direct dependencies of the package
-      // enable: takes the value "enable" or "disable" depending on whether the package is installed
-      // bin, sbin, lib, man, doc, share, etc: the corresponding directories for this package (similar to <pkgname>.install)
-      // build: directory where the package was built
-      // hash: hash of the package archive
-      // dev: true if this is a development package, i.e. it was not built from a release archive
-      // build-id: a hash identifying the precise package version and metadata, and that of all its dependencies
-      // opamfile: if the package is installed, path of its opam file, from opam internals, otherwise not defined
-      ident => Err(anyhow!("TODO unknown package[{:?}] var: {:?}", &pkg, ident)),
+      "enable" => {
+        let s = if installed { "enable" } else { "disable" };
+        Some(Eval::Str(s.to_owned()))
+      },
+      _ => None
     }
+  }
+
+  fn resolve_path(pkg: PkgImpl, ident: &str) -> Result<Eval<'static>> {
+    let simple = PathType::Simple;
+    let named = PathScope::Named;
+    let rel_lib_and_scope = match ident {
+      "prefix" => Ok((None, simple, PathScope::Root)),
+
+      "share"
+      | "doc"
+      | "bin"
+      | "sbin"
+      | "man"
+      | "etc"
+      => Ok((Some(ident), simple, named)),
+
+      "lib" => Ok((None, PathType::Lib, named)),
+      "stublibs" | "toplevel" => Ok((Some(ident), simple, named)),
+      "lib_root" => Ok((Some("lib"), PathType::Lib, PathScope::Root)),
+      "share_root" => Ok((Some("share"), PathType::Simple, PathScope::Root)),
+
+      _ => Err(anyhow!("TODO unknown package[{:?}] var: {:?}", &pkg, ident)),
+    };
+
+    rel_lib_and_scope.map(|(rel, lib, scope)| {
+      let suffix = match (rel, scope) {
+        (Some(rel), PathScope::Named) => format!("/{}/{}", rel, pkg.name.0),
+        (None, PathScope::Named) => format!("/{}", pkg.name.0),
+        (Some(rel), PathScope::Root) => format!("/{}", rel),
+        (None, PathScope::Root) => "".to_owned(),
+      };
+      Eval::Nix(match lib {
+        PathType::Lib => {
+          let PkgImpl { path, name } = pkg;
+          Expr::StrInterp(vec!(
+            StringComponent::Expr(path),
+            StringComponent::Literal("/".to_owned()),
+            StringComponent::Expr(Expr::FunCall(Box::new(FunCall {
+              subject: Expr::Literal("siteLib".to_owned()),
+              args: vec!(Expr::Str(name.0.clone())),
+            }))),
+          ))
+        },
+        PathType::Simple => Expr::StrInterp(vec!(
+          StringComponent::Expr(pkg.path),
+          StringComponent::Literal(suffix),
+        )),
+      })
+    })
   }
 
   fn scope<'a, 'expr : 'a, Ctx: NixCtx<'a>>(ctx: &Ctx, scope: &'expr str) -> VarScope<'a> {
@@ -161,9 +231,10 @@ pub enum Eval<'a> {
   List(Vec<Eval<'a>>),
 }
 
+use Eval::*;
+
 impl<'a> Eval<'a> {
-  pub fn truthy(&self) -> bool {
-    use Eval::*;
+  fn truthy(&self) -> bool {
     match self {
       Complex(_) | Nix(_) | Str(_) => true,
       Undefined => false,
@@ -172,40 +243,102 @@ impl<'a> Eval<'a> {
     }
   }
 
+  fn as_bool(&self) -> Result<bool> {
+    match self {
+      Bool(b) => Ok(*b),
+      Undefined => Ok(false),
+      _ => Err(anyhow!("Can't coerce {:?} into boolean")),
+    }
+  }
+
   pub fn evaluate<C: NixCtx<'a>>(v: Value<'a>, c: &C) -> Result<Eval<'a>> {
     use Value::*;
-    Ok(match v {
+    match v {
       // TODO could canonicalize() a string to turn it into a Str, but it's unclear if that
       // is ever needed
       // TODO need to dive into string components
-      Int(_) | String(_) => Eval::Complex(v),
+      Int(_) | String(_) => Ok(Eval::Complex(v)),
 
-      List(l) => Eval::List(
+      List(l) => Ok(Eval::List(
         l.into_iter()
         .map(|v| Eval::evaluate(v, c))
         // drop all elements which evaluate to false / undefined
         .filter(|result| result.as_ref().map(Eval::truthy).unwrap_or(true /* include failed */))
         .collect::<Result<Vec<Eval<'a>>>>()?
-      ),
+      )),
 
-      Bool(x) => Eval::Bool(x),
-      Ident(x) => Ctx::resolve_ident(c, x)?,
-      Varident(x) => Ctx::resolve_varident(c, &x)?,
-      UnaryOp(_, _) => Err(anyhow!("Unimplemented: evaluate({:?})", v))?,
-      Binop(x) => Err(anyhow!("Unimplemented: evaluate({:?})", x))?,
+      Bool(x) => Ok(Eval::Bool(x)),
+      Ident(x) => Ctx::resolve_ident(c, x),
+      Varident(x) => Ctx::resolve_varident(c, &x),
+      UnaryOp(op, v) => {
+        use Op::*;
+        let b = Self::evaluate(*v, c).and_then(|x| x.as_bool());
+        match op {
+          Not => b.map(|b| Eval::Bool(!b)),
+          And
+          | Or
+          | Eq
+          | Neq
+          | Lte
+          | Gte
+          | Lt
+          | Gt
+          | Question
+          => Err(anyhow!("Unimplemented: evaluate(UnaryOp({:?}, _))", op))?
+        }
+      },
+      Binop(binop) => {
+        let opam_parser::Binop { a, op, b } = *binop;
+        // TODO: it's a bit annoying that we need to clone here...
+        let a_bool = || Self::evaluate(a.clone(), c).and_then(|x| x.as_bool());
+        let b_bool = || Self::evaluate(b.clone(), c).and_then(|x| x.as_bool());
+        let bools = a_bool().and_then(|a| b_bool().map(|b| (a,b)));
+
+        use Op::*;
+        match op {
+          // The explicit matching is so that we can short-circuit even when we can't
+          // evaluate one side of the operand
+          And => match (a_bool(), b_bool()) {
+            (Ok(false), _) | (_, Ok(false)) => Ok(Eval::Bool(false)),
+            _ => bools.map(|(a, b)| Eval::Bool(a && b)),
+          },
+
+          Or => match (a_bool(), b_bool()) {
+            (Ok(true), _) | (_, Ok(true)) => Ok(Eval::Bool(true)),
+            _ => bools.map(|(a, b)| Eval::Bool(a && b)),
+          },
+          
+          // for comparisons we assume we're running new versions,
+          // just to get past this stage for POC
+          Lt | Lte => {
+            warn!("TODO: assuming <= comparison returns false");
+            Ok(Eval::Bool(false))
+          },
+          Gt | Gte => {
+            warn!("TODO: assuming >= comparison returns true");
+            Ok(Eval::Bool(true))
+          },
+
+          Eq
+          | Neq
+          | Not
+          | Question
+          => Err(anyhow!("Unimplemented: evaluate(Binop(_, {:?}, _))", op))?
+        }
+      },
       Option(x) => {
         let ValueWithOption { value, option } = *x;
         let filter = Eval::evaluate(option, c)?;
         match filter {
           Eval::Bool(b) => if b {
-            Eval::evaluate(value, c)?
+            Eval::evaluate(value, c)
           } else {
-            Eval::Undefined
+            Ok(Eval::Undefined)
           }
-          other => other
+          other => Err(anyhow!("Unsupported filter value: {:?}", other))
         }
       },
-    })
+    }
   }
 
   

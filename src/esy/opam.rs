@@ -90,39 +90,49 @@ impl<'a> Opam<'a> {
     // and returns a multi-line bash string.
     // TODO: add quotes / escapes where necessary
     use crate::StringComponent;
-    let mut buf = Vec::new();
     
     let newline = StringComponent::Literal("\n".to_owned());
     let space = StringComponent::Literal(" ".to_owned());
+    
+    let add_cmd = |buf: &mut Vec<StringComponent>, args| {
+      let mut first_arg = true;
+      for arg in args {
+        Self::add_sep(buf, &mut first_arg, &space);
+        match arg {
+          Expr::Str(s) => buf.push(StringComponent::Literal(s)),
+          Expr::StrInterp(s) => buf.extend(s),
+          _ => todo!(),
+        };
+      }
+    };
+
+    let mut buf = Vec::new();
 
     match cmds {
       Expr::List(cmds) => {
-        let mut first_cmd = true;
-        if cmds.len() > 1 {
-          // always start a multiline string with a newline
-          first_cmd = false;
-        }
+        if !cmds.iter().any(|cmd| cmd.is_list()) {
+          // canonical form is a list (script) of lists (command args)
+          // but if you only have one command you can just pass a single list of args
+          add_cmd(&mut buf, cmds)
+        } else {
+          let mut first_cmd = true;
+          if cmds.len() > 1 {
+            // always start a multiline string with a newline
+            first_cmd = false;
+          }
 
-        for cmd in cmds {
-          match cmd {
-            Expr::List(args) => {
-              Self::add_sep(&mut buf, &mut first_cmd, &newline);
-              let mut first_arg = true;
-
-              for arg in args {
-                Self::add_sep(&mut buf, &mut first_arg, &space);
-                match arg {
-                  Expr::Str(s) => buf.push(StringComponent::Literal(s)),
-                  Expr::StrInterp(s) => buf.extend(s),
-                  _ => todo!(),
-                };
-              }
-            },
-            _ => todo!(),
+          for cmd in cmds {
+            match cmd {
+              Expr::List(args) => {
+                Self::add_sep(&mut buf, &mut first_cmd, &newline);
+                add_cmd(&mut buf, args);
+              },
+              expr => Err(anyhow!("TODO: interpret command argument: {:?}", expr))?,
+            }
           }
         }
       },
-      _ => todo!(),
+      cmds => Err(anyhow!("TODO: interpret commands expression: {:?}", cmds))?,
     }
     Ok(Expr::StrInterp(buf))
   }

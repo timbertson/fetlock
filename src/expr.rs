@@ -61,6 +61,13 @@ impl Expr {
 			other => other
 		}
 	}
+	
+	pub fn is_list(&self) -> bool {
+		match self {
+			Expr::List(_) => true,
+			_ => false,
+		}
+	}
 }
 
 #[derive(Debug, Clone)]

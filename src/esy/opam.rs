@@ -5,6 +5,7 @@ use crate::esy::opam_parser::*;
 use crate::esy::eval::*;
 use crate::{Key, Expr};
 
+// TODO: promote this outside of opam
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Name(pub String);
 

@@ -19,48 +19,98 @@ pub struct EsyLock {
 	lock: Lock<EsySpec>,
 }
 
+#[derive(Debug)]
+enum PartitionedSpec<'a> {
+	Opam(&'a mut EsySpec), // TODO make opam_name non-optional?
+	Esy(&'a mut EsySpec),
+}
+
+impl PartitionedSpec<'_> {
+	fn id(&self) -> &Id {
+		match self {
+			PartitionedSpec::Opam(spec) => &spec.spec.id,
+			PartitionedSpec::Esy(spec) => &spec.spec.id,
+		}
+	}
+}
+
+struct InstalledPkgs {
+	// TODO can these be refs?
+	opam: HashMap<opam::Name, opam::Pkg>,
+	esy: HashMap<opam::Name, opam::Pkg>,
+}
+
 impl EsyLock {
-	fn opam_specs(&mut self) -> (Vec<&mut EsySpec>, HashMap<opam::Name, opam::Pkg>) {
+	fn partition_specs<'a>(&'a mut self) -> (Vec<PartitionedSpec<'a>>, InstalledPkgs) {
+		let mut opam = HashMap::new();
+		let mut esy = HashMap::new();
 		let mut specs = Vec::new();
-		let mut map = HashMap::new();
+		let pkg = |name: opam::Name, key: &Key| opam::Pkg {
+			name: name,
+			key: key.clone(),
+		};
+
 		for (key, spec) in self.lock.specs.iter_mut() {
-			if let Some(name) = spec.meta.opam_name.as_ref() {
-				let pkg = opam::Pkg {
-					name: name.to_owned(),
-					key: key.clone(),
-				};
-				map.insert(name.to_owned(), pkg);
-				specs.push(spec);
+			match spec.meta.opam_name.as_ref() {
+				Some(name) => {
+					opam.insert(name.to_owned(), pkg(name.to_owned(), key));
+					specs.push(PartitionedSpec::Opam(spec));
+				},
+				None => {
+					let name = opam::Name(spec.spec.id.name.to_owned());
+					esy.insert(name.clone(), pkg(name, key));
+					specs.push(PartitionedSpec::Esy(spec));
+				},
 			}
 		}
-		(specs, map)
+
+		(specs, InstalledPkgs { esy, opam })
 	}
 	
-	async fn finalize_spec(esy_spec: &mut EsySpec, opam_map: &HashMap<opam::Name, opam::Pkg>) -> Result<()> {
-		info!("[esy]: {}", esy_spec.spec.id.name);
-		if let Some(path) = fetch::realise_source(&esy_spec.spec).await? {
-			let name = esy_spec.meta.opam_name.as_ref().expect("opam name");
-			let manifest = if let Some(manifest_path) = esy_spec.meta.manifest_path.as_ref() {
-				let extract = fetch::ExtractSource::from(&path).await?;
-				extract.file_contents(&manifest_path).await?
-			} else {
-				// TODO get your own checkout, stop hardcoding
-				let repo_path = std::path::PathBuf::from("/Users/tcuthbertson/.cache/opam2nix/repos/opam-repository/");
-				let repo = fetch::ExtractSource::from(&repo_path).await?;
-				let version = &esy_spec.spec.id.version;
-				let path = format!("packages/{}/{}.{}/opam", name.0, name.0, version);
-				repo.file_contents(&path).await?
-			};
-			let nix_ctx = eval::Ctx::from_map(&name, &opam_map);
-			let opam = opam::Opam::from_str(&manifest)
-				.with_context(|| format!("parsing opam manifest:\n{}", &manifest))?;
-			debug!("parsed opam: {:?}", opam);
-			let nix = opam.into_nix(&nix_ctx)
-				.with_context(|| format!("evaluating opam:\n{:?}", &manifest))?;
-			debug!(" -> as nix: {:?}", nix);
-			esy_spec.spec.extra.insert("opam".to_owned(), nix.expr());
+	async fn finalize_spec(spec: PartitionedSpec<'_>, installed: &InstalledPkgs) -> Result<()> {
+		info!("[esy]: {}", spec.id().name);
+		match spec {
+			PartitionedSpec::Opam(esy_spec) => {
+				if let Some(path) = fetch::realise_source(&esy_spec.spec).await? {
+					let name = esy_spec.meta.opam_name.as_ref().expect("opam name");
+					let manifest = if let Some(manifest_path) = esy_spec.meta.manifest_path.as_ref() {
+						let extract = fetch::ExtractSource::from(&path).await?;
+						extract.file_contents(&manifest_path).await?
+					} else {
+						// TODO get your own checkout, stop hardcoding
+						let repo_path = std::path::PathBuf::from("/Users/tcuthbertson/.cache/opam2nix/repos/opam-repository/");
+						let repo = fetch::ExtractSource::from(&repo_path).await?;
+						let version = &esy_spec.spec.id.version;
+						let path = format!("packages/{}/{}.{}/opam", name.0, name.0, version);
+						repo.file_contents(&path).await?
+					};
+					let nix_ctx = eval::Ctx::from_map(&name, &installed.opam);
+					let opam = opam::Opam::from_str(&manifest)
+						.with_context(|| format!("parsing opam manifest:\n{}", &manifest))?;
+					debug!("parsed opam: {:?}", opam);
+					let nix = opam.into_nix(&nix_ctx)
+						.with_context(|| format!("evaluating opam:\n{:?}", &manifest))?;
+					debug!(" -> as nix: {:?}", nix);
+					esy_spec.spec.extra.insert("opam".to_owned(), nix.expr());
+				}
+				Ok(())
+			},
+			PartitionedSpec::Esy(esy_spec) => {
+				if let Some(path) = fetch::realise_source(&esy_spec.spec).await? {
+					let manifest = {
+						let extract = fetch::ExtractSource::from(&path).await?;
+						if extract.exists("esy.json").await {
+							extract.file_contents("esy.json").await
+						} else {
+							extract.file_contents("package.json").await
+						}
+					}?;
+					todo!("Extract esy manifest...");
+					log::info!("TODO: {:?}", manifest);
+				}
+				Ok(())
+			},
 		}
-		Ok(())
 	}
 }
 
@@ -91,18 +141,19 @@ impl Backend for EsyLock {
 			None => warn!("no `ocaml` implementation found, you will need to supply one at import time"),
 		}
 
-		let (mut specs, opam_map) = self.opam_specs();
-		let opam_map_ref = &opam_map;
+		let (mut specs, installed) = self.partition_specs();
+		let installed_ref = &installed;
 		
 		let parallelism = 10;
 		// TODO sorting and no parallelism makes ordering deterministic for testing
 		// let parallelism = 1;
-		specs.sort_by(|a,b| a.spec.id.cmp(&b.spec.id));
+		specs.sort_by(|a,b| a.id().cmp(&b.id()));
 
 		let mut stream = futures::stream::iter(specs)
 			.map(|esy_spec| async move {
-				Self::finalize_spec(esy_spec, opam_map_ref).await
-					.with_context(|| format!("Finalizing spec: {:?}", &esy_spec))
+				let id = esy_spec.id().clone();
+				Self::finalize_spec(esy_spec, installed_ref).await
+					.with_context(|| format!("Finalizing spec: {:?}", id))
 			})
 			.buffer_unordered(parallelism);
 

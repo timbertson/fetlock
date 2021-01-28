@@ -1,6 +1,6 @@
 // esy.lock backend
 
-use crate::esy::{command, eval, opam};
+use crate::esy::{command, eval, opam, esy_parser};
 use crate::fetch;
 use crate::*;
 use crate::nix_serialize::{Writeable, WriteContext};
@@ -96,6 +96,8 @@ impl EsyLock {
 				Ok(())
 			},
 			PartitionedSpec::Esy(esy_spec) => {
+				// NOTE: some esy packages are just npm packages, depending on whether they have
+				// an `esy` property in them
 				if let Some(path) = fetch::realise_source(&esy_spec.spec).await? {
 					let manifest = {
 						let extract = fetch::ExtractSource::from(&path).await?;
@@ -105,8 +107,10 @@ impl EsyLock {
 							extract.file_contents("package.json").await
 						}
 					}?;
-					todo!("Extract esy manifest...");
-					log::info!("TODO: {:?}", manifest);
+					let esy = esy_parser::PackageJson::from_str(&manifest)
+						.with_context(|| format!("deserializing manifest:\n\n{}", &manifest))?;
+					// TODO unify opam / esy into a Manifest struct with Option<Expr> fields for consistency
+					esy_spec.spec.extra.insert("esy".to_owned(), esy.expr());
 				}
 				Ok(())
 			},

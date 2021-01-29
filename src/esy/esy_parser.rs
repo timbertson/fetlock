@@ -1,10 +1,10 @@
 use anyhow::*;
 use std::collections::HashMap;
-use std::fmt;
-use std::borrow::Borrow;
 use serde::Deserialize;
-use serde::de::*;
-use crate::Expr;
+use crate::{Expr, StringComponent};
+use crate::esy::build::*;
+use crate::esy::eval::*;
+use crate::esy::opam::{Name};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct PackageJson {
@@ -16,19 +16,38 @@ impl PackageJson {
     Ok(serde_json::from_str(&contents)?)
   }
   
-  pub fn expr(self) -> Expr {
-    let mut map = HashMap::new();
+  pub fn build(self) -> Result<NixBuild> {
+    let mut nix_build = NixBuild::empty(PkgType::Esy);
+
     if let Some(EsySpec { build }) = self.esy {
-      let lines: Vec<Command> = build.0;
-      let build_expr = Expr::Str(lines.join("\n"));
-      map.insert("buildPhase".to_owned(), Box::new(build_expr));
+      /*
+      let name = Name("TODO".to_owned());
+      // TODO hoist this out to caller
+      // TODO: use a nix function to reduce the size / repetition in generated .nix expression
+      let ctx_map = HashMap::new();
+      let ctx = Ctx::from_map(&name, &ctx_map);
+      let pkg_impl = PkgImpl {
+        name: &name,
+        path: Expr::Str("$out".to_owned()),
+      };
+
+      let expr_of_dir = |p: &str| -> Result<Expr> {
+        let eval = Ctx::resolve_path(pkg_impl, p)?;
+        Ok(eval.into_nix(&ctx)?)
+      };
+      */
+
+      nix_build.build =
+      Some(Expr::StrInterp(vec!(
+        StringComponent::Literal("export cur__bin=$out/bin\n".to_owned()),
+        // StringComponent::Expr(expr_of_dir("bin")?),
+        // StringComponent::Literal("\n".to_owned()),
+        StringComponent::Expr(build.into_nix()),
+      )));
     }
-    Expr::AttrSet(map)
+    Ok(nix_build)
   }
 }
-
-#[derive(Debug, Clone)]
-pub struct Script(Vec<Command>);
 
 // see:
 // https://esy.sh/docs/en/configuration.html
@@ -36,78 +55,4 @@ pub struct Script(Vec<Command>);
 #[derive(Debug, Clone, Deserialize)]
 pub struct EsySpec {
   pub build: Script
-}
-
-impl<'de> Deserialize<'de> for Script {
-  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-  where
-    D: Deserializer<'de>,
-  {
-    deserializer.deserialize_any(ScriptVisitor)
-  }
-}
-
-struct ScriptVisitor;
-
-// A script can be a single string,
-// an array of strings (commands),
-// or an array of arrays of strings (arguments)
-impl<'de> Visitor<'de> for ScriptVisitor {
-  type Value = Script;
-
-  fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-    formatter.write_str("build script")
-  }
-
-  fn visit_str<E: serde::de::Error>(self, v: &str) -> std::result::Result<Self::Value, E> {
-    Ok(Script(vec!(Command(v.to_owned()))))
-  }
-
-  fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> std::result::Result<Self::Value, A::Error> {
-    let mut ret = Vec::new();
-    while let Some(elem) = seq.next_element()? {
-      ret.push(elem);
-    }
-    Ok(Script(ret))
-  }
-}
-
-#[derive(Debug, Clone)]
-pub struct Command(String);
-
-impl<'de> Deserialize<'de> for Command {
-  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-  where
-    D: Deserializer<'de>,
-  {
-    deserializer.deserialize_any(CommandVisitor)
-  }
-}
-
-struct CommandVisitor;
-
-impl<'de> Visitor<'de> for CommandVisitor {
-  type Value = Command;
-
-  fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-    formatter.write_str("build command")
-  }
-
-  fn visit_str<E: serde::de::Error>(self, v: &str) -> std::result::Result<Self::Value, E> {
-    Ok(Command(v.to_owned()))
-  }
-
-  fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> std::result::Result<Self::Value, A::Error> {
-    let mut args = Vec::new();
-    while let Some(elem) = seq.next_element::<String>()? {
-      args.push(elem);
-    }
-    Ok(Command(args.join(" ")))
-  }
-}
-
-impl Borrow<str> for Command {
-  fn borrow(&self) -> &str {
-    &self.0
-  }
 }

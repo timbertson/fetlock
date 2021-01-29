@@ -31,8 +31,8 @@ impl<'a> NixCtx<'a> for NixCtxMap<'a> {
 
 #[derive(Debug, Clone)]
 pub struct PkgImpl<'a> {
-  name: &'a Name,
-  path: Expr,
+  pub name: &'a Name,
+  pub path: Expr,
 }
 
 #[derive(Debug, Clone)]
@@ -140,7 +140,7 @@ impl Ctx {
     }
   }
 
-  fn resolve_path(pkg: PkgImpl, ident: &str) -> Result<Eval> {
+  pub fn resolve_path(pkg: PkgImpl, ident: &str) -> Result<Eval> {
     let simple = PathType::Simple;
     let named = PathScope::Named;
     let rel_lib_and_scope = match ident {

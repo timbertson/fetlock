@@ -1,8 +1,8 @@
 use anyhow::*;
-use std::collections::HashMap;
 use std::borrow::Borrow;
 use crate::esy::opam_parser::*;
 use crate::esy::eval::*;
+use crate::esy::build::*;
 use crate::{Key, Expr};
 
 // TODO: promote this outside of opam
@@ -139,37 +139,14 @@ impl<'a> Opam<'a> {
     Ok(Expr::StrInterp(buf))
   }
 
-  pub fn into_nix<'c, Ctx: NixCtx<'c>>(self, ctx: &Ctx) -> Result<Nix> where 'a : 'c {
+  pub fn into_nix<'c, Ctx: NixCtx<'c>>(self, ctx: &Ctx) -> Result<NixBuild> where 'a : 'c {
     let Self { build, install, depexts } = self;
-    Ok(Nix {
+    Ok(NixBuild {
+      mode: PkgType::Opam,
       build: build.map_or(Ok(None), |x| x.into_nix(ctx).and_then(Self::bash_of_commands).map(Some))?,
       install: install.map_or(Ok(None), |x| x.into_nix(ctx).and_then(Self::bash_of_commands).map(Some))?,
       depexts: depexts.into_iter().map(|x| x.into_nix(ctx)).collect::<Result<Vec<Expr>>>()?,
     })
-  }
-}
-
-#[derive(Clone, Debug)]
-pub struct Nix {
-  pub build: Option<Expr>,
-  pub install: Option<Expr>,
-  pub depexts: Vec<Expr>,
-}
-
-impl Nix {
-  pub fn expr(self) -> Expr {
-    let mut map = HashMap::new();
-    let Self { build, install, depexts } = self;
-
-    if let Some(build) = build {
-      map.insert("buildPhase".to_owned(), Box::new(build));
-    }
-    if let Some(install) = install {
-      map.insert("installPhase".to_owned(), Box::new(install));
-    }
-
-    map.insert("depexts".to_owned(), Box::new(Expr::List(depexts)));
-    Expr::AttrSet(map)
   }
 }
 

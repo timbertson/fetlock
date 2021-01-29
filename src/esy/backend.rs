@@ -88,10 +88,10 @@ impl EsyLock {
 					let opam = opam::Opam::from_str(&manifest)
 						.with_context(|| format!("parsing opam manifest:\n{}", &manifest))?;
 					debug!("parsed opam: {:?}", opam);
-					let nix = opam.into_nix(&nix_ctx)
+					let build = opam.into_nix(&nix_ctx)
 						.with_context(|| format!("evaluating opam:\n{:?}", &manifest))?;
-					debug!(" -> as nix: {:?}", nix);
-					esy_spec.spec.extra.insert("opam".to_owned(), nix.expr());
+					debug!(" -> as nix: {:?}", build);
+					esy_spec.spec.extra.insert("build".to_owned(), build.expr());
 				}
 				Ok(())
 			},
@@ -109,8 +109,8 @@ impl EsyLock {
 					}?;
 					let esy = esy_parser::PackageJson::from_str(&manifest)
 						.with_context(|| format!("deserializing manifest:\n\n{}", &manifest))?;
-					// TODO unify opam / esy into a Manifest struct with Option<Expr> fields for consistency
-					esy_spec.spec.extra.insert("esy".to_owned(), esy.expr());
+
+					esy_spec.spec.extra.insert("build".to_owned(), esy.build()?.expr());
 				}
 				Ok(())
 			},
@@ -144,7 +144,7 @@ impl Backend for EsyLock {
 			},
 			None => warn!("no `ocaml` implementation found, you will need to supply one at import time"),
 		}
-
+		
 		let (mut specs, installed) = self.partition_specs();
 		let installed_ref = &installed;
 		

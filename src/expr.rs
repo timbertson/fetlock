@@ -55,6 +55,7 @@ pub type StringComponent = StringComponentOf<Expr>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr {
+	LitSeq(Vec<Expr>),
 	Literal(String),
 	Bool(bool),
 	// TODO combine two string types

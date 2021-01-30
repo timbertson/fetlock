@@ -116,13 +116,13 @@ pub enum Op {
 // <logop>           ::= "&" | "|"
 fn basic_op(s: Src) -> Res<Op> {
   context("op", alt((
-    map(tag("="), |_| Op::Eq),
     map(tag("=="), |_| Op::Eq),
     map(tag("!="), |_| Op::Neq),
     map(tag("<="), |_| Op::Lte),
     map(tag(">="), |_| Op::Gte),
     map(tag("<"), |_| Op::Lt),
     map(tag(">"), |_| Op::Gt),
+    map(tag("="), |_| Op::Eq),
     map(tag("&"), |_| Op::And),
     map(tag("|"), |_| Op::Or),
     map(tag("!"), |_| Op::Not),
@@ -471,32 +471,14 @@ fn op_suffix(s: Src) -> Res<OpSuffix> {
   ))(s)
 }
 
-fn esy_ternary_suffix(s: Src) -> Res<OpSuffix> {
-  map(
-    tuple((
-      ws(question),
-      esy_value,
-      ws(colon),
-      esy_value
-    )),
-    |(_question, a, _colon, b)| OpSuffix::Ternop((a,b))
-  )(s)
-}
-
-fn esy_op_suffix(s: Src) -> Res<OpSuffix> {
-  alt((
-    map(tuple((ws(basic_op), esy_value)), OpSuffix::Binop),
-    map(tuple((delimited(ws(question), esy_value, ws(colon)), esy_value)), OpSuffix::Ternop)
-  ))(s)
-}
-
 fn value_mapper<'a>(mut value: Value<'a>, option: Option<Value<'a>>, op: Option<OpSuffix<'a>>) -> Value<'a> {
   if let Some(option) = option {
     value = Value::Option(Box::new(ValueWithOption {
       value, option
     }))
   }
-  match op {
+  
+  let value = match op {
     Some(OpSuffix::Binop((op, value2))) => Value::Binop(Box::new(Binop {
       a: value,
       op,
@@ -506,34 +488,52 @@ fn value_mapper<'a>(mut value: Value<'a>, option: Option<Value<'a>>, op: Option<
       test: value, iftrue, iffalse
     })),
     None => value,
-  }
+  };
+  
+  value
+}
+
+fn esy_base_value(s: Src) -> Res<Value> {
+  alt((
+    map(esy_string, Value::String),
+    map(esy_varident, Value::Varident),
+    map(esy_envvar, Value::Varident),
+    map(bool_, Value::Bool),
+    map(int, Value::Int),
+    map(ident, Value::Ident),
+    map(
+      tuple((basic_op, ws(esy_value))),
+      |(op, value)| Value::UnaryOp(op, Box::new(value))
+    ),
+    map(list, Value::List),
+    delimited(ws(char('(')), esy_value, ws(char(')'))),
+  ))(s)
+}
+
+fn esy_binop_value(s: Src) -> Res<Value> {
+  map(
+    tuple((esy_base_value, ws(basic_op), esy_base_value)),
+    |(a, op, b)| Value::Binop(Box::new(Binop { a, op, b }))
+  )(s)
+}
+
+fn esy_ternop_value(s: Src) -> Res<Value> {
+  map(
+    tuple((
+      alt((esy_binop_value, esy_base_value)),
+      preceded(ws(question), esy_value),
+      preceded(ws(colon), esy_value),
+    )),
+    |(test, iftrue, iffalse)| Value::Ternop(Box::new(Ternop { test, iftrue, iffalse }))
+  )(s)
 }
 
 fn esy_value(s: Src) -> Res<Value> {
-  map(
-    tuple((
-      alt((
-        map(esy_string, Value::String),
-        map(esy_varident, Value::Varident),
-        map(esy_envvar, Value::Varident),
-        map(bool_, Value::Bool),
-        map(int, Value::Int),
-        map(ident, Value::Ident),
-        // map(binary_op, Value::Binop),
-        map(
-          tuple((basic_op, ws(esy_value))),
-          |(op, value)| Value::UnaryOp(op, Box::new(value))
-        ),
-        // map(logop, Value::Op),
-        map(list, Value::List),
-        // map(version_formula, Value::VersionFormula),
-        delimited(ws(char('(')), esy_value, ws(char(')'))),
-      )),
-      opt(ws(value_option)),
-      opt(esy_op_suffix),
-    )),
-    |(a,b,c)| value_mapper(a,b,c)
-  )(s)
+  alt((
+    esy_ternop_value,
+    esy_binop_value,
+    esy_base_value,
+  ))(s)
 }
 
 // <list>          ::= "[" { <value> }* "]"
@@ -744,11 +744,25 @@ mod tests {
   #[test]
   fn test_esy() {
     valid(esy_string, "'foo'");
-    valid(esy_op_suffix, "== 1");
-    valid(esy_op_suffix, "? 1 : 2");
+    //valid(esy_op_suffix, "== 1");
+    //valid(esy_op_suffix, "? 1 : 2");
     valid(esy_value, "os == 1");
     valid(esy_interpolation, "#{ os = 'linux'}");
     valid(esy_interpolation, "#{ true ? 1 : 2 }");
+    assert_eq!(
+      // TODO parses as true == (true ? 1 : 2)
+      p(esy_value, "true == true ? 1 : 2"),
+      Value::Ternop(Box::new(Ternop {
+        test: Value::Binop(Box::new(Binop {
+          a: Value::Bool(true),
+          op: Op::Eq,
+          b: Value::Bool(true),
+        })),
+        iftrue: Value::Int(1),
+        iffalse: Value::Int(2),
+      })),
+    );
+
     valid(esy_interpolation, "#{ os == 'linux' ? 'linux' : 'nope' }");
     valid(esy_string_inner, "#{ os == 'linux' ? 'yeah' : 'nah' }");
   }

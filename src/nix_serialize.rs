@@ -258,6 +258,18 @@ impl Writeable for Expr {
 	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
 		match self {
 			Expr::Literal(s) => c.write_str(s),
+			Expr::LitSeq(parts) => {
+				let mut first = true;
+				for part in parts {
+					if first {
+						first = false;
+					} else {
+						c.write_char(' ')?;
+					}
+					part.write_to(c)?;
+				}
+				Ok(())
+			},
 			Expr::Bool(b) => c.write(format_args!("{}", b)),
 			Expr::Str(s) => {
 				let mode = StringMode::preferred(&s);

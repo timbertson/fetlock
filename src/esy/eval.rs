@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use crate::esy::opam_parser::*;
 use crate::esy::opam_parser;
 use crate::esy::opam::{Name, NameRef, Pkg};
-use crate::{Expr, FunCall, StringComponent};
+use crate::{Expr, FunCall, StringComponent, StringComponentOf};
 
 // TODO we only have one concrete implementation, drop this trait
 pub trait NixCtx {
@@ -164,7 +164,7 @@ impl Ctx {
     let simple = PathType::Simple;
     let named = PathScope::Named;
     let rel_lib_and_scope = match ident {
-      "prefix" => Ok((None, simple, PathScope::Root)),
+      "prefix" | "install" /* esy */ => Ok((None, simple, PathScope::Root)),
 
       "share"
       | "doc"
@@ -210,7 +210,7 @@ impl Ctx {
 
   fn scope<'a, 'c : 'a, Ctx: NixCtx>(ctx: &'c Ctx, scope: &'a str) -> VarScope<'a> {
     match scope {
-      "_" | "self" => VarScope::SelfScope,
+      "_" | "self" /* esy */ => VarScope::SelfScope,
       name if name == ctx.name().0 => VarScope::SelfScope,
       scope => VarScope::Package(ctx.get(NameRef(scope)))
     }
@@ -236,23 +236,10 @@ impl Ctx {
   }
 }
 
-#[derive(Debug, Clone)]
-pub enum EvalSC {
-  Literal(String),
-  Expr(Eval),
-}
-
-impl EvalSC {
-  fn into_nix(self) -> Result<StringComponent> {
-    todo!()
-    // match self {
-    //   EvalSC::Literal(s) => Ok(Expr::Literal(s)),
-    //   EvalSC::Expr(e) => Expr
-  }
-}
+pub type EvalSC = StringComponentOf<Eval>;
 
 // Eval is used to reduce formulas down to primitives, where possible
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Eval {
   Nix(Expr), // opaque nix expression (e.g. function call)
   Undefined,
@@ -360,17 +347,41 @@ impl Eval {
             Ok(Eval::Bool(true))
           },
 
-          Eq
-          | Neq
+          Eq => Ok(Eval::Nix(Expr::LitSeq(vec!(
+            a.into_nix(c)?,
+            Expr::Literal("==".to_owned()),
+            b.into_nix(c)?,
+          )))),
+
+          Slash => Ok(Eval::StrInterp(vec!(
+            EvalSC::Expr(Self::evaluate(a, c)?),
+            EvalSC::Literal("/".to_owned()), // TODO windows?
+            EvalSC::Expr(Self::evaluate(b, c)?)
+          ))),
+
+          Colon => Ok(Eval::StrInterp(vec!(
+            EvalSC::Expr(Self::evaluate(a, c)?),
+            EvalSC::Literal(":".to_owned()), // TODO windows?
+            EvalSC::Expr(Self::evaluate(b, c)?)
+          ))),
+
+          Neq
           | Not
           | Question
-          | Slash
-          | Colon
           => Err(anyhow!("Unimplemented: evaluate(Binop(_, {:?}, _))", op))?
         }
       },
-      Ternop(_) => {
-        Err(anyhow!("Unimplemented: evaluate(Ternop(...))"))?
+      Ternop(op) => {
+        warn!("TERN: {:?}", op);
+        let opam_parser::Ternop { test, iftrue, iffalse } = *op;
+        Ok(Eval::Nix(Expr::LitSeq(vec!(
+          Expr::Literal("if".to_owned()),
+          test.into_nix(c)?,
+          Expr::Literal("then".to_owned()),
+          iftrue.into_nix(c)?,
+          Expr::Literal("else".to_owned()),
+          iffalse.into_nix(c)?,
+        ))))
       },
       Option(x) => {
         let ValueWithOption { value, option } = *x;
@@ -395,7 +406,7 @@ impl Eval {
       Eval::Str(s) => Ok(Expr::Str(s)),
       Eval::StrInterp(parts) => {
         let nix_parts = parts.into_iter()
-          .map(|part| part.into_nix())
+          .map(|part| part.map_result(|eval| eval.into_nix(c)))
           .collect::<Result<Vec<StringComponent>>>();
         Ok(Expr::StrInterp(nix_parts?))
       },

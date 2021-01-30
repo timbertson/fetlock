@@ -76,15 +76,6 @@ impl Expr {
 		}))
 	}
 
-  //pub fn as_str_opt(&self) -> Option<&str> {
-  //  use Expr::*;
-  //  match self {
-  //    Bool(b) => Some(if *b { S_TRUE } else { S_FALSE }),
-  //    Str(s) => Some(s.as_str()),
-  //    _ => None,
-  //  }
-  //}
-
 	pub fn canonicalize(self) -> Self {
 		use Expr::*;
 		match self {
@@ -109,13 +100,6 @@ impl Expr {
 				}
 			},
 			other => other
-		}
-	}
-	
-	pub fn is_list(&self) -> bool {
-		match self {
-			Expr::List(_) => true,
-			_ => false,
 		}
 	}
 }

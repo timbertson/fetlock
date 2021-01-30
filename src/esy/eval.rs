@@ -6,9 +6,10 @@ use crate::esy::opam_parser;
 use crate::esy::opam::{Name, NameRef, Pkg};
 use crate::{Expr, FunCall, StringComponent};
 
-pub trait NixCtx<'a> {
-  fn name(&self) -> &'a Name;
-  fn get<'b>(&self, name: NameRef<'b>) -> Option<&'a Pkg>;
+// TODO we only have one concrete implementation, drop this trait
+pub trait NixCtx {
+  fn name<'a>(&'a self) -> &'a Name;
+  fn get<'a, 'b>(&'a self, name: NameRef<'b>) -> Option<&'a Pkg>;
   //fn get<K: Hash + Eq>(&self, name: &'a K) -> Option<&'a Pkg>
   //  where Name: Borrow<K>;
 }
@@ -18,15 +19,27 @@ pub struct NixCtxMap<'a> {
   map: &'a HashMap<Name, Pkg>
 }
 
-impl<'a> NixCtx<'a> for NixCtxMap<'a> {
-  fn name(&self) -> &'a Name { self.name }
+impl<'c> NixCtx for NixCtxMap<'c> {
+  fn name(&self) -> &Name { self.name }
   //fn get<K: Hash + Eq>(&self, name: &K) -> Option<&'a Pkg> where Name: Borrow<K> {
   //  self.map.get(name)
   //}
-  fn get<'b>(&self, name: NameRef<'b>) -> Option<&'a Pkg> {
+  fn get<'a, 'b>(&'a self, name: NameRef<'b>) -> Option<&'a Pkg> {
     self.map.get(name.0)
   }
 }
+
+pub struct EmptyCtx {
+  name: Name,
+}
+
+impl NixCtx for EmptyCtx {
+  fn name(&self) -> &Name { &self.name }
+  fn get<'a, 'b>(&'a self, name: NameRef<'b>) -> Option<&'a Pkg> {
+    None
+  }
+}
+
 
 
 #[derive(Debug, Clone)]
@@ -60,10 +73,17 @@ impl Ctx {
     NixCtxMap { name, map }
   }
 
-  pub fn resolve<'a, 'expr: 'a, Ctx: NixCtx<'a>>(ctx: &Ctx, scope: VarScope<'a>, ident: &'expr str) -> Result<Eval> {
+  pub fn empty<'a>(name: &'a str) -> EmptyCtx {
+    // used in tests
+    EmptyCtx { name: Name(name.to_owned()) }
+  }
+
+  fn resolve<'a, 'c: 'a, Ctx: NixCtx>(ctx: &Ctx, scope: VarScope<'a>, ident: &'a str) -> Result<Eval> {
+    debug!("resolving {:?} in scope {:?}", ident, scope);
     let resolved = match scope {
       VarScope::Unknown => match ident {
         "jobs" => Ok(Eval::Str("$NIX_BUILD_CORES".to_owned())),
+        "os" => Ok(Eval::Nix(Expr::Literal("final.os".to_owned()))),
         "make" => Ok(Eval::Str("make".to_owned())),
 
         "opam-version" => Ok(Eval::Str("2.0".to_owned())),
@@ -188,19 +208,21 @@ impl Ctx {
     })
   }
 
-  fn scope<'a, 'expr : 'a, Ctx: NixCtx<'a>>(ctx: &Ctx, scope: &'expr str) -> VarScope<'a> {
+  fn scope<'a, 'c : 'a, Ctx: NixCtx>(ctx: &'c Ctx, scope: &'a str) -> VarScope<'a> {
     match scope {
-      "_" => VarScope::SelfScope,
+      "_" | "self" => VarScope::SelfScope,
       name if name == ctx.name().0 => VarScope::SelfScope,
       scope => VarScope::Package(ctx.get(NameRef(scope)))
     }
   }
 
-  pub fn resolve_ident<'a, Ctx: NixCtx<'a>>(ctx: &Ctx, ident: &'a str) -> Result<Eval> {
-    Self::resolve(ctx, VarScope::Unknown, ident)
+  pub fn resolve_ident<'a, 'c: 'a, Ctx: NixCtx>(ctx: &'c Ctx, ident: &'a str) -> Result<Eval> {
+    let result = Self::resolve(ctx, VarScope::Unknown, ident);
+    debug!("resolved {:?} -> {:?}", ident, result);
+    result
   }
 
-  pub fn resolve_varident<'a, Ctx: NixCtx<'a>>(ctx: &Ctx, ident: &Varident<'a>) -> Result<Eval> {
+  pub fn resolve_varident<'a, 'c: 'a, Ctx: NixCtx>(ctx: &'c Ctx, ident: &Varident<'a>) -> Result<Eval> {
     if ident.additional_scopes.len() > 0 {
       todo!("support additional scopes");
     }
@@ -208,7 +230,9 @@ impl Ctx {
       "_" => VarScope::SelfScope,
       name => Self::scope(ctx, name),
     };
-    Self::resolve(ctx, scope, ident.ident)
+    let result = Self::resolve(ctx, scope, ident.ident);
+    debug!("resolved {:?} -> {:?}", ident, result);
+    result
   }
 }
 
@@ -258,7 +282,7 @@ impl Eval {
     }
   }
 
-  pub fn evaluate<'a, C: NixCtx<'a>>(v: Value<'a>, c: &C) -> Result<Eval> {
+  pub fn evaluate<'a, 'c: 'a, C: NixCtx>(v: Value<'a>, c: &'c C) -> Result<Eval> {
     use Value::*;
     match v {
       // TODO could canonicalize() a string to turn it into a Str, but it's unclear if that
@@ -266,7 +290,10 @@ impl Eval {
       Int(x) => Ok(Eval::Nix(Expr::Literal(format!("{}", x)))),
       String(parts) => {
         let parts = parts.into_iter()
-          .map(|component| component.map_result(|v| v.into_nix(c)))
+          .map(|component| component.map_result(|v| {
+            v.clone().into_nix(c)
+            .with_context(|| format!("evaluating {:?}", v))
+          }))
           .collect::<Result<Vec<StringComponent>>>()?;
         Ok(Eval::Nix(Expr::StrInterp(parts).canonicalize()))
       },
@@ -296,6 +323,8 @@ impl Eval {
           | Lt
           | Gt
           | Question
+          | Slash
+          | Colon
           => Err(anyhow!("Unimplemented: evaluate(UnaryOp({:?}, _))", op))?
         }
       },
@@ -335,8 +364,13 @@ impl Eval {
           | Neq
           | Not
           | Question
+          | Slash
+          | Colon
           => Err(anyhow!("Unimplemented: evaluate(Binop(_, {:?}, _))", op))?
         }
+      },
+      Ternop(_) => {
+        Err(anyhow!("Unimplemented: evaluate(Ternop(...))"))?
       },
       Option(x) => {
         let ValueWithOption { value, option } = *x;
@@ -353,10 +387,10 @@ impl Eval {
     }
   }
 
-  pub fn into_nix<'a, C: NixCtx<'a>>(self, c: &C) -> Result<Expr> {
+  pub fn into_nix<C: NixCtx>(self, c: &C) -> Result<Expr> {
     match self {
       Eval::Nix(expr) => Ok(expr),
-      Eval::Undefined => Err(anyhow!("TODO: undefined")),
+      Eval::Undefined => Ok(Expr::Str("".to_owned())),
       Eval::Bool(b) => Ok(Expr::Bool(b)),
       Eval::Str(s) => Ok(Expr::Str(s)),
       Eval::StrInterp(parts) => {

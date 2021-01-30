@@ -1,10 +1,12 @@
 use anyhow::*;
-use std::collections::HashMap;
 use serde::Deserialize;
 use crate::{Expr, StringComponent};
 use crate::esy::build::*;
 use crate::esy::eval::*;
-use crate::esy::opam::{Name};
+use crate::esy::opam_parser;
+use crate::esy::opam_parser::Value;
+use std::fmt;
+use serde::de::*;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct PackageJson {
@@ -16,33 +18,14 @@ impl PackageJson {
     Ok(serde_json::from_str(&contents)?)
   }
   
-  pub fn build(self) -> Result<NixBuild> {
+  pub fn build<'c, C: NixCtx>(self, ctx: &C) -> Result<NixBuild> {
     let mut nix_build = NixBuild::empty(PkgType::Esy);
 
     if let Some(EsySpec { build }) = self.esy {
-      /*
-      let name = Name("TODO".to_owned());
-      // TODO hoist this out to caller
-      // TODO: use a nix function to reduce the size / repetition in generated .nix expression
-      let ctx_map = HashMap::new();
-      let ctx = Ctx::from_map(&name, &ctx_map);
-      let pkg_impl = PkgImpl {
-        name: &name,
-        path: Expr::Str("$out".to_owned()),
-      };
-
-      let expr_of_dir = |p: &str| -> Result<Expr> {
-        let eval = Ctx::resolve_path(pkg_impl, p)?;
-        Ok(eval.into_nix(&ctx)?)
-      };
-      */
-
-      nix_build.build =
-      Some(Expr::StrInterp(vec!(
-        StringComponent::Literal("export cur__bin=$out/bin\n".to_owned()),
-        // StringComponent::Expr(expr_of_dir("bin")?),
-        // StringComponent::Literal("\n".to_owned()),
-        StringComponent::Expr(build.into_nix()),
+      let parsed = build.parse()?;
+      nix_build.build = Some(Expr::StrInterp(vec!(
+        StringComponent::Literal("\nexport cur__bin=$out/bin\n".to_owned()),
+        StringComponent::Expr(NixBuild::script(PkgType::Esy, ctx, parsed)?),
       )));
     }
     Ok(nix_build)
@@ -55,4 +38,85 @@ impl PackageJson {
 #[derive(Debug, Clone, Deserialize)]
 pub struct EsySpec {
   pub build: Script
+}
+
+#[derive(Debug, Clone)]
+pub struct Command(String);
+
+#[derive(Debug, Clone)]
+pub struct Script(Vec<Command>);
+
+impl Script {
+  fn parse(&self) -> Result<Value> {
+    let cmds = self.0.iter()
+      .map(|cmd| opam_parser::parse(opam_parser::entire_esy_string, &cmd.0)
+        .with_context(|| format!("Parsing esy command: {:?}", cmd)))
+      .collect::<Result<Vec<Value>>>()?;
+    Ok(Value::List(cmds))
+  }
+}
+
+impl<'de> Deserialize<'de> for Script {
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: Deserializer<'de>,
+  {
+    deserializer.deserialize_any(ScriptVisitor)
+  }
+}
+
+struct ScriptVisitor;
+
+// A script can be a single string,
+// an array of strings (commands),
+// or an array of arrays of strings (arguments)
+impl<'de> Visitor<'de> for ScriptVisitor {
+  type Value = Script;
+
+  fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+    formatter.write_str("build script")
+  }
+
+  fn visit_str<E: serde::de::Error>(self, v: &str) -> std::result::Result<Self::Value, E> {
+    Ok(Script(vec!(Command(v.to_owned()))))
+  }
+
+  fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> std::result::Result<Self::Value, A::Error> {
+    let mut ret = Vec::new();
+    while let Some(elem) = seq.next_element()? {
+      ret.push(elem);
+    }
+    Ok(Script(ret))
+  }
+}
+
+impl<'de> Deserialize<'de> for Command {
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: Deserializer<'de>,
+  {
+    deserializer.deserialize_any(CommandVisitor)
+  }
+}
+
+struct CommandVisitor;
+
+impl<'de> Visitor<'de> for CommandVisitor {
+  type Value = Command;
+
+  fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+    formatter.write_str("build command")
+  }
+
+  fn visit_str<E: serde::de::Error>(self, v: &str) -> std::result::Result<Self::Value, E> {
+    Ok(Command(v.to_owned()))
+  }
+
+  fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> std::result::Result<Self::Value, A::Error> {
+    let mut args = Vec::new();
+    while let Some(elem) = seq.next_element::<String>()? {
+      args.push(elem);
+    }
+    Ok(Command(args.join(" ")))
+  }
 }

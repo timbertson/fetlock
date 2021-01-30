@@ -105,15 +105,19 @@ pub enum Op {
   Or,
   Not,
   Question,
+  // Used in esy
+  Slash,
+  Colon,
 }
 // <operator>      ::= { "!" | "=" | "<" | ">" | "|" | "&" }+ | [ ":" ] <operator> [ ":" ]
 // TODO I don't understand the [":"] ... part. Does it mean optionally preceded and optionally followed?
 // Note operator seems unused in practice, this is essentially relop from a package formula / version formula
 // <relop>           ::= "=" | "!=" | "<" | "<=" | ">" | ">="
 // <logop>           ::= "&" | "|"
-fn op(s: Src) -> Res<Op> {
+fn basic_op(s: Src) -> Res<Op> {
   context("op", alt((
     map(tag("="), |_| Op::Eq),
+    map(tag("=="), |_| Op::Eq),
     map(tag("!="), |_| Op::Neq),
     map(tag("<="), |_| Op::Lte),
     map(tag(">="), |_| Op::Gte),
@@ -122,8 +126,15 @@ fn op(s: Src) -> Res<Op> {
     map(tag("&"), |_| Op::And),
     map(tag("|"), |_| Op::Or),
     map(tag("!"), |_| Op::Not),
-    map(tag("?"), |_| Op::Question),
+    map(tag("/"), |_| Op::Slash),
   )))(s)
+}
+
+fn question(s: Src) -> Res<Op> {
+  map(tag("?"), |_| Op::Question)(s)
+}
+fn colon(s: Src) -> Res<Op> {
+  map(tag(":"), |_| Op::Colon)(s)
 }
 
 // #[derive(Debug, Clone)]
@@ -156,26 +167,46 @@ fn op(s: Src) -> Res<Op> {
 //   )(s)
 // }
 
+fn escaped_char(s: Src) -> Res<char> {
+  preceded(char('\\'), alt((
+    map(char('t'), |_| '\t'),
+    map(char('n'), |_| '\n'),
+    map(char('\n'), |_| '\n'), // TODO this should consume and return nothing, but it's unlikely to matter for fetlock
+    map(char('r'), |_| '\r'),
+    map(char('b'), |_| '\t'), // TODO what is \b for?
+    map(char('"'), |_| '"'),
+    map(char('\''), |_| '\''),
+    map(char('\\'), |_| '\\'),
+    // TODO:
+    // * three-digit decimal / two-digit hexadecimal character codes (\NNN and \xNN)
+  )))(s)
+}
+
 fn string_char(s: Src) -> Res<char> {
   alt((
     none_of("\"\\"),
-    preceded(char('\\'), alt((
-      map(char('t'), |_| '\t'),
-      map(char('n'), |_| '\n'),
-      map(char('\n'), |_| '\n'), // TODO this should consume and return nothing, but it's unlikely to matter for fetlock
-      map(char('r'), |_| '\r'),
-      map(char('b'), |_| '\t'), // TODO what is \b for?
-      map(char('"'), |_| '"'),
-      map(char('\\'), |_| '\\')
-      // TODO:
-      // * three-digit decimal / two-digit hexadecimal character codes (\NNN and \xNN)
-    )))
+    escaped_char,
+  ))(s)
+}
+
+fn single_string_char(s: Src) -> Res<char> {
+  alt((
+    none_of("'\\"),
+    escaped_char,
   ))(s)
 }
 
 // <string>        ::= ( (") { <char> }* (") ) | ( (""") { <char> }* (""") )
 fn quote_string(s: Src) -> Res<Vec<OpamSC>> {
   delimited(char('"'), map(many0(string_atom), StringAtom::coalesce), char('"'))(s)
+}
+
+fn esy_string_inner(s: Src) -> Res<Vec<OpamSC>> {
+  map(many0(esy_string_atom), StringAtom::coalesce)(s)
+}
+
+fn esy_string(s: Src) -> Res<Vec<OpamSC>> {
+  delimited(char('\''), esy_string_inner, char('\''))(s)
 }
 fn triplequote_string(s: Src) -> Res<Vec<OpamSC>> {
   map(
@@ -200,6 +231,13 @@ fn string_atom(s: Src) -> Res<StringAtom> {
   alt((
     map(interpolation, StringAtom::Expr),
     map(string_char, StringAtom::Char),
+  ))(s)
+}
+
+fn esy_string_atom(s: Src) -> Res<StringAtom> {
+  alt((
+    map(esy_interpolation, StringAtom::Expr),
+    map(single_string_char, StringAtom::Char),
   ))(s)
 }
 
@@ -254,6 +292,29 @@ fn interpolation(s: Src) -> Res<Value> {
   delimited(tag("%{"), ws(value), tag("}%"))(s)
 }
 
+pub fn esy_interpolation(s: Src) -> Res<Value> {
+  delimited(tag("#{"), ws(esy_value), tag("}"))(s)
+}
+
+fn esy_varident(s: Src) -> Res<Varident> {
+  map(
+    tuple((
+      ident,
+      char('.'),
+      ident
+    )),
+    |(scope, _, ident)| Varident { scope, additional_scopes: Vec::new(), ident }
+  )(s)
+}
+
+fn esy_envvar(s: Src) -> Res<Varident> {
+  map(
+    preceded(char('$'), ident),
+    |ident| Varident { scope:"env", additional_scopes: Vec::new(), ident }
+  )(s)
+}
+
+
 fn string(s: Src) -> Res<Vec<OpamSC>> {
   context("string",
     alt((triplequote_string, quote_string)),
@@ -288,6 +349,13 @@ pub struct Binop<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Ternop<'a> {
+  pub test: Value<'a>,
+  pub iftrue: Value<'a>,
+  pub iffalse: Value<'a>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValueWithOption<'a> {
   pub value: Value<'a>,
   pub option: Value<'a>
@@ -304,14 +372,27 @@ pub enum Value<'a> {
   // Composite(Box<Value<'a>>, Vec<ValueSuffix<'a>>),
   UnaryOp(Op, Box<Value<'a>>),
   Binop(Box<Binop<'a>>),
+  Ternop(Box<Ternop<'a>>),
   Option(Box<ValueWithOption<'a>>),
 }
 
 
 impl<'a> Value<'a> {
-  pub fn into_nix<'c, C: NixCtx<'c>>(self, c: &C) -> Result<Expr> where 'a: 'c {
+  pub fn literal(s: &str) -> Value {
+    // used in tests
+    Value::String(vec!(OpamSC::Literal(s.to_owned())))
+  }
+
+  pub fn into_nix<'c: 'a, C: NixCtx>(self, c: &'c C) -> Result<Expr> {
     Ok(Eval::evaluate(self, c)?.into_nix(c)?.canonicalize())
   }
+
+	pub fn is_list(&self) -> bool {
+		match self {
+			Value::List(_) => true,
+			_ => false,
+		}
+	}
 }
 
 // <value>         ::= <bool> | <int> | <string> | <ident> | <varident>
@@ -350,7 +431,7 @@ fn value(s: Src) -> Res<Value> {
         map(ident, Value::Ident),
         // map(binary_op, Value::Binop),
         map(
-          tuple((op, ws(value))),
+          tuple((basic_op, ws(value))),
           |(op, value)| Value::UnaryOp(op, Box::new(value))
         ),
         // map(logop, Value::Op),
@@ -359,24 +440,9 @@ fn value(s: Src) -> Res<Value> {
         delimited(ws(char('(')), value, ws(char(')'))),
       )),
       opt(ws(value_option)),
-      opt(tuple((ws(op), value))),
+      opt(op_suffix),
     )),
-    |(mut value, option, op)| {
-      match option {
-        Some(option) => value = Value::Option(Box::new(ValueWithOption {
-          value, option
-        })),
-        None => (),
-      }
-      match op {
-        Some((op, value2)) => Value::Binop(Box::new(Binop {
-          a: value,
-          op,
-          b: value2,
-        })),
-        None => value,
-      }
-    }
+    |(a,b,c)| value_mapper(a,b,c)
   )(s)
 }
 
@@ -390,6 +456,84 @@ fn value(s: Src) -> Res<Value> {
 // the value parse is ambiguous
 fn value_option(s: Src) -> Res<Value> {
   delimited(ws(char('{')), value, ws(char('}')))(s)
+}
+
+#[derive(Clone, Debug)]
+enum OpSuffix<'a> {
+  Binop((Op, Value<'a>)),
+  Ternop((Value<'a>, Value<'a>)),
+}
+
+fn op_suffix(s: Src) -> Res<OpSuffix> {
+  alt((
+    map(tuple((ws(basic_op), value)), OpSuffix::Binop),
+    map(tuple((delimited(ws(question), value, ws(colon)), value)), OpSuffix::Ternop)
+  ))(s)
+}
+
+fn esy_ternary_suffix(s: Src) -> Res<OpSuffix> {
+  map(
+    tuple((
+      ws(question),
+      esy_value,
+      ws(colon),
+      esy_value
+    )),
+    |(_question, a, _colon, b)| OpSuffix::Ternop((a,b))
+  )(s)
+}
+
+fn esy_op_suffix(s: Src) -> Res<OpSuffix> {
+  alt((
+    map(tuple((ws(basic_op), esy_value)), OpSuffix::Binop),
+    map(tuple((delimited(ws(question), esy_value, ws(colon)), esy_value)), OpSuffix::Ternop)
+  ))(s)
+}
+
+fn value_mapper<'a>(mut value: Value<'a>, option: Option<Value<'a>>, op: Option<OpSuffix<'a>>) -> Value<'a> {
+  if let Some(option) = option {
+    value = Value::Option(Box::new(ValueWithOption {
+      value, option
+    }))
+  }
+  match op {
+    Some(OpSuffix::Binop((op, value2))) => Value::Binop(Box::new(Binop {
+      a: value,
+      op,
+      b: value2,
+    })),
+    Some(OpSuffix::Ternop((iftrue, iffalse))) => Value::Ternop(Box::new(Ternop {
+      test: value, iftrue, iffalse
+    })),
+    None => value,
+  }
+}
+
+fn esy_value(s: Src) -> Res<Value> {
+  map(
+    tuple((
+      alt((
+        map(esy_string, Value::String),
+        map(esy_varident, Value::Varident),
+        map(esy_envvar, Value::Varident),
+        map(bool_, Value::Bool),
+        map(int, Value::Int),
+        map(ident, Value::Ident),
+        // map(binary_op, Value::Binop),
+        map(
+          tuple((basic_op, ws(esy_value))),
+          |(op, value)| Value::UnaryOp(op, Box::new(value))
+        ),
+        // map(logop, Value::Op),
+        map(list, Value::List),
+        // map(version_formula, Value::VersionFormula),
+        delimited(ws(char('(')), esy_value, ws(char(')'))),
+      )),
+      opt(ws(value_option)),
+      opt(esy_op_suffix),
+    )),
+    |(a,b,c)| value_mapper(a,b,c)
+  )(s)
 }
 
 // <list>          ::= "[" { <value> }* "]"
@@ -488,6 +632,10 @@ fn term(s: Src) -> Res<Term> {
 
 pub fn entire_file(s: Src) -> Res<Vec<FileItem>> {
   all_consuming(ws(file_contents))(s)
+}
+
+pub fn entire_esy_string(s: Src) -> Res<Value> {
+  all_consuming(map(esy_string_inner, Value::String))(s)
 }
 
 pub fn parse<'a, T, F>(mut p: F, contents: &'a str) -> Result<T>
@@ -591,6 +739,18 @@ mod tests {
     valid(value_option, "{ foo }");
     valid(value_option, "{ foo & bar }");
     valid(value_option, "{ foo & >= bar }");
+  }
+
+  #[test]
+  fn test_esy() {
+    valid(esy_string, "'foo'");
+    valid(esy_op_suffix, "== 1");
+    valid(esy_op_suffix, "? 1 : 2");
+    valid(esy_value, "os == 1");
+    valid(esy_interpolation, "#{ os = 'linux'}");
+    valid(esy_interpolation, "#{ true ? 1 : 2 }");
+    valid(esy_interpolation, "#{ os == 'linux' ? 'linux' : 'nope' }");
+    valid(esy_string_inner, "#{ os == 'linux' ? 'yeah' : 'nah' }");
   }
 
   #[test]

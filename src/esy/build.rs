@@ -3,11 +3,9 @@
 
 use std::collections::HashMap;
 use anyhow::*;
-use std::fmt;
-use std::borrow::Borrow;
-use serde::Deserialize;
-use serde::de::*;
 use crate::Expr;
+use crate::esy::opam_parser::{Value, OpamSC};
+use crate::esy::eval::{Eval, NixCtx};
 
 #[derive(Clone, Debug)]
 pub enum Depext {
@@ -15,7 +13,7 @@ pub enum Depext {
   IfPresent(String),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy, PartialEq, Eq)]
 pub enum PkgType {
   Esy,
   Opam,
@@ -38,6 +36,69 @@ impl NixBuild {
       install: None,
       depexts: Vec::new(),
     }
+  }
+  
+  fn add_sep<T: Clone>(vec: &mut Vec<T>, first: &mut bool, sep: &T) {
+    if *first {
+      *first = false;
+    } else {
+      vec.push(sep.clone());
+    }
+  }
+
+  fn coerce_script<'a>(pkg_type: PkgType, value: Value<'a>) -> Result<Value<'a>> {
+    let newline = OpamSC::Literal("\n".to_owned());
+    let space = OpamSC::Literal(" ".to_owned());
+    
+    let add_cmd = |buf: &mut Vec<OpamSC<'a>>, args| -> Result<()> {
+      let mut first_arg = true;
+      for arg in args {
+        Self::add_sep(buf, &mut first_arg, &space);
+        match arg {
+          Value::String(parts) => buf.extend(parts),
+          other => buf.push(OpamSC::Expr(other)),
+        };
+      }
+      Ok(())
+    };
+
+    let mut buf = Vec::new();
+
+    match value {
+      Value::List(cmds) => {
+        if pkg_type == PkgType::Opam && !cmds.iter().any(|cmd| cmd.is_list()) {
+          // opam [ foo bar baz ] means [[ foo bar baz ]],
+          // but esy [ foo bar baz ] is [[foo] [bar] [baz]], so we also need to
+          // handle cmds that are strings (below)
+          add_cmd(&mut buf, cmds)?
+        } else {
+          let mut first_cmd = true;
+          if cmds.len() > 1 {
+            // always start a multiline string with a newline
+            first_cmd = false;
+          }
+
+          for cmd in cmds {
+            Self::add_sep(&mut buf, &mut first_cmd, &newline);
+            match cmd {
+              Value::List(args) => add_cmd(&mut buf, args)?,
+              _ => add_cmd(&mut buf, vec!(cmd))?,
+            }
+          }
+        }
+      },
+      _ => add_cmd(&mut buf, vec!(value))?,
+    }
+    Ok(Value::String(buf))
+  }
+
+  pub fn script<'a, 'c: 'a, Ctx: NixCtx>(pkg_type: PkgType, ctx: &Ctx, value: Value<'a>) -> Result<Expr> {
+    let r: Result<Expr> = (|| {
+      let value = NixBuild::coerce_script(pkg_type, value.clone())?;
+      let eval = Eval::evaluate(value, ctx)?;
+      Ok(eval.into_nix(ctx)?.canonicalize())
+    })();
+    r.with_context(|| format!("processing script expression: {:?}", value))
   }
 
   pub fn expr(self) -> Expr {
@@ -63,86 +124,69 @@ impl NixBuild {
   }
 }
 
-#[derive(Debug, Clone)]
-pub struct Command(String);
-
-#[derive(Debug, Clone)]
-pub struct Script(Vec<Command>);
-
-impl Script {
-  pub fn into_nix(self) -> Expr {
-    let lines: Vec<Command> = self.0;
-    Expr::Str(lines.join("\n"))
-  }
-}
-
-impl<'de> Deserialize<'de> for Script {
-  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-  where
-    D: Deserializer<'de>,
-  {
-    deserializer.deserialize_any(ScriptVisitor)
-  }
-}
-
-struct ScriptVisitor;
-
-// A script can be a single string,
-// an array of strings (commands),
-// or an array of arrays of strings (arguments)
-impl<'de> Visitor<'de> for ScriptVisitor {
-  type Value = Script;
-
-  fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-    formatter.write_str("build script")
-  }
-
-  fn visit_str<E: serde::de::Error>(self, v: &str) -> std::result::Result<Self::Value, E> {
-    Ok(Script(vec!(Command(v.to_owned()))))
-  }
-
-  fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> std::result::Result<Self::Value, A::Error> {
-    let mut ret = Vec::new();
-    while let Some(elem) = seq.next_element()? {
-      ret.push(elem);
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use Value::*;
+  use crate::esy::eval::Ctx;
+  type StringComponent = crate::StringComponent;
+  
+  fn bash(pkg_type: PkgType, cmds: Value) -> Expr {
+    let ctx = Ctx::empty("testpkg");
+    match NixBuild::script(pkg_type, &ctx, cmds.clone())
+      .with_context(||format!("Processing commands: {:?}", cmds)) {
+      Ok(expr) => expr.canonicalize(),
+      Err(e) => panic!("{:?}", e),
     }
-    Ok(Script(ret))
-  }
-}
-
-impl<'de> Deserialize<'de> for Command {
-  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-  where
-    D: Deserializer<'de>,
-  {
-    deserializer.deserialize_any(CommandVisitor)
-  }
-}
-
-struct CommandVisitor;
-
-impl<'de> Visitor<'de> for CommandVisitor {
-  type Value = Command;
-
-  fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-    formatter.write_str("build command")
   }
 
-  fn visit_str<E: serde::de::Error>(self, v: &str) -> std::result::Result<Self::Value, E> {
-    Ok(Command(v.to_owned()))
+  fn cmd(pkg_type: PkgType, cmd: Vec<Value>) -> Expr {
+    bash(pkg_type, List(cmd))
   }
 
-  fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> std::result::Result<Self::Value, A::Error> {
-    let mut args = Vec::new();
-    while let Some(elem) = seq.next_element::<String>()? {
-      args.push(elem);
-    }
-    Ok(Command(args.join(" ")))
-  }
-}
+  #[test]
+  fn test_bash_commands() {
+    assert_eq!(
+      cmd(PkgType::Opam, vec!(
+        String(vec!(
+          OpamSC::Expr(Bool(false))
+        ))
+      )),
+      Expr::Str("false".to_string())
+    );
+    
+    assert_eq!(
+      cmd(PkgType::Opam, vec!(
+        Value::literal("ocaml"),
+        Value::literal("pkg/pkg.ml"),
+        Value::literal("build"),
+        Value::literal("--with-js_of_ocaml"),
+        String(vec!(
+          OpamSC::Expr(Bool(true))
+        ))
+      )),
+      Expr::Str("ocaml pkg/pkg.ml build --with-js_of_ocaml true".to_owned())
+    );
 
-impl Borrow<str> for Command {
-  fn borrow(&self) -> &str {
-    &self.0
+    assert_eq!(
+      bash(PkgType::Opam, List(vec!(
+        Value::literal("ocaml"),
+        Value::literal("build"),
+      ))),
+      Expr::Str("ocaml build".to_owned())
+    );
+
+    assert_eq!(
+      bash(PkgType::Esy, List(vec!(
+        Value::literal("make"),
+        Value::literal("./build"),
+      ))),
+      Expr::Str("\nmake\n./build".to_owned())
+    );
+
+    assert_eq!(
+      bash(PkgType::Esy, Value::literal("make")),
+      Expr::Str("make".to_owned())
+    );
   }
 }

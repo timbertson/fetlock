@@ -110,7 +110,9 @@ impl EsyLock {
 					let esy = esy_parser::PackageJson::from_str(&manifest)
 						.with_context(|| format!("deserializing manifest:\n\n{}", &manifest))?;
 
-					esy_spec.spec.extra.insert("build".to_owned(), esy.build()?.expr());
+					let name = opam::Name("TODO".to_owned());
+					let nix_ctx = eval::Ctx::from_map(&name, &installed.esy);
+					esy_spec.spec.extra.insert("build".to_owned(), esy.build(&nix_ctx)?.expr());
 				}
 				Ok(())
 			},

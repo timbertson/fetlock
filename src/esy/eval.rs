@@ -1,8 +1,8 @@
 use anyhow::*;
 use log::*;
 use std::collections::HashMap;
-use crate::esy::opam_parser::*;
-use crate::esy::opam_parser;
+use crate::esy::parser::*;
+use crate::esy::parser;
 use crate::esy::opam::{Name, NameRef, Pkg};
 use crate::{Expr, FunCall, StringComponent, StringComponentOf};
 
@@ -316,7 +316,7 @@ impl Eval {
         }
       },
       Binop(binop) => {
-        let opam_parser::Binop { a, op, b } = *binop;
+        let parser::Binop { a, op, b } = *binop;
         // TODO: it's a bit annoying that we need to clone here...
         let a_bool = || Self::evaluate(a.clone(), c).and_then(|x| x.as_bool());
         let b_bool = || Self::evaluate(b.clone(), c).and_then(|x| x.as_bool());
@@ -373,7 +373,7 @@ impl Eval {
       },
       Ternop(op) => {
         warn!("TERN: {:?}", op);
-        let opam_parser::Ternop { test, iftrue, iffalse } = *op;
+        let parser::Ternop { test, iftrue, iffalse } = *op;
         Ok(Eval::Nix(Expr::LitSeq(vec!(
           Expr::Literal("if".to_owned()),
           test.into_nix(c)?,

@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use anyhow::*;
 use crate::Expr;
-use crate::esy::opam_parser::{Value, OpamSC};
+use crate::esy::parser::{Value, OpamSC};
 use crate::esy::eval::{Eval, NixCtx};
 
 #[derive(Clone, Debug)]

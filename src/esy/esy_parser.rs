@@ -3,8 +3,8 @@ use serde::Deserialize;
 use crate::{Expr, StringComponent};
 use crate::esy::build::*;
 use crate::esy::eval::*;
-use crate::esy::opam_parser;
-use crate::esy::opam_parser::Value;
+use crate::esy::parser;
+use crate::esy::parser::Value;
 use std::fmt;
 use serde::de::*;
 
@@ -49,7 +49,7 @@ pub struct Script(Vec<Command>);
 impl Script {
   fn parse(&self) -> Result<Value> {
     let cmds = self.0.iter()
-      .map(|cmd| opam_parser::parse(opam_parser::esy::entire_string, &cmd.0)
+      .map(|cmd| parser::parse(parser::esy::entire_string, &cmd.0)
         .with_context(|| format!("Parsing esy command: {:?}", cmd)))
       .collect::<Result<Vec<Value>>>()?;
     Ok(Value::List(cmds))

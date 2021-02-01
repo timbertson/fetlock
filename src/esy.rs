@@ -1,6 +1,6 @@
 mod backend;
 mod command;
-mod opam_parser;
+mod parser;
 mod esy_parser;
 mod build;
 pub mod eval;

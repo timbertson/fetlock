@@ -1,3 +1,4 @@
+// TODO rename parser
 use anyhow::*;
 use crate::expr::{Expr, StringComponentOf};
 use crate::esy::eval::{NixCtx, Eval};
@@ -14,7 +15,11 @@ use nom::{
   sequence::*};
 
 type Src<'a> = &'a str;
-type Res<'a, T> = IResult<Src<'a>, T, VerboseError<Src<'a>>>;
+type SrcError<'a> = VerboseError<Src<'a>>;
+type Res<'a, T> = IResult<Src<'a>, T, SrcError<'a>>;
+trait SrcParser<'a, T>: Parser<Src<'a>, T, SrcError<'a>> {}
+impl<'a, T, P> SrcParser<'a, T> for P where P: Parser<Src<'a>, T, SrcError<'a>> {
+}
 
 // <bool>          ::= true | false
 fn bool_(s: Src) -> Res<bool> {
@@ -79,20 +84,6 @@ pub struct Varident<'a> {
   pub ident: Src<'a>,
 }
 
-// <varident>      ::= [ ( <ident> | "_" ) { "+" ( <ident> | "_" ) }* : ] <ident>
-// TODO treat a+b+c:d as a:d & b:d & c:d
-fn varident(s: Src) -> Res<Varident> {
-  map(
-    tuple((
-      alt((ident, underscore_s)),
-      many0(preceded(plus, alt((ident, underscore_s)))),
-      char(':'),
-      ident
-    )),
-    |(scope, additional_scopes, _, ident)| Varident { scope, additional_scopes, ident }
-  )(s)
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Op {
   Eq,
@@ -137,36 +128,6 @@ fn colon(s: Src) -> Res<Op> {
   map(tag(":"), |_| Op::Colon)(s)
 }
 
-// #[derive(Debug, Clone)]
-// pub enum VersionFormula<'a> {
-//   Not(Box<VersionFormula<'a>>),
-//   Binop(Box<VersionFormula<'a>>, char, Box<VersionFormula<'a>>),
-//   Op(Src<'a>, String),
-// }
-// // <version-formula> ::= <version-formula> <logop> <version-formula>
-// //                       | "!" <version-formula>
-// //                       | "(" <version-formula> ")"
-// //                       | <relop> <version>
-// // TODO: ws
-// fn version_formula(s: Src) -> Res<VersionFormula> {
-//   map(
-//     tuple((
-//       alt((
-//         map(tuple((ws(relop), string)), |(relop, v)| VersionFormula::Op(relop, v)),
-//         map(preceded(ws(tag("!")), version_formula), |v| VersionFormula::Not(Box::new(v))),
-//         delimited(ws(char('(')), version_formula, ws(char(')'))),
-//       )),
-//       opt(tuple((ws(logop), version_formula)))
-//     )),
-//     |(a, op_and_b)| {
-//       match op_and_b {
-//         None => a,
-//         Some((op, b)) => VersionFormula::Binop(Box::new(a), op, Box::new(b)),
-//       }
-//     }
-//   )(s)
-// }
-
 fn escaped_char(s: Src) -> Res<char> {
   preceded(char('\\'), alt((
     map(char('t'), |_| '\t'),
@@ -182,63 +143,10 @@ fn escaped_char(s: Src) -> Res<char> {
   )))(s)
 }
 
-fn string_char(s: Src) -> Res<char> {
-  alt((
-    none_of("\"\\"),
-    escaped_char,
-  ))(s)
-}
-
-fn single_string_char(s: Src) -> Res<char> {
-  alt((
-    none_of("'\\"),
-    escaped_char,
-  ))(s)
-}
-
-// <string>        ::= ( (") { <char> }* (") ) | ( (""") { <char> }* (""") )
-fn quote_string(s: Src) -> Res<Vec<OpamSC>> {
-  delimited(char('"'), map(many0(string_atom), StringAtom::coalesce), char('"'))(s)
-}
-
-fn esy_string_inner(s: Src) -> Res<Vec<OpamSC>> {
-  map(many0(esy_string_atom), StringAtom::coalesce)(s)
-}
-
-fn esy_string(s: Src) -> Res<Vec<OpamSC>> {
-  delimited(char('\''), esy_string_inner, char('\''))(s)
-}
-fn triplequote_string(s: Src) -> Res<Vec<OpamSC>> {
-  map(
-    preceded(tag("\"\"\""), many_till(triplequote_string_atom, tag("\"\"\""))),
-    |(content, _delim)| StringAtom::coalesce(content)
-  )(s)
-}
 
 pub enum StringAtom<'a> {
   Char(char),
   Expr(Value<'a>),
-}
-
-fn triplequote_string_atom(s: Src) -> Res<StringAtom> {
-  alt((
-    map(char('"'), StringAtom::Char),
-		string_atom
-  ))(s)
-}
-
-fn string_atom(s: Src) -> Res<StringAtom> {
-  alt((
-    map(interpolation, StringAtom::Expr),
-    map(string_char, StringAtom::Char),
-  ))(s)
-}
-
-fn esy_string_atom(s: Src) -> Res<StringAtom> {
-  alt((
-    map(esy_interpolation, StringAtom::Expr),
-    map(single_string_char, StringAtom::Char),
-  ))(s)
 }
 
 struct CoalesceState<'a> {
@@ -288,46 +196,37 @@ impl<'a> StringAtom<'a> {
 
 pub type OpamSC<'a> = StringComponentOf<Value<'a>>;
 
-fn interpolation(s: Src) -> Res<Value> {
-  delimited(tag("%{"), ws(value), tag("}%"))(s)
-}
-
-pub fn esy_interpolation(s: Src) -> Res<Value> {
-  delimited(tag("#{"), ws(esy_value), tag("}"))(s)
-}
-
-fn esy_varident(s: Src) -> Res<Varident> {
-  map(
-    tuple((
-      ident,
-      char('.'),
-      ident
-    )),
-    |(scope, _, ident)| Varident { scope, additional_scopes: Vec::new(), ident }
-  )(s)
-}
-
-fn esy_envvar(s: Src) -> Res<Varident> {
-  map(
-    preceded(char('$'), ident),
-    |ident| Varident { scope:"env", additional_scopes: Vec::new(), ident }
-  )(s)
-}
-
-
-fn string(s: Src) -> Res<Vec<OpamSC>> {
-  context("string",
-    alt((triplequote_string, quote_string)),
-  )(s)
-}
-
 /// A combinator that takes a parser `inner` and produces a parser that also consumes both leading and 
 /// trailing whitespace, returning the output of `inner`.
 fn ws<'a, F: 'a, O>(inner: F) -> impl FnMut(Src<'a>) -> Res<O>
-  where F: FnMut(Src<'a>) -> Res<O>,
+  where F: SrcParser<'a, O>
 {
   delimited(filler, inner, filler)
 }
+
+// <comment>       ::= ( "(*" { <char> }* "*)" ) | ( "#" { <char\newline> }* <newline> )
+fn ocaml_comment(s: Src) -> Res<()> {
+  discard(tuple((
+    tag("(*"),
+    many_till(anychar, tag("*)")),
+  )))(s)
+}
+
+fn newline_or_eof(s: Src) -> Res<()> {
+  discard(alt((tag("\n"), eof)))(s)
+}
+
+fn line_comment(s: Src) -> Res<()> {
+  discard(tuple((
+    char('#'),
+    many0(satisfy(|ch| ch != '\n')),
+    newline_or_eof,
+  )))(s)
+}
+fn comment(s: Src) -> Res<()> {
+  alt((ocaml_comment, line_comment))(s)
+}
+
 
 /// We discard comments anywhere whitespace is allowed
 fn filler(s: Src) -> Res<()> {
@@ -395,247 +294,376 @@ impl<'a> Value<'a> {
 	}
 }
 
-// <value>         ::= <bool> | <int> | <string> | <ident> | <varident>
-//                   | <operator> | <list> | <option> | "(" <value> ")"
-// For convenience, value is also used to express filters & dependency filters:
-//
-// <filter> ::= <filter> <logop> <filter>
-//            | "!" <filter>
-//            | "?" <filter>
-//            | ( <filter> )
-//            | <filter> <relop> <filter>
-//            | <varident>
-//            | <string>
-//            | <int>
-//            | <bool>
-// 
-// <filtered-package-formula> ::= <filtered-package-formula> <logop> <filtered-package-formula>
-//                              | ( <filtered-package-formula> )
-//                              | <pkgname> { { <filtered-version-formula> }* }
-// 
-// <filtered-version-formula> ::= <filtered-version-formula> <logop> <filtered-version-formula>
-//                              | "!" <filtered-version-formula>
-//                              | "?" <filtered-version-formula>
-//                              | "(" <filtered-version-formula> ")"
-//                              | <relop> <version>
-//                              | <filter>
-//                              | <relop> <filter>
-fn value(s: Src) -> Res<Value> {
-  map(
-    tuple((
-      alt((
-        map(string, Value::String),
-        map(bool_, Value::Bool),
-        map(int, Value::Int),
-        map(varident, Value::Varident),
-        map(ident, Value::Ident),
-        // map(binary_op, Value::Binop),
-        map(
-          tuple((basic_op, ws(value))),
-          |(op, value)| Value::UnaryOp(op, Box::new(value))
-        ),
-        // map(logop, Value::Op),
-        map(list, Value::List),
-        // map(version_formula, Value::VersionFormula),
-        delimited(ws(char('(')), value, ws(char(')'))),
-      )),
-      opt(ws(value_option)),
-      opt(op_suffix),
-    )),
-    |(a,b,c)| value_mapper(a,b,c)
-  )(s)
+#[derive(Debug, Clone)]
+pub struct Dialect<I,O,E> {
+  base: fn(I) -> IResult<I,O,E>
 }
 
-// #[derive(Debug, Clone, PartialEq, Eq)]
-// pub enum ValueSuffix<'a> {
-//   Logop(Src<'a>, Value<'a>),
-//   Option(Vec<Value<'a>>),
-// }
-// <option>        ::= <value> "{" { <value> }* "}"
-// We implement this as "value optionally followed by value_suffix", otherwise
-// the value parse is ambiguous
-fn value_option(s: Src) -> Res<Value> {
-  delimited(ws(char('{')), value, ws(char('}')))(s)
+type SrcDialect<'a> = Dialect<Src<'a>, Value<'a>, SrcError<'a>>;
+
+
+// A dialect parser is any parser that depends on a dialect
+// (but `fn` must be a static function pointer, not a closure)
+#[derive(Debug, Clone)]
+pub struct DialectParser<I,O1,O2,E>
+{
+  dialect: Dialect<I,O1,E>,
+  f: fn(Dialect<I,O1,E>, I) -> IResult<I,O2,E>,
 }
 
-#[derive(Clone, Debug)]
-enum OpSuffix<'a> {
-  Binop((Op, Value<'a>)),
-  Ternop((Value<'a>, Value<'a>)),
-}
+// explicit impl required to relax default `Copy` condition on generic params to `Clone`
+impl <I: Clone,O: Clone,E: Clone> Copy for Dialect<I,O,E> {}
+impl <I: Clone,O1: Clone,O2: Clone,E: Clone> Copy for DialectParser<I,O1,O2,E> {}
 
-fn op_suffix(s: Src) -> Res<OpSuffix> {
-  alt((
-    map(tuple((ws(basic_op), value)), OpSuffix::Binop),
-    map(tuple((delimited(ws(question), value, ws(colon)), value)), OpSuffix::Ternop)
-  ))(s)
-}
-
-fn value_mapper<'a>(mut value: Value<'a>, option: Option<Value<'a>>, op: Option<OpSuffix<'a>>) -> Value<'a> {
-  if let Some(option) = option {
-    value = Value::Option(Box::new(ValueWithOption {
-      value, option
-    }))
+impl<I: Clone, O1: Clone, O2: Clone, E: Clone> Parser<I,O2,E> for DialectParser<I,O1,O2,E> {
+  fn parse(&mut self, input: I) -> IResult<I,O2,E> {
+    (self.f)(self.dialect, input)
   }
-  
-  let value = match op {
-    Some(OpSuffix::Binop((op, value2))) => Value::Binop(Box::new(Binop {
-      a: value,
-      op,
-      b: value2,
-    })),
-    Some(OpSuffix::Ternop((iftrue, iffalse))) => Value::Ternop(Box::new(Ternop {
-      test: value, iftrue, iffalse
-    })),
-    None => value,
-  };
-  
-  value
 }
 
-fn esy_base_value(s: Src) -> Res<Value> {
-  alt((
-    map(esy_string, Value::String),
-    map(esy_varident, Value::Varident),
-    map(esy_envvar, Value::Varident),
-    map(bool_, Value::Bool),
-    map(int, Value::Int),
-    map(ident, Value::Ident),
+mod dialect {
+  use super::*;
+
+  pub fn parser<'a, I,O1, O2, E>(
+    dialect: Dialect<I,O1,E>, f: fn(Dialect<I,O1,E>, I) -> IResult<I,O2,E>)
+    -> DialectParser<I,O1,O2,E> {
+    DialectParser { dialect, f }
+  }
+
+  // base values are ones without operators
+  fn base_value<'a>(d: SrcDialect<'a>, s: Src<'a>) -> Res<'a, Value<'a>> {
+    let base_value = parser(d, base_value);
+    let value = parser(d, value);
+    let value_option = parser(d, value_option);
+    let list = parser(d, list);
     map(
-      tuple((basic_op, ws(esy_value))),
-      |(op, value)| Value::UnaryOp(op, Box::new(value))
-    ),
-    map(list, Value::List),
-    delimited(ws(char('(')), esy_value, ws(char(')'))),
-  ))(s)
+      tuple((
+        alt((
+          map(bool_, Value::Bool),
+          map(int, Value::Int),
+          map(ident, Value::Ident),
+          d.base,
+          map(
+            tuple((basic_op, ws(base_value))),
+            |(op, value)| Value::UnaryOp(op, Box::new(value))
+          ),
+          map(list, Value::List),
+          delimited(ws(char('(')), value, ws(char(')'))),
+        )),
+        opt(value_option),
+      ))
+      , |(mut value, option)| {
+        if let Some(option) = option {
+          value = Value::Option(Box::new(ValueWithOption {
+            value, option
+          }))
+        }
+        value
+      }
+    )(s)
+  }
+
+  // #[derive(Debug, Clone, PartialEq, Eq)]
+  // pub enum ValueSuffix<'a> {
+  //   Logop(Src<'a>, Value<'a>),
+  //   Option(Vec<Value<'a>>),
+  // }
+  // <option>        ::= <value> "{" { <value> }* "}"
+  // We implement this as "value optionally followed by value_suffix", otherwise
+  // the value parse is ambiguous
+  fn value_option<'a>(d: SrcDialect<'a>, s: Src<'a>) -> Res<'a, Value<'a>> {
+    let value = parser(d, value);
+    delimited(ws(char('{')), value, ws(char('}')))(s)
+  }
+
+  pub fn list<'a>(d: Dialect<Src<'a>, Value<'a>, SrcError<'a>>, s: Src<'a>) -> Res<'a, Vec<Value<'a>>> {
+    let value = parser(d, value);
+    context("list",
+      delimited(ws(char('[')),
+      many0(ws(value)),
+      ws(char(']')))
+    )(s)
+  }
+
+  fn binop_value<'a>(d: SrcDialect<'a>, s: Src<'a>) -> Res<'a, Value<'a>> {
+    let base_value = parser(d, base_value);
+    map(
+      tuple((base_value.clone(), ws(basic_op), base_value)),
+      |(a, op, b)| Value::Binop(Box::new(Binop { a, op, b }))
+    )(s)
+  }
+
+  fn ternop_value<'a>(d: SrcDialect<'a>, s: Src<'a>) -> Res<'a, Value<'a>> {
+    let binop_value = parser(d, binop_value);
+    let base_value = parser(d, base_value);
+    let value = parser(d, value);
+    map(
+      tuple((
+        alt((binop_value, base_value)),
+        preceded(ws(question), value),
+        preceded(ws(colon), value),
+      )),
+      |(test, iftrue, iffalse)| Value::Ternop(Box::new(Ternop { test, iftrue, iffalse }))
+    )(s)
+  }
+
+  pub fn value<'a>(d: Dialect<Src<'a>, Value<'a>, SrcError<'a>>, s: Src<'a>) -> Res<'a, Value<'a>> {
+    let binop_value = parser(d, binop_value);
+    let ternop_value = parser(d, ternop_value);
+    let base_value = parser(d, base_value);
+    alt((
+      ternop_value,
+      binop_value,
+      base_value,
+    ))(s)
+  }
 }
 
-fn esy_binop_value(s: Src) -> Res<Value> {
-  map(
-    tuple((esy_base_value, ws(basic_op), esy_base_value)),
-    |(a, op, b)| Value::Binop(Box::new(Binop { a, op, b }))
-  )(s)
-}
 
-fn esy_ternop_value(s: Src) -> Res<Value> {
-  map(
-    tuple((
-      alt((esy_binop_value, esy_base_value)),
-      preceded(ws(question), esy_value),
-      preceded(ws(colon), esy_value),
+pub mod opam {
+  use super::*;
+
+  // <value>         ::= <bool> | <int> | <string> | <ident> | <varident>
+  //                   | <operator> | <list> | <option> | "(" <value> ")"
+  // For convenience, value is also used to express filters & dependency filters:
+  //
+  // <filter> ::= <filter> <logop> <filter>
+  //            | "!" <filter>
+  //            | "?" <filter>
+  //            | ( <filter> )
+  //            | <filter> <relop> <filter>
+  //            | <varident>
+  //            | <string>
+  //            | <int>
+  //            | <bool>
+  // 
+  // <filtered-package-formula> ::= <filtered-package-formula> <logop> <filtered-package-formula>
+  //                              | ( <filtered-package-formula> )
+  //                              | <pkgname> { { <filtered-version-formula> }* }
+  // 
+  // <filtered-version-formula> ::= <filtered-version-formula> <logop> <filtered-version-formula>
+  //                              | "!" <filtered-version-formula>
+  //                              | "?" <filtered-version-formula>
+  //                              | "(" <filtered-version-formula> ")"
+  //                              | <relop> <version>
+  //                              | <filter>
+  //                              | <relop> <filter>
+  //
+  fn base(s: Src) -> Res<Value> {
+    alt((
+      map(string, Value::String),
+      map(varident, Value::Varident),
+    ))(s)
+  }
+
+  pub fn value(s: Src) -> Res<Value> {
+    let d = Dialect { base };
+    dialect::parser(d, dialect::value).parse(s)
+  }
+
+  pub fn list(s: Src) -> Res<Vec<Value>> {
+    let d = Dialect { base };
+    dialect::parser(d, dialect::list).parse(s)
+  }
+
+  // #[derive(Debug, Clone, PartialEq, Eq)]
+  // pub enum ValueSuffix<'a> {
+  //   Logop(Src<'a>, Value<'a>),
+  //   Option(Vec<Value<'a>>),
+  // }
+  // <option>        ::= <value> "{" { <value> }* "}"
+  // We implement this as "value optionally followed by value_suffix", otherwise
+  // the value parse is ambiguous
+  pub fn value_option(s: Src) -> Res<Value> {
+    delimited(ws(char('{')), value, ws(char('}')))(s)
+  }
+
+  pub fn interpolation(s: Src) -> Res<Value> {
+    delimited(tag("%{"), ws(value), tag("}%"))(s)
+  }
+
+  pub fn string(s: Src) -> Res<Vec<OpamSC>> {
+    context("string",
+      alt((triplequote_string, quote_string)),
+    )(s)
+  }
+
+  #[derive(Clone, Debug, PartialEq, Eq)]
+  pub struct FieldBinding<'a> {
+    pub ident: Src<'a>,
+    pub value: Value<'a>,
+  }
+
+  // <field-binding> ::= <ident> : <value>
+  pub fn field_binding(s: Src) -> Res<FieldBinding> {
+    context("field_binding", map(
+      separated_pair(ident, context("colon", ws(char(':'))), ws(value)),
+      |(ident, value)| FieldBinding { ident, value }
+    ))(s)
+  }
+
+  #[derive(Clone, Debug, PartialEq, Eq)]
+  pub enum FileItem<'a> {
+    Section(Section<'a>),
+    FieldBinding(FieldBinding<'a>),
+  }
+
+  #[derive(Clone, Debug, PartialEq, Eq)]
+  pub struct Section<'a> {
+    pub ident: Src<'a>,
+    pub string: Option<Vec<OpamSC<'a>>>,
+    pub contents: Vec<FileItem<'a>>,
+  }
+  // <section>       ::= <ident> [ <string> ] "{" <file-contents> "}"
+  fn section(s: Src) -> Res<Section> {
+    map(tuple((
+      ident,
+      ws(opt(string)),
+      delimited(
+        ws(char('{')),
+        file_contents,
+        ws(char('}'))
+      )
     )),
-    |(test, iftrue, iffalse)| Value::Ternop(Box::new(Ternop { test, iftrue, iffalse }))
-  )(s)
+    |(ident, string, contents)| Section { ident, string, contents })(s)
+  }
+
+  // <file-contents> ::= { <file-item> }*
+  // <file-item>     ::= <field-binding> | <section>
+  fn file_contents(s: Src) -> Res<Vec<FileItem>> {
+    many0(alt((
+      map(field_binding, FileItem::FieldBinding),
+      map(section, FileItem::Section))))(s)
+  }
+
+  #[derive(Clone, Debug, PartialEq, Eq)]
+  pub enum Term<'a> {
+    String(Vec<OpamSC<'a>>),
+    Varident(Varident<'a>)
+  }
+  // <term>          ::= <string> | <varident>
+  fn term(s: Src) -> Res<Term> {
+    alt((
+      map(string, Term::String),
+      map(varident, Term::Varident),
+    ))(s)
+  }
+
+  pub fn entire_file(s: Src) -> Res<Vec<FileItem>> {
+    all_consuming(ws(file_contents))(s)
+  }
+
+  fn string_char(s: Src) -> Res<char> {
+    alt((
+      none_of("\"\\"),
+      escaped_char,
+    ))(s)
+  }
+
+  // <string>        ::= ( (") { <char> }* (") ) | ( (""") { <char> }* (""") )
+  pub fn quote_string(s: Src) -> Res<Vec<OpamSC>> {
+    delimited(char('"'), map(many0(string_atom), StringAtom::coalesce), char('"'))(s)
+  }
+
+  pub fn triplequote_string(s: Src) -> Res<Vec<OpamSC>> {
+    map(
+      preceded(tag("\"\"\""), many_till(triplequote_string_atom, tag("\"\"\""))),
+      |(content, _delim)| StringAtom::coalesce(content)
+    )(s)
+  }
+  fn triplequote_string_atom(s: Src) -> Res<StringAtom> {
+    alt((
+      map(char('"'), StringAtom::Char),
+      string_atom
+    ))(s)
+  }
+
+  fn string_atom(s: Src) -> Res<StringAtom> {
+    alt((
+      map(interpolation, StringAtom::Expr),
+      map(string_char, StringAtom::Char),
+    ))(s)
+  }
+
+  // <varident>      ::= [ ( <ident> | "_" ) { "+" ( <ident> | "_" ) }* : ] <ident>
+  // TODO treat a+b+c:d as a:d & b:d & c:d
+  pub fn varident(s: Src) -> Res<Varident> {
+    map(
+      tuple((
+        alt((ident, underscore_s)),
+        many0(preceded(plus, alt((ident, underscore_s)))),
+        char(':'),
+        ident
+      )),
+      |(scope, additional_scopes, _, ident)| Varident { scope, additional_scopes, ident }
+    )(s)
+  }
+
 }
 
-fn esy_value(s: Src) -> Res<Value> {
-  alt((
-    esy_ternop_value,
-    esy_binop_value,
-    esy_base_value,
-  ))(s)
-}
+pub mod esy {
+  use super::*;
 
-// <list>          ::= "[" { <value> }* "]"
-fn list(s: Src) -> Res<Vec<Value>> {
-  context("list",
-    delimited(ws(char('[')),
-    many0(ws(value)),
-    // many0(ws(map(int, Value::Int))),
-    ws(char(']')))
-  )(s)
-}
+  fn base(s: Src) -> Res<Value> {
+    alt((
+      map(string, Value::String),
+      map(varident, Value::Varident),
+      map(envvar, Value::Varident),
+    ))(s)
+  }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct FieldBinding<'a> {
-  pub ident: Src<'a>,
-  pub value: Value<'a>,
-}
+  pub fn value(s: Src) -> Res<Value> {
+    let d = Dialect { base };
+    dialect::parser(d, dialect::value).parse(s)
+  }
 
-// <field-binding> ::= <ident> : <value>
-fn field_binding(s: Src) -> Res<FieldBinding> {
-  context("field_binding", map(
-    separated_pair(ident, context("colon", ws(char(':'))), ws(value)),
-    |(ident, value)| FieldBinding { ident, value }
-  ))(s)
-}
+  pub fn interpolation(s: Src) -> Res<Value> {
+    delimited(tag("#{"), ws(value), tag("}"))(s)
+  }
 
-// <comment>       ::= ( "(*" { <char> }* "*)" ) | ( "#" { <char\newline> }* <newline> )
-fn ocaml_comment(s: Src) -> Res<()> {
-  discard(tuple((
-    tag("(*"),
-    many_till(anychar, tag("*)")),
-  )))(s)
-}
+  fn varident(s: Src) -> Res<Varident> {
+    map(
+      tuple((
+        ident,
+        char('.'),
+        ident
+      )),
+      |(scope, _, ident)| Varident { scope, additional_scopes: Vec::new(), ident }
+    )(s)
+  }
 
-fn newline_or_eof(s: Src) -> Res<()> {
-  discard(alt((tag("\n"), eof)))(s)
-}
+  fn envvar(s: Src) -> Res<Varident> {
+    map(
+      preceded(char('$'), ident),
+      |ident| Varident { scope:"env", additional_scopes: Vec::new(), ident }
+    )(s)
+  }
 
-fn line_comment(s: Src) -> Res<()> {
-  discard(tuple((
-    char('#'),
-    many0(satisfy(|ch| ch != '\n')),
-    newline_or_eof,
-  )))(s)
-}
-fn comment(s: Src) -> Res<()> {
-  alt((ocaml_comment, line_comment))(s)
-}
+  pub fn string_inner(s: Src) -> Res<Vec<OpamSC>> {
+    map(many0(string_atom), StringAtom::coalesce)(s)
+  }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum FileItem<'a> {
-  Section(Section<'a>),
-  FieldBinding(FieldBinding<'a>),
-}
+  fn single_string_char(s: Src) -> Res<char> {
+    alt((
+      none_of("'\\"),
+      escaped_char,
+    ))(s)
+  }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Section<'a> {
-  pub ident: Src<'a>,
-  pub string: Option<Vec<OpamSC<'a>>>,
-  pub contents: Vec<FileItem<'a>>,
-}
-// <section>       ::= <ident> [ <string> ] "{" <file-contents> "}"
-fn section(s: Src) -> Res<Section> {
-  map(tuple((
-    ident,
-    ws(opt(string)),
-    delimited(
-      ws(char('{')),
-      file_contents,
-      ws(char('}'))
-    )
-  )),
-  |(ident, string, contents)| Section { ident, string, contents })(s)
-}
+  pub fn string(s: Src) -> Res<Vec<OpamSC>> {
+    delimited(char('\''), string_inner, char('\''))(s)
+  }
 
-// <file-contents> ::= { <file-item> }*
-// <file-item>     ::= <field-binding> | <section>
-fn file_contents(s: Src) -> Res<Vec<FileItem>> {
-  many0(alt((
-    map(field_binding, FileItem::FieldBinding),
-    map(section, FileItem::Section))))(s)
-}
+  fn string_atom(s: Src) -> Res<StringAtom> {
+    alt((
+      map(interpolation, StringAtom::Expr),
+      map(single_string_char, StringAtom::Char),
+    ))(s)
+  }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Term<'a> {
-  String(Vec<OpamSC<'a>>),
-  Varident(Varident<'a>)
-}
-// <term>          ::= <string> | <varident>
-fn term(s: Src) -> Res<Term> {
-  alt((
-    map(string, Term::String),
-    map(varident, Term::Varident),
-  ))(s)
-}
-
-pub fn entire_file(s: Src) -> Res<Vec<FileItem>> {
-  all_consuming(ws(file_contents))(s)
-}
-
-pub fn entire_esy_string(s: Src) -> Res<Value> {
-  all_consuming(map(esy_string_inner, Value::String))(s)
+  pub fn entire_string(s: Src) -> Res<Value> {
+    all_consuming(map(esy::string_inner, Value::String))(s)
+  }
 }
 
 pub fn parse<'a, T, F>(mut p: F, contents: &'a str) -> Result<T>
@@ -681,6 +709,7 @@ mod tests {
 
   #[test]
   fn test_string_subparsers() {
+    use opam::*;
     valid(quote_string, r#""hello""#);
     valid(triplequote_string, r#""""hello""""#);
     valid(interpolation, "%{1}%");
@@ -692,6 +721,7 @@ mod tests {
 
   #[test]
   fn test_string() {
+    use opam::*;
     valid(string, r#""""hello""""#);
     valid(string, r#""hello""#);
     use StringComponentOf::*;
@@ -707,6 +737,7 @@ mod tests {
 
   #[test]
   fn test_field_binding() {
+    use opam::*;
     valid(field_binding, r#"foo: """hello""""#);
     valid(field_binding, r#"foo: "hello""#);
     valid(field_binding, r#"foo: true"#);
@@ -714,6 +745,7 @@ mod tests {
 
   #[test]
   fn test_list() {
+    use opam::*;
     valid(list, "[1]");
     valid(list, "[1 2 3]");
     valid(list, "[]");
@@ -736,6 +768,7 @@ mod tests {
 
   #[test]
   fn test_options() {
+    use opam::*;
     valid(value_option, "{ foo }");
     valid(value_option, "{ foo & bar }");
     valid(value_option, "{ foo & >= bar }");
@@ -743,15 +776,16 @@ mod tests {
 
   #[test]
   fn test_esy() {
-    valid(esy_string, "'foo'");
+    use esy::*;
+    valid(string, "'foo'");
     //valid(esy_op_suffix, "== 1");
     //valid(esy_op_suffix, "? 1 : 2");
-    valid(esy_value, "os == 1");
-    valid(esy_interpolation, "#{ os = 'linux'}");
-    valid(esy_interpolation, "#{ true ? 1 : 2 }");
+    valid(value, "os == 1");
+    valid(interpolation, "#{ os = 'linux'}");
+    valid(interpolation, "#{ true ? 1 : 2 }");
     assert_eq!(
       // TODO parses as true == (true ? 1 : 2)
-      p(esy_value, "true == true ? 1 : 2"),
+      p(value, "true == true ? 1 : 2"),
       Value::Ternop(Box::new(Ternop {
         test: Value::Binop(Box::new(Binop {
           a: Value::Bool(true),
@@ -763,12 +797,13 @@ mod tests {
       })),
     );
 
-    valid(esy_interpolation, "#{ os == 'linux' ? 'linux' : 'nope' }");
-    valid(esy_string_inner, "#{ os == 'linux' ? 'yeah' : 'nah' }");
+    valid(interpolation, "#{ os == 'linux' ? 'linux' : 'nope' }");
+    valid(string_inner, "#{ os == 'linux' ? 'yeah' : 'nah' }");
   }
 
   #[test]
   fn test_value() {
+    use opam::*;
     valid(value, r#""cppo" {build & >= "1.1.0"}"#);
     valid(many0(ws(value)), r#">= "4.08.0""#);
     valid(value, r#""ocaml" {>= "4.08.0"}"#);
@@ -794,6 +829,7 @@ mod tests {
 
   #[test]
   fn test_entire_file() {
+    use opam::*;
     valid(entire_file, r#"foo: """hello""""#);
     valid(entire_file, r#"foo: true"#);
     valid(entire_file, r#"description: """desc""""#);

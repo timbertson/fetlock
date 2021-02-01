@@ -1,6 +1,7 @@
 use anyhow::*;
 use std::borrow::Borrow;
 use crate::esy::opam_parser::*;
+use crate::esy::opam_parser::opam::*;
 use crate::esy::eval::*;
 use crate::esy::build::*;
 use crate::{Key, Expr};

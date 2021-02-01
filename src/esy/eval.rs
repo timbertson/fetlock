@@ -3,15 +3,19 @@ use log::*;
 use std::collections::HashMap;
 use crate::esy::parser::*;
 use crate::esy::parser;
-use crate::esy::opam::{Name, NameRef, Pkg};
-use crate::{Expr, FunCall, StringComponent, StringComponentOf};
+use crate::{Name, Key, Expr, FunCall, StringComponent, StringComponentOf};
+
+#[derive(Debug, Clone)]
+pub struct Pkg {
+  pub name: Name,
+  pub key: Key,
+}
 
 // TODO we only have one concrete implementation, drop this trait
 pub trait NixCtx {
   fn name<'a>(&'a self) -> &'a Name;
-  fn get<'a, 'b>(&'a self, name: NameRef<'b>) -> Option<&'a Pkg>;
-  //fn get<K: Hash + Eq>(&self, name: &'a K) -> Option<&'a Pkg>
-  //  where Name: Borrow<K>;
+  // TODO make this a KeyRef (again!)
+  fn get<'a, 'b>(&'a self, name: &'b str) -> Option<&'a Pkg>;
 }
 
 pub struct NixCtxMap<'a> {
@@ -21,11 +25,8 @@ pub struct NixCtxMap<'a> {
 
 impl<'c> NixCtx for NixCtxMap<'c> {
   fn name(&self) -> &Name { self.name }
-  //fn get<K: Hash + Eq>(&self, name: &K) -> Option<&'a Pkg> where Name: Borrow<K> {
-  //  self.map.get(name)
-  //}
-  fn get<'a, 'b>(&'a self, name: NameRef<'b>) -> Option<&'a Pkg> {
-    self.map.get(name.0)
+  fn get<'a, 'b>(&'a self, name: &'b str) -> Option<&'a Pkg> {
+    self.map.get(name)
   }
 }
 
@@ -35,12 +36,10 @@ pub struct EmptyCtx {
 
 impl NixCtx for EmptyCtx {
   fn name(&self) -> &Name { &self.name }
-  fn get<'a, 'b>(&'a self, name: NameRef<'b>) -> Option<&'a Pkg> {
+  fn get<'a, 'b>(&'a self, name: &'b str) -> Option<&'a Pkg> {
     None
   }
 }
-
-
 
 #[derive(Debug, Clone)]
 pub struct PkgImpl<'a> {
@@ -92,7 +91,7 @@ impl Ctx {
         // is it a package variable implicitly on `self`?
         ident => Self::resolve(ctx, VarScope::SelfScope, ident).or_else(|_| {
           // otherwise try looking it up as a package name
-          match ctx.get(NameRef(ident)) {
+          match ctx.get(ident) {
             Some(pkg) => Self::resolve(ctx, VarScope::Package(Some(pkg)), "prefix"),
             
             // otherwise it might either be an uninstalled package,
@@ -212,7 +211,7 @@ impl Ctx {
     match scope {
       "_" | "self" /* esy */ => VarScope::SelfScope,
       name if name == ctx.name().0 => VarScope::SelfScope,
-      scope => VarScope::Package(ctx.get(NameRef(scope)))
+      scope => VarScope::Package(ctx.get(scope))
     }
   }
 

@@ -1,6 +1,8 @@
 // esy.lock backend
 
-use crate::esy::{command, eval, opam, esy_parser};
+use crate::esy::{command, eval, esy_manifest};
+use crate::esy::opam_manifest::Opam;
+use crate::esy::eval::Pkg;
 use crate::fetch;
 use crate::*;
 use crate::nix_serialize::{Writeable, WriteContext};
@@ -36,8 +38,8 @@ impl PartitionedSpec<'_> {
 
 struct InstalledPkgs {
 	// TODO can these be refs?
-	opam: HashMap<opam::Name, opam::Pkg>,
-	esy: HashMap<opam::Name, opam::Pkg>,
+	opam: HashMap<Name, Pkg>,
+	esy: HashMap<Name, Pkg>,
 }
 
 impl EsyLock {
@@ -45,7 +47,7 @@ impl EsyLock {
 		let mut opam = HashMap::new();
 		let mut esy = HashMap::new();
 		let mut specs = Vec::new();
-		let pkg = |name: opam::Name, key: &Key| opam::Pkg {
+		let pkg = |name: Name, key: &Key| Pkg {
 			name: name,
 			key: key.clone(),
 		};
@@ -57,7 +59,7 @@ impl EsyLock {
 					specs.push(PartitionedSpec::Opam(spec));
 				},
 				None => {
-					let name = opam::Name(spec.spec.id.name.to_owned());
+					let name = Name(spec.spec.id.name.to_owned());
 					esy.insert(name.clone(), pkg(name, key));
 					specs.push(PartitionedSpec::Esy(spec));
 				},
@@ -85,7 +87,7 @@ impl EsyLock {
 						repo.file_contents(&path).await?
 					};
 					let nix_ctx = eval::Ctx::from_map(&name, &installed.opam);
-					let opam = opam::Opam::from_str(&manifest)
+					let opam = Opam::from_str(&manifest)
 						.with_context(|| format!("parsing opam manifest:\n{}", &manifest))?;
 					debug!("parsed opam: {:?}", opam);
 					let build = opam.into_nix(&nix_ctx)
@@ -107,10 +109,10 @@ impl EsyLock {
 							extract.file_contents("package.json").await
 						}
 					}?;
-					let esy = esy_parser::PackageJson::from_str(&manifest)
+					let esy = esy_manifest::PackageJson::from_str(&manifest)
 						.with_context(|| format!("deserializing manifest:\n\n{}", &manifest))?;
 
-					let name = opam::Name("TODO".to_owned());
+					let name = Name("TODO".to_owned());
 					let nix_ctx = eval::Ctx::from_map(&name, &installed.esy);
 					esy_spec.spec.extra.insert("build".to_owned(), esy.build(&nix_ctx)?.expr());
 				}
@@ -175,7 +177,7 @@ impl Backend for EsyLock {
 
 #[derive(Debug, Clone)]
 struct EsyMeta {
-	opam_name: Option<opam::Name>,
+	opam_name: Option<Name>,
 	manifest_path: Option<String>,
 	manifest: Option<command::Manifest>,
 }
@@ -289,7 +291,7 @@ impl<'de> Visitor<'de> for EsySpecVisitor {
 				"name" => {
 					let name = map.next_value::<&str>()?;
 					let name = if let Some(opam_name) = name.strip_prefix("@opam/") {
-						meta.opam_name = Some(opam::Name(opam_name.to_owned()));
+						meta.opam_name = Some(Name(opam_name.to_owned()));
 						opam_name.to_owned()
 					} else {
 						name.to_owned()

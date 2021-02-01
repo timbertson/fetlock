@@ -1,8 +1,8 @@
 mod backend;
 mod command;
 mod parser;
-mod esy_parser;
+mod esy_manifest;
 mod build;
-pub mod eval;
-pub mod opam;
+mod eval;
+mod opam_manifest;
 pub use backend::*;

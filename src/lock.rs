@@ -25,6 +25,15 @@ impl fmt::Display for Type {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Key(String);
 
+// newtype for a logical package name
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Name(pub String);
+impl std::borrow::Borrow<str> for Name {
+  fn borrow(&self) -> &str {
+    self.0.as_str()
+  }
+}
+
 impl Key {
 	pub fn new(raw: String) -> Key {
 		Key(raw)

@@ -113,10 +113,15 @@ fn basic_op(s: Src) -> Res<Op> {
     map(tag("<"), |_| Op::Lt),
     map(tag(">"), |_| Op::Gt),
     map(tag("="), |_| Op::Eq),
-    map(tag("&"), |_| Op::And),
-    map(tag("|"), |_| Op::Or),
     map(tag("!"), |_| Op::Not),
     map(tag("/"), |_| Op::Slash),
+  )))(s)
+}
+
+fn logic_op(s: Src) -> Res<Op> {
+  context("op", alt((
+    map(tag("&"), |_| Op::And),
+    map(tag("|"), |_| Op::Or),
   )))(s)
 }
 
@@ -329,39 +334,6 @@ mod dialect {
     DialectParser { dialect, f }
   }
 
-  // base values are ones without operators
-  fn base_value<'a>(d: SrcDialect<'a>, s: Src<'a>) -> Res<'a, Value<'a>> {
-    let base_value = parser(d, base_value);
-    let value = parser(d, value);
-    let value_option = parser(d, value_option);
-    let list = parser(d, list);
-    map(
-      tuple((
-        alt((
-          map(bool_, Value::Bool),
-          map(int, Value::Int),
-          map(ident, Value::Ident),
-          d.base,
-          map(
-            tuple((basic_op, ws(base_value))),
-            |(op, value)| Value::UnaryOp(op, Box::new(value))
-          ),
-          map(list, Value::List),
-          delimited(ws(char('(')), value, ws(char(')'))),
-        )),
-        opt(value_option),
-      ))
-      , |(mut value, option)| {
-        if let Some(option) = option {
-          value = Value::Option(Box::new(ValueWithOption {
-            value, option
-          }))
-        }
-        value
-      }
-    )(s)
-  }
-
   // #[derive(Debug, Clone, PartialEq, Eq)]
   // pub enum ValueSuffix<'a> {
   //   Logop(Src<'a>, Value<'a>),
@@ -384,37 +356,91 @@ mod dialect {
     )(s)
   }
 
-  fn binop_value<'a>(d: SrcDialect<'a>, s: Src<'a>) -> Res<'a, Value<'a>> {
-    let base_value = parser(d, base_value);
+  // lvl0 is plain values, without operators
+  pub fn value_lvl0<'a>(d: SrcDialect<'a>, s: Src<'a>) -> Res<'a, Value<'a>> {
+    let value_lvl0 = parser(d, value_lvl0);
+    let value = parser(d, value);
+    let value_option = parser(d, value_option);
+    let list = parser(d, list);
     map(
-      tuple((base_value.clone(), ws(basic_op), base_value)),
-      |(a, op, b)| Value::Binop(Box::new(Binop { a, op, b }))
+      tuple((
+        alt((
+          map(bool_, Value::Bool),
+          map(int, Value::Int),
+          d.base,
+          map(ident, Value::Ident),
+          map(list, Value::List),
+          delimited(ws(char('(')), value, ws(char(')'))),
+        )),
+        opt(value_option),
+      ))
+      , |(mut value, option)| {
+        if let Some(option) = option {
+          value = Value::Option(Box::new(ValueWithOption {
+            value, option
+          }))
+        }
+        value
+      }
     )(s)
   }
 
-  fn ternop_value<'a>(d: SrcDialect<'a>, s: Src<'a>) -> Res<'a, Value<'a>> {
-    let binop_value = parser(d, binop_value);
-    let base_value = parser(d, base_value);
+  pub fn value_lvl1<'a>(d: SrcDialect<'a>, s: Src<'a>) -> Res<'a, Value<'a>> {
+    // lvl0 or unary op
+    let value_lvl0 = parser(d, value_lvl0);
     let value = parser(d, value);
-    map(
-      tuple((
-        alt((binop_value, base_value)),
-        preceded(ws(question), value),
-        preceded(ws(colon), value),
-      )),
-      |(test, iftrue, iffalse)| Value::Ternop(Box::new(Ternop { test, iftrue, iffalse }))
-    )(s)
+    alt((
+      map(
+        tuple((basic_op, ws(value))),
+        |(op, value)| Value::UnaryOp(op, Box::new(value))
+      ),
+      value_lvl0
+    ))(s)
+  }
+
+  pub fn value_lvl2<'a>(d: SrcDialect<'a>, s: Src<'a>) -> Res<'a, Value<'a>> {
+    // lvl1 or comparison binop
+    let value_lvl1 = parser(d, value_lvl1);
+    alt((
+      map(
+        tuple((value_lvl1.clone(), ws(basic_op), value_lvl1)),
+        |(a, op, b)| Value::Binop(Box::new(Binop { a, op, b }))
+      ),
+      value_lvl1
+    ))(s)
+  }
+
+  pub fn value_lvl3<'a>(d: SrcDialect<'a>, s: Src<'a>) -> Res<'a, Value<'a>> {
+    // lvl2 or logic binop
+    let lvl2 = parser(d, value_lvl2);
+    alt((
+      map(
+        tuple((lvl2.clone(), ws(logic_op), lvl2.clone())),
+        |(a, op, b)| Value::Binop(Box::new(Binop { a, op, b }))
+      ),
+      lvl2
+    ))(s)
+  }
+
+  pub fn value_lvl4<'a>(d: SrcDialect<'a>, s: Src<'a>) -> Res<'a, Value<'a>> {
+    // lvl3 or ternop
+    let lvl3 = parser(d, value_lvl3);
+    let value = parser(d, value);
+    alt((
+      map(
+        tuple((
+          lvl3,
+          preceded(ws(question), value),
+          preceded(ws(colon), value),
+        )),
+        |(test, iftrue, iffalse)| Value::Ternop(Box::new(Ternop { test, iftrue, iffalse }))
+      ),
+      lvl3
+    ))(s)
   }
 
   pub fn value<'a>(d: Dialect<Src<'a>, Value<'a>, SrcError<'a>>, s: Src<'a>) -> Res<'a, Value<'a>> {
-    let binop_value = parser(d, binop_value);
-    let ternop_value = parser(d, ternop_value);
-    let base_value = parser(d, base_value);
-    alt((
-      ternop_value,
-      binop_value,
-      base_value,
-    ))(s)
+    value_lvl4(d, s)
   }
 }
 
@@ -448,7 +474,7 @@ pub mod opam {
   //                              | <filter>
   //                              | <relop> <filter>
   //
-  fn base(s: Src) -> Res<Value> {
+  pub fn base(s: Src) -> Res<Value> {
     alt((
       map(string, Value::String),
       map(varident, Value::Varident),
@@ -777,13 +803,12 @@ mod tests {
   fn test_esy() {
     use esy::*;
     valid(string, "'foo'");
-    //valid(esy_op_suffix, "== 1");
-    //valid(esy_op_suffix, "? 1 : 2");
     valid(value, "os == 1");
     valid(interpolation, "#{ os = 'linux'}");
     valid(interpolation, "#{ true ? 1 : 2 }");
+    valid(value, "self.bin / 'makeinfo'");
+    valid(entire_string, "ln #{self.bin / 'makeinfo'}");
     assert_eq!(
-      // TODO parses as true == (true ? 1 : 2)
       p(value, "true == true ? 1 : 2"),
       Value::Ternop(Box::new(Ternop {
         test: Value::Binop(Box::new(Binop {
@@ -832,6 +857,14 @@ mod tests {
     valid(entire_file, r#"foo: """hello""""#);
     valid(entire_file, r#"foo: true"#);
     valid(entire_file, r#"description: """desc""""#);
+    valid(entire_file, r#"
+      build: [ "dune" "runtest" "-p" name ] {with-test & ocaml:version >= "4.07.0"}
+    "#);
+    valid(entire_file, r#"
+      depends: [
+        "mdx" {with-test & >= "1.4" & < "1.6" }
+      ]
+    "#);
     valid(entire_file, r#"
 #leading comment
 opam-version: "2.0"

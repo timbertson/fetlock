@@ -371,7 +371,6 @@ impl Eval {
         }
       },
       Ternop(op) => {
-        warn!("TERN: {:?}", op);
         let parser::Ternop { test, iftrue, iffalse } = *op;
         Ok(Eval::Nix(Expr::LitSeq(vec!(
           Expr::Literal("if".to_owned()),

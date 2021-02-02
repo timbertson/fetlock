@@ -19,7 +19,7 @@ let
 
   overlay = final: prev: {
     # esy expects one of `linux`, `windows` and `linux`, anything else probably won't work
-    platform = stdenv.buildPlatform.parsed.kernel.name;
+    os = stdenv.buildPlatform.parsed.kernel.name;
 
     siteLib = prefix: "${prefix}/lib/ocaml/${final.ocaml.version}/site-lib";
     ocamlSetupHook = pkgs.makeSetupHook { name = "ocaml-path-hooks"; } (pkgs.writeText "setupHook.sh" ''

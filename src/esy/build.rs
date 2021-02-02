@@ -2,6 +2,7 @@
 // whether that be `esy`, `opam` or `npm`
 
 use std::collections::HashMap;
+use log::*;
 use anyhow::*;
 use crate::Expr;
 use crate::esy::parser::{Value, OpamSC};
@@ -51,6 +52,7 @@ impl NixBuild {
     let space = OpamSC::Literal(" ".to_owned());
     
     let add_cmd = |buf: &mut Vec<OpamSC<'a>>, args| -> Result<()> {
+      debug!("adding cmd: {:?}", args);
       let mut first_arg = true;
       for arg in args {
         Self::add_sep(buf, &mut first_arg, &space);
@@ -66,6 +68,7 @@ impl NixBuild {
 
     match value {
       Value::List(cmds) => {
+        debug!("toplevel cmds: {:?}", cmds);
         if pkg_type == PkgType::Opam && !cmds.iter().any(|cmd| cmd.is_list()) {
           // opam [ foo bar baz ] means [[ foo bar baz ]],
           // but esy [ foo bar baz ] is [[foo] [bar] [baz]], so we also need to
@@ -80,6 +83,7 @@ impl NixBuild {
 
           for cmd in cmds {
             Self::add_sep(&mut buf, &mut first_cmd, &newline);
+            debug!("procesing cmd: {:?}", cmd);
             match cmd {
               Value::List(args) => add_cmd(&mut buf, args)?,
               _ => add_cmd(&mut buf, vec!(cmd))?,

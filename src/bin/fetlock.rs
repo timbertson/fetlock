@@ -27,17 +27,20 @@ async fn run() -> Result<()> {
 			writeln!(buf, "{}: {}", level, record.args())
 		})
 		.init();
-	let args: Vec<String> = env::args().collect();
-	let program = args[0].clone();
+	let argv: Vec<String> = env::args().collect();
+	let program = argv[0].clone();
 
 	let mut opts = Options::new();
 	opts.optflag("h", "help", "print this help menu");
-	let matches = opts.parse(&args[1..])?;
+	let matches = opts.parse(&argv[1..])?;
 	if matches.opt_present("h") {
 		return Ok(print_usage(&program, opts));
 	}
 
-	let mut esy_lock = esy::EsyLock::load("sample/esy.json")?;
+	let mut args = matches.free.iter().map(|x| x.as_ref());
+
+	let lockfile_path = args.next().unwrap_or("sample/esy.json");
+	let mut esy_lock = esy::EsyLock::load(lockfile_path)?;
 	debug!("{:?}", esy_lock);
 	fetch::populate_source_digests(esy_lock.lock_mut()).await?;
 	let lock = esy_lock.finalize().await?;

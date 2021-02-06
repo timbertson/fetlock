@@ -4,8 +4,8 @@
 use std::collections::HashMap;
 use log::*;
 use anyhow::*;
-use crate::Expr;
-use crate::esy::parser::{Value, OpamSC};
+use crate::{Expr,StringComponent};
+use crate::esy::parser::Value;
 use crate::esy::eval::{Eval, NixCtx};
 
 #[derive(Clone, Debug)]
@@ -47,18 +47,19 @@ impl NixBuild {
     }
   }
 
-  fn coerce_script<'a>(pkg_type: PkgType, value: Value<'a>) -> Result<Value<'a>> {
-    let newline = OpamSC::Literal("\n".to_owned());
-    let space = OpamSC::Literal(" ".to_owned());
+  fn coerce_script<'a>(pkg_type: PkgType, expr: Expr) -> Result<Expr> {
+    let newline = StringComponent::Literal("\n".to_owned());
+    let space = StringComponent::Literal(" ".to_owned());
     
-    let add_cmd = |buf: &mut Vec<OpamSC<'a>>, args| -> Result<()> {
+    let add_cmd = |buf: &mut Vec<StringComponent>, args| -> Result<()> {
       debug!("adding cmd: {:?}", args);
       let mut first_arg = true;
       for arg in args {
         Self::add_sep(buf, &mut first_arg, &space);
         match arg {
-          Value::String(parts) => buf.extend(parts),
-          other => buf.push(OpamSC::Expr(other)),
+          Expr::Str(part) => buf.push(StringComponent::Literal(part)),
+          Expr::StrInterp(parts) => buf.extend(parts),
+          other => buf.push(StringComponent::Expr(other)),
         };
       }
       Ok(())
@@ -66,8 +67,8 @@ impl NixBuild {
 
     let mut buf = Vec::new();
 
-    match value {
-      Value::List(cmds) => {
+    match expr {
+      Expr::List(cmds) => {
         debug!("toplevel cmds: {:?}", cmds);
         if pkg_type == PkgType::Opam && !cmds.iter().any(|cmd| cmd.is_list()) {
           // opam [ foo bar baz ] means [[ foo bar baz ]],
@@ -85,22 +86,21 @@ impl NixBuild {
             Self::add_sep(&mut buf, &mut first_cmd, &newline);
             debug!("procesing cmd: {:?}", cmd);
             match cmd {
-              Value::List(args) => add_cmd(&mut buf, args)?,
+              Expr::List(args) => add_cmd(&mut buf, args)?,
               _ => add_cmd(&mut buf, vec!(cmd))?,
             }
           }
         }
       },
-      _ => add_cmd(&mut buf, vec!(value))?,
+      _ => add_cmd(&mut buf, vec!(expr))?,
     }
-    Ok(Value::String(buf))
+    Ok(Expr::StrInterp(buf))
   }
 
   pub fn script<'a, 'c: 'a, Ctx: NixCtx>(pkg_type: PkgType, ctx: &Ctx, value: Value<'a>) -> Result<Expr> {
     let r: Result<Expr> = (|| {
-      let value = NixBuild::coerce_script(pkg_type, value.clone())?;
-      let eval = Eval::evaluate(value, ctx)?;
-      Ok(eval.into_nix(ctx)?.canonicalize())
+      let nix = Eval::evaluate(value.clone(), ctx)?.into_nix(ctx)?.canonicalize();
+      Ok(NixBuild::coerce_script(pkg_type, nix)?)
     })();
     r.with_context(|| format!("processing script expression: {:?}", value))
   }
@@ -133,6 +133,7 @@ mod tests {
   use super::*;
   use Value::*;
   use crate::esy::eval::Ctx;
+  use crate::esy::parser::OpamSC;
   type StringComponent = crate::StringComponent;
   
   fn bash(pkg_type: PkgType, cmds: Value) -> Expr {

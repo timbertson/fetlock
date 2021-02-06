@@ -1,6 +1,5 @@
 use anyhow::*;
 use serde::Deserialize;
-use crate::{Expr, StringComponent};
 use crate::esy::build::*;
 use crate::esy::eval::*;
 use crate::esy::parser;
@@ -10,6 +9,7 @@ use serde::de::*;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct PackageJson {
+  pub name: String,
   pub esy: Option<EsySpec>,
 }
 
@@ -23,10 +23,7 @@ impl PackageJson {
 
     if let Some(EsySpec { build }) = self.esy {
       let parsed = build.parse()?;
-      nix_build.build = Some(Expr::StrInterp(vec!(
-        StringComponent::Literal("\nexport cur__bin=$out/bin\n".to_owned()),
-        StringComponent::Expr(NixBuild::script(PkgType::Esy, ctx, parsed)?),
-      )));
+      nix_build.build = Some(NixBuild::script(PkgType::Esy, ctx, parsed)?);
     }
     Ok(nix_build)
   }

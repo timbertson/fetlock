@@ -69,6 +69,13 @@ pub enum Expr {
 }
 
 impl Expr {
+	pub fn is_list(&self) -> bool {
+		match self {
+			Expr::List(_) => true,
+			_ => false,
+		}
+	}
+
 	pub fn get_drv(key: String) -> Self {
 		// TODO this is a bit lazy, we could just inline `final.pkgs."key"` but it needs another Expr type
 		Expr::FunCall(Box::new(FunCall {
@@ -119,6 +126,6 @@ impl fmt::Display for DrvName<'_> {
 		lazy_static! {
 			static ref UNSAFE_CHARS: Regex = Regex::new(r"[^-_.0-9a-zA-Z]").unwrap();
 		}
-		f.write_str(&UNSAFE_CHARS.replace_all(&self.0, "-"))
+		f.write_str(&UNSAFE_CHARS.replace_all(&self.0, "-").trim_matches('-'))
 	}
 }

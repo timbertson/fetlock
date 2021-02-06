@@ -17,15 +17,15 @@ final: prev: with prev.pkgs.lib;
     };
   in
   {
-  buildSpec = {
+  specToAttrs = {
     key, pname, version,
     depKeys,
     src ? core.emptyDrv,
     build ? { mode = "esy"; } #TODO: after we support link-dev, use abort "no build instructions passed for derivation ${key}"
   }@spec:
     let buildWithDefault = (getAttr build.mode defaultBuilds) // build; in
-    warn pname ( # TODO remove
-    stdenv.mkDerivation {
+    trace pname ( # TODO remove
+    {
       inherit pname version depKeys src;
       inherit (buildWithDefault) buildPhase installPhase;
       # TODO don't need to include ocaml as dependency if it's a node package
@@ -33,7 +33,6 @@ final: prev: with prev.pkgs.lib;
       
       # setupHooks comes from ./hooks.nix
       buildInputs = [(final.setupHooks build.mode)];
-      passthru.spec = spec;
     });
 
   ocaml = final.context.ocaml or (abort ''

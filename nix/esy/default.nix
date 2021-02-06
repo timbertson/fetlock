@@ -11,8 +11,7 @@ let
 in core.makeAPI {
   overlays = [
     base
-    (import ./buildSpec.nix)
     (import ./hooks.nix)
-    (import ./overrides.nix { inherit core; })
+    (import ./specToAttrs.nix)
   ];
 }

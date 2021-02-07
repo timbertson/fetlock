@@ -171,7 +171,7 @@ impl Ctx {
       | "sbin"
       | "man"
       | "etc"
-      => Ok((Some(ident), simple, named)),
+      => Ok((Some(ident), simple, PathScope::Root)),
 
       "lib" => Ok((None, PathType::Lib, named)),
       "stublibs" | "toplevel" => Ok((Some(ident), simple, named)),

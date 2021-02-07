@@ -27,8 +27,19 @@ let
 						let
 							# Utility function for use in dependency lookup
 							getDrv = key: getAttr key self.drvs;
+							overrideAll = fn: drvs: mapAttrs (k: fn) drvs;
+							overrideOnly = attrs: fn:
+								overrideAll (drv:
+									if hasAttr drv.pname attrs
+									then lib.trace "Applying override for ${drv.pname}" (
+										fn (getAttr drv.pname attrs) drv)
+									else drv
+								);
 						in (fallback self) // {
 							inherit pkgs getDrv;
+							emptyDrv = pkgs.runCommandLocal "empty" {} "mkdir $out";
+							makeHook = name: text:
+								pkgs.makeSetupHook { inherit name; } (pkgs.writeText "setupHook.sh" text);
 							
 							# apply frontend build function to all specs
 							drvs = mapAttrs
@@ -61,25 +72,22 @@ let
 							toplevelPackage = head self.toplevelPackages;
 
 							# Utilities for overriding the result derivation set.
-							overrideAll = fn: drvs: mapAttrs (k: fn) drvs;
-							
-							_overrideOnly = attrs: fn:
-								final.overrideAll (drv:
-									if hasAttr drv.pname attrs
-									then lib.trace "Applying override for ${drv.pname}" (
-										fn (getAttr drv.pname attrs) drv)
-									else drv
-								);
+							inherit overrideAll;
 
 							override = attrs:
-								final._overrideOnly attrs (fn: drv: fn drv);
+								overrideOnly attrs (fn: drv: fn drv);
 
 							overrideAttrs = attrs:
-								final._overrideOnly attrs (fn: drv: drv.overrideAttrs fn);
+								overrideOnly attrs (fn: drv: drv.overrideAttrs fn);
 
 							addBuildInputs = attrs:
-								final._overrideOnly attrs (extra: drv: drv.overrideAttrs (o: {
+								overrideOnly attrs (extra: drv: drv.overrideAttrs (o: {
 									buildInputs = (o.buildInputs or []) ++ extra;
+								}));
+
+							addPropagatedBuildInputs = attrs:
+								overrideOnly attrs (extra: drv: drv.overrideAttrs (o: {
+									propagatedBuildInputs = (o.propagatedBuildInputs or []) ++ extra;
 								}));
 						};
 
@@ -115,5 +123,4 @@ let
 in
 {
 	inherit makeAPI;
-	emptyDrv = pkgs.runCommandLocal "empty" {} "mkdir $out";
 }

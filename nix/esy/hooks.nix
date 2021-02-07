@@ -1,10 +1,10 @@
 final: prev:
-  let pkgs = prev.pkgs; in
+  let
+    pkgs = prev.pkgs;
+  in
   with pkgs.lib; {
   setupHooks = mode: let
-    makeHook = name: text:
-      pkgs.makeSetupHook { inherit name; } (pkgs.writeText "setupHook.sh" text);
-    path = makeHook "ocaml-path-hooks" ''
+    path = prev.makeHook "ocaml-path-hooks" ''
       function ocamlPathSetup {
         local libPath="lib/ocaml/${final.ocaml.version}/site-lib"
         local libdir="$1/$libPath"
@@ -21,35 +21,28 @@ final: prev:
       }
       addEnvHooks "$targetOffset" ocamlPathSetup
     '';
-    outputDirs = makeHook "ocaml-output-dirs" ''
-      function ocamlOutputDirs {
-        echo \
-          $out/bin \
-          ;
-      }
+    outputDirs = prev.makeHook "ocaml-output-dirs" ''
       function ocamlInitDirs {
         echo "+ ocamlInitDirs"
-        for d in $(ocamlOutputDirs); do
+        for d in \
+          $out/bin \
+          ${final.siteLib "$out"}/$pname \
+        ; do
           echo "Creating: $d"
           mkdir -p "$d"
-          ls -l "$d"
         done
       }
+
       function ocamlCleanEmptyDirs {
         echo "+ ocamlCleanEmptyDirs"
-        for d in $(ocamlOutputDirs); do
-          echo "cleaning: $d"
-          if [ -z "$(ls -A "$d")" ]; then
-            rmdir "$d"
-          fi
-        done
+        find "$out" -mindepth 1 -depth -empty -a -type d -exec rmdir {} \;
       }
       postUnpackHooks+=(ocamlInitDirs)
       preFixupHooks+=(ocamlCleanEmptyDirs)
     '';
     modeSpecific = {
       esy = [
-        (makeHook "esy-env" ''
+        (prev.makeHook "esy-env" ''
           function esySetupEnvVars {
             echo '+ esySetupEnvVars'
             export cur__bin=$out/bin

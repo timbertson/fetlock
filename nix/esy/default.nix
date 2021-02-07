@@ -6,6 +6,13 @@ let
     # esy expects one of `linux`, `windows` and `linux`, anything else probably won't work
     os = stdenv.buildPlatform.parsed.kernel.name;
     siteLib = prefix: "${prefix}/lib/ocaml/${final.ocaml.version}/site-lib";
+    ocaml = final.context.ocaml or (abort ''
+
+      ERROR: No ocaml version present in lockfile.
+      If you still want to build this expression,
+      you will need to set the root `ocaml` attribute
+      in your override.
+    '');
   };
 
 in core.makeAPI {

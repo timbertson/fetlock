@@ -106,7 +106,7 @@ impl Ctx {
         "version" => Err(anyhow!("TODO: version")),
         ident => Self::resolve_bool(true, ident).map(Ok)
           .unwrap_or_else(|| Self::resolve_path(PkgImpl {
-            path: Expr::Str("$out".to_owned()),
+            path: Expr::str("$out".to_owned()),
             name: ctx.name(),
           }, ident)),
       },
@@ -191,7 +191,7 @@ impl Ctx {
       Eval::Nix(match lib {
         PathType::Lib => {
           let PkgImpl { path, name } = pkg;
-          Expr::StrInterp(vec!(
+          Expr::Str(vec!(
             StringComponent::Expr(Expr::FunCall(Box::new(FunCall {
               subject: Expr::Literal("final.siteLib".to_owned()),
               args: vec!(path),
@@ -199,7 +199,7 @@ impl Ctx {
             StringComponent::Literal(format!("/{}", name.0)),
           ))
         },
-        PathType::Simple => Expr::StrInterp(vec!(
+        PathType::Simple => Expr::Str(vec!(
           StringComponent::Expr(pkg.path),
           StringComponent::Literal(suffix),
         )),
@@ -281,7 +281,7 @@ impl Eval {
             .with_context(|| format!("evaluating {:?}", v))
           }))
           .collect::<Result<Vec<StringComponent>>>()?;
-        Ok(Eval::Nix(Expr::StrInterp(parts).canonicalize()))
+        Ok(Eval::Nix(Expr::Str(parts).canonicalize()))
       },
 
       List(l) => Ok(Eval::List(
@@ -399,14 +399,14 @@ impl Eval {
   pub fn into_nix<C: NixCtx>(self, c: &C) -> Result<Expr> {
     match self {
       Eval::Nix(expr) => Ok(expr),
-      Eval::Undefined => Ok(Expr::Str("".to_owned())),
+      Eval::Undefined => Ok(Expr::str("".to_owned())),
       Eval::Bool(b) => Ok(Expr::Bool(b)),
-      Eval::Str(s) => Ok(Expr::Str(s)),
+      Eval::Str(s) => Ok(Expr::str(s)),
       Eval::StrInterp(parts) => {
         let nix_parts = parts.into_iter()
           .map(|part| part.map_result(|eval| eval.into_nix(c)))
           .collect::<Result<Vec<StringComponent>>>();
-        Ok(Expr::StrInterp(nix_parts?))
+        Ok(Expr::Str(nix_parts?))
       },
       Eval::List(l) => {
         let exprs = l.into_iter().map(|x| x.into_nix(c)).collect::<Result<Vec<Expr>>>()?;

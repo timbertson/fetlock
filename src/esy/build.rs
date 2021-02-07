@@ -57,8 +57,7 @@ impl NixBuild {
       for arg in args {
         Self::add_sep(buf, &mut first_arg, &space);
         match arg {
-          Expr::Str(part) => buf.push(StringComponent::Literal(part)),
-          Expr::StrInterp(parts) => buf.extend(parts),
+          Expr::Str(parts) => buf.extend(parts),
           other => buf.push(StringComponent::Expr(other)),
         };
       }
@@ -94,7 +93,7 @@ impl NixBuild {
       },
       _ => add_cmd(&mut buf, vec!(expr))?,
     }
-    Ok(Expr::StrInterp(buf))
+    Ok(Expr::Str(buf))
   }
 
   pub fn script<'a, 'c: 'a, Ctx: NixCtx>(pkg_type: PkgType, ctx: &Ctx, value: Value<'a>) -> Result<Expr> {
@@ -114,7 +113,7 @@ impl NixBuild {
       PkgType::Node => "node",
     };
     
-    map.insert("mode".to_owned(), Box::new(Expr::Str(mode_str.to_owned())));
+    map.insert("mode".to_owned(), Box::new(Expr::str(mode_str.to_owned())));
 
     if let Some(build) = build {
       map.insert("buildPhase".to_owned(), Box::new(build));
@@ -157,7 +156,7 @@ mod tests {
           OpamSC::Expr(Bool(false))
         ))
       )),
-      Expr::Str("false".to_string())
+      Expr::str("false".to_string())
     );
     
     assert_eq!(
@@ -170,7 +169,7 @@ mod tests {
           OpamSC::Expr(Bool(true))
         ))
       )),
-      Expr::Str("ocaml pkg/pkg.ml build --with-js_of_ocaml true".to_owned())
+      Expr::str("ocaml pkg/pkg.ml build --with-js_of_ocaml true".to_owned())
     );
 
     assert_eq!(
@@ -178,7 +177,7 @@ mod tests {
         Value::literal("ocaml"),
         Value::literal("build"),
       ))),
-      Expr::Str("ocaml build".to_owned())
+      Expr::str("ocaml build".to_owned())
     );
 
     assert_eq!(
@@ -186,12 +185,12 @@ mod tests {
         Value::literal("make"),
         Value::literal("./build"),
       ))),
-      Expr::Str("\nmake\n./build".to_owned())
+      Expr::str("\nmake\n./build".to_owned())
     );
 
     assert_eq!(
       bash(PkgType::Esy, Value::literal("make")),
-      Expr::Str("make".to_owned())
+      Expr::str("make".to_owned())
     );
   }
 }

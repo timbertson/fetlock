@@ -59,8 +59,7 @@ pub enum Expr {
 	Literal(String),
 	Bool(bool),
 	// TODO combine two string types
-	Str(String),
-	StrInterp(Vec<StringComponent>),
+	Str(Vec<StringComponent>),
 	Identifier(String),
 	FunCall(Box<FunCall>),
 	AttrPath(Box<AttrPath>),
@@ -69,6 +68,10 @@ pub enum Expr {
 }
 
 impl Expr {
+	pub fn str(s: String) -> Expr {
+		Expr::Str(vec!(StringComponent::Literal(s)))
+	}
+
 	pub fn is_list(&self) -> bool {
 		match self {
 			Expr::List(_) => true,
@@ -80,17 +83,17 @@ impl Expr {
 		// TODO this is a bit lazy, we could just inline `final.pkgs."key"` but it needs another Expr type
 		Expr::FunCall(Box::new(FunCall {
 			subject: Expr::Literal("final.getDrv".to_owned()),
-			args: vec!(Expr::Str(key))
+			args: vec!(Expr::str(key))
 		}))
 	}
 
 	pub fn canonicalize(self) -> Self {
 		use Expr::*;
 		match self {
-			StrInterp(components) => {
+			Str(components) => {
 				let coerced_to_string = components.into_iter().map(|part|
 					part.map(|expr| match expr.canonicalize() {
-						Expr::Bool(b) => Expr::Str(format!("{}", b)),
+						Expr::Bool(b) => Expr::str(format!("{}", b)),
 						other => other,
 					})
 				).collect::<Vec<StringComponent>>();
@@ -98,13 +101,12 @@ impl Expr {
 				let as_plain_string: Result<Vec<&str>, ()> = coerced_to_string.iter().map(|part|
 					match part {
 						StringComponent::Literal(s) => Ok(s.as_str()),
-						StringComponent::Expr(Expr::Str(s)) => Ok(s.as_str()),
 						StringComponent::Expr(_) => Err(()),
 					}
 				).collect();
 				match as_plain_string {
-					Ok(parts) => Expr::Str(parts.join("")),
-					Err(()) => StrInterp(coerced_to_string),
+					Ok(parts) => Expr::str(parts.join("")),
+					Err(()) => Str(coerced_to_string),
 				}
 			},
 			other => other

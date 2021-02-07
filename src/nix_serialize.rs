@@ -272,12 +272,6 @@ impl Writeable for Expr {
 			},
 			Expr::Bool(b) => c.write(format_args!("{}", b)),
 			Expr::Str(s) => {
-				let mode = StringMode::preferred(&s);
-				c.wrap_nix_string(mode, |c| {
-					c.write_nix_string_inner(mode, s)
-				})
-			},
-			Expr::StrInterp(s) => {
 				let mode = StringMode::preferred_v(&s);
 				c.wrap_nix_string(mode, |c| {
 					for part in s {

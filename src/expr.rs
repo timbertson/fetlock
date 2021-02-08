@@ -83,7 +83,6 @@ pub enum Expr {
 	LitSeq(Vec<Expr>),
 	Literal(String),
 	Bool(bool),
-	// TODO combine two string types
 	Str(Vec<StringComponent>),
 	Identifier(String),
 	FunCall(Box<FunCall>),

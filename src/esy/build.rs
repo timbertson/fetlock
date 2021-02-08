@@ -47,7 +47,7 @@ impl NixBuild {
     }
   }
 
-  fn coerce_script<'a>(pkg_type: PkgType, expr: Expr) -> Result<Expr> {
+  pub fn coerce_script<'a>(pkg_type: PkgType, expr: Expr) -> Result<Expr> {
     let newline = StringComponent::Literal("\n".to_owned());
     let space = StringComponent::Literal(" ".to_owned());
     
@@ -113,6 +113,7 @@ impl NixBuild {
   }
 
   pub fn script<'a, 'c: 'a, Ctx: NixCtx>(pkg_type: PkgType, ctx: &Ctx, value: Value<'a>) -> Result<Expr> {
+    debug!("evaluating script: {:?}", value);
     let r: Result<Expr> = (|| {
       let nix = Eval::evaluate(value.clone(), ctx)?.into_nix(ctx)?.canonicalize();
       Ok(NixBuild::coerce_script(pkg_type, nix)?)
@@ -161,7 +162,19 @@ mod tests {
   }
 
   fn cmd(pkg_type: PkgType, cmd: Vec<Value>) -> Expr {
-    bash(pkg_type, List(cmd))
+    bash(pkg_type, List(vec!(List(cmd))))
+  }
+
+  fn coerce_bash(pkg_type: PkgType, cmds: Expr) -> Expr {
+    match NixBuild::coerce_script(pkg_type, cmds.clone())
+      .with_context(||format!("Processing commands: {:?}", cmds)) {
+      Ok(expr) => expr.canonicalize(),
+      Err(e) => panic!("{:?}", e),
+    }
+  }
+
+  fn coerce_cmd(pkg_type: PkgType, cmd: Vec<Expr>) -> Expr {
+    coerce_bash(pkg_type, Expr::List(vec!(Expr::List(cmd))))
   }
 
   #[test]
@@ -186,6 +199,19 @@ mod tests {
         ))
       )),
       Expr::str("ocaml pkg/pkg.ml build --with-js_of_ocaml true".to_owned())
+    );
+
+    assert_eq!(
+      coerce_cmd(PkgType::Opam, vec!(
+        Expr::str("bash".to_owned()),
+        Expr::str("-c".to_owned()),
+        Expr::Literal("var".to_owned()),
+      )),
+      Expr::Str(vec!(
+        StringComponent::Literal("bash -c \"".to_owned()),
+        StringComponent::Expr(Expr::Literal("var".to_owned())),
+        StringComponent::Literal("\"".to_owned()),
+      ))
     );
 
     assert_eq!(

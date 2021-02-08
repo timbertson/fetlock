@@ -51,17 +51,33 @@ impl NixBuild {
     let newline = StringComponent::Literal("\n".to_owned());
     let space = StringComponent::Literal(" ".to_owned());
     
-    let add_cmd = |buf: &mut Vec<StringComponent>, args| -> Result<()> {
+    let add_cmd = |buf: &mut Vec<StringComponent>, args: Vec<Expr>| -> () {
       debug!("adding cmd: {:?}", args);
       let mut first_arg = true;
       for arg in args {
         Self::add_sep(buf, &mut first_arg, &space);
+        let needs_quotes = arg.needs_bash_quotes();
+        if needs_quotes {
+          buf.push(StringComponent::Literal("\"".to_owned()));
+        };
+        // TODO actually escape double-quotes
         match arg {
           Expr::Str(parts) => buf.extend(parts),
           other => buf.push(StringComponent::Expr(other)),
         };
+        if needs_quotes {
+          buf.push(StringComponent::Literal("\"".to_owned()));
+        };
       }
-      Ok(())
+    };
+
+    let add_cmdline = |buf: &mut Vec<StringComponent>, cmdline: Expr| -> () {
+      debug!("adding cmdline: {:?}", cmdline);
+      // TODO encapsulate this [attern as `append_to(dest)`?
+      match cmdline {
+        Expr::Str(parts) => buf.extend(parts),
+        other => buf.push(StringComponent::Expr(other)),
+      }
     };
 
     let mut buf = Vec::new();
@@ -73,7 +89,7 @@ impl NixBuild {
           // opam [ foo bar baz ] means [[ foo bar baz ]],
           // but esy [ foo bar baz ] is [[foo] [bar] [baz]], so we also need to
           // handle cmds that are strings (below)
-          add_cmd(&mut buf, cmds)?
+          add_cmd(&mut buf, cmds)
         } else {
           let mut first_cmd = true;
           if cmds.len() > 1 {
@@ -85,13 +101,13 @@ impl NixBuild {
             Self::add_sep(&mut buf, &mut first_cmd, &newline);
             debug!("procesing cmd: {:?}", cmd);
             match cmd {
-              Expr::List(args) => add_cmd(&mut buf, args)?,
-              _ => add_cmd(&mut buf, vec!(cmd))?,
+              Expr::List(args) => add_cmd(&mut buf, args),
+              _ => add_cmdline(&mut buf, cmd),
             }
           }
         }
       },
-      _ => add_cmd(&mut buf, vec!(expr))?,
+      _ => add_cmdline(&mut buf, expr),
     }
     Ok(Expr::Str(buf))
   }

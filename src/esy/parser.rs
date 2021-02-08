@@ -279,7 +279,6 @@ pub enum Value<'a> {
   Option(Box<ValueWithOption<'a>>),
 }
 
-
 impl<'a> Value<'a> {
   pub fn literal(s: &str) -> Value {
     // used in tests

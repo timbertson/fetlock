@@ -25,14 +25,39 @@ pub struct AttrPath {
 	pub attr_path: Vec<String>,
 }
 
+pub trait StringMerge: fmt::Debug + Clone + PartialEq + Eq {
+	fn into_string_components(self) -> Result<Vec<StringComponentOf<Self>>, Self>;
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StringComponentOf<T: fmt::Debug + Clone + PartialEq + Eq> {
 	Literal(String),
 	Expr(T),
 }
 
+impl<X: fmt::Debug + Clone + PartialEq + Eq> StringComponentOf<X> {
+	fn push_literal<T: StringMerge>(dest: &mut Vec<StringComponentOf<T>>, s: String) -> () {
+		match dest.last_mut() {
+			Some(StringComponentOf::Literal(dest)) => dest.push_str(&s),
+			_ => dest.push(StringComponentOf::Literal(s)),
+		}
+	}
+
+	pub fn append<T: StringMerge>(dest: &mut Vec<StringComponentOf<T>>, v: StringComponentOf<T>) -> () {
+		match v {
+			StringComponentOf::Literal(s) => Self::push_literal(dest, s),
+			StringComponentOf::Expr(e) => {
+				match e.into_string_components() {
+					Ok(components) => components.into_iter().for_each(|part| Self::append(dest, part)),
+					Err(e) => dest.push(StringComponentOf::Expr(e)),
+				}
+			}
+		}
+	}
+}
+
 impl<T: fmt::Debug + Clone + Eq> StringComponentOf<T> {
-	pub fn map_result<R, F>(self, f: F) -> Result<StringComponentOf<R>> 
+	pub fn map_result<R, F>(self, f: F) -> Result<StringComponentOf<R>>
 		where F: Fn(T) -> Result<R>, R: fmt::Debug + Clone + Eq
 	{
 		match self {
@@ -41,7 +66,7 @@ impl<T: fmt::Debug + Clone + Eq> StringComponentOf<T> {
 		}
 	}
 
-	pub fn map<R, F>(self, f: F) -> StringComponentOf<R> 
+	pub fn map<R, F>(self, f: F) -> StringComponentOf<R>
 		where F: Fn(T) -> R, R: fmt::Debug + Clone + Eq
 	{
 		match self {
@@ -78,6 +103,20 @@ impl Expr {
 			_ => false,
 		}
 	}
+	
+	pub fn needs_bash_quotes(&self) -> bool {
+		match self {
+			Expr::Str(parts) => parts.iter().any(|part| {
+				match part {
+					// weak test for now, can be improved
+					StringComponent::Literal(s) => s.contains(|ch| ch == ' ' || ch == '"'),
+					StringComponent::Expr(e) => e.needs_bash_quotes(),
+				}
+			}),
+			Expr::Bool(_) => false,
+			_ => true,
+		}
+	}
 
 	pub fn get_drv(key: String) -> Self {
 		// TODO this is a bit lazy, we could just inline `final.pkgs."key"` but it needs another Expr type
@@ -91,25 +130,23 @@ impl Expr {
 		use Expr::*;
 		match self {
 			Str(components) => {
-				let coerced_to_string = components.into_iter().map(|part|
-					part.map(|expr| match expr.canonicalize() {
-						Expr::Bool(b) => Expr::str(format!("{}", b)),
-						other => other,
-					})
-				).collect::<Vec<StringComponent>>();
-
-				let as_plain_string: Result<Vec<&str>, ()> = coerced_to_string.iter().map(|part|
-					match part {
-						StringComponent::Literal(s) => Ok(s.as_str()),
-						StringComponent::Expr(_) => Err(()),
-					}
-				).collect();
-				match as_plain_string {
-					Ok(parts) => Expr::str(parts.join("")),
-					Err(()) => Str(coerced_to_string),
+				let mut dest = Vec::new();
+				for v in components {
+					StringComponent::append(&mut dest, v);
 				}
+				Str(dest)
 			},
 			other => other
+		}
+	}
+}
+
+impl StringMerge for Expr {
+	fn into_string_components(self) -> Result<Vec<StringComponent>, Self> {
+		match self {
+			Self::Str(components) => Ok(components),
+			Self::Bool(b) => Ok(vec!(StringComponent::Literal(format!("{}", b)))),
+			expr => Err(expr),
 		}
 	}
 }

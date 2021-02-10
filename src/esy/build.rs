@@ -2,6 +2,7 @@
 // whether that be `esy`, `opam` or `npm`
 
 use std::collections::HashMap;
+use std::fmt;
 use log::*;
 use anyhow::*;
 use crate::{Expr,StringComponent};
@@ -19,6 +20,38 @@ pub enum PkgType {
   Esy,
   Opam,
   Node,
+}
+
+#[derive(Debug, Clone)]
+pub enum Command<T: fmt::Debug + Clone> {
+  Sh(T),
+  Argv(Vec<T>),
+}
+
+impl<T: fmt::Debug + Clone> Command<T> {
+  pub fn map_result<'a, F, R>(&'a self, f: F) -> Result<Command<R>>
+    where F: Fn(&'a T) -> Result<R>, R: fmt::Debug + Clone {
+    match self {
+      Self::Sh(v) => Ok(Command::Sh(f(v)?)),
+      Self::Argv(v) => {
+        let v = v.into_iter().map(f).collect::<Result<Vec<R>>>();
+        Ok(Command::Argv(v?))
+      },
+    }
+  }
+}
+
+#[derive(Debug, Clone)]
+pub struct Script<T: fmt::Debug+Clone>(pub Vec<Command<T>>);
+
+impl<T: fmt::Debug+Clone> Script<T> {
+  pub fn map_result<'a, F, R>(&'a self, f: F) -> Result<Script<R>>
+    where F: Copy + Fn(&'a T) -> Result<R>, R: fmt::Debug + Clone {
+    let cmds = self.0.iter()
+      .map(|cmd| cmd.map_result(f))
+      .collect::<Result<Vec<Command<R>>>>()?;
+    Ok(Script(cmds))
+  }
 }
 
 #[derive(Clone, Debug)]
@@ -54,13 +87,13 @@ impl NixBuild {
     let add_cmd = |buf: &mut Vec<StringComponent>, args: Vec<Expr>| -> () {
       debug!("adding cmd: {:?}", args);
       let mut first_arg = true;
-      for arg in args {
+      for mut arg in args {
         Self::add_sep(buf, &mut first_arg, &space);
         let needs_quotes = arg.needs_bash_quotes();
         if needs_quotes {
           buf.push(StringComponent::Literal("\"".to_owned()));
+          arg = arg.escape_for_bash();
         };
-        // TODO actually escape double-quotes
         match arg {
           Expr::Str(parts) => buf.extend(parts),
           other => buf.push(StringComponent::Expr(other)),

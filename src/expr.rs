@@ -117,6 +117,30 @@ impl Expr {
 		}
 	}
 
+	pub fn escape_for_bash(self) -> Self {
+		match self {
+			Expr::Str(parts) => Expr::Str(parts.into_iter().map(|part|
+				match part {
+					StringComponent::Literal(s) => StringComponent::Literal(
+						s.replace('\\', r#"\\"#).replace('"', r#"\""#)
+					),
+					StringComponent::Expr(e) => StringComponent::Expr(e.escape_for_bash()),
+				}
+			).collect()),
+
+			Expr::List(v) => Expr::List(v.into_iter().map(|v| v.escape_for_bash()).collect()),
+			Expr::LitSeq(v) => Expr::LitSeq(v.into_iter().map(|v| v.escape_for_bash()).collect()),
+
+			Expr::Bool(_)
+			| Expr::Identifier(_)
+			| Expr::Literal(_)
+			| Expr::AttrPath(_)
+			| Expr::FunCall(_)
+			| Expr::AttrSet(_)
+			=> self,
+		}
+	}
+
 	pub fn get_drv(key: String) -> Self {
 		// TODO this is a bit lazy, we could just inline `final.pkgs."key"` but it needs another Expr type
 		Expr::FunCall(Box::new(FunCall {

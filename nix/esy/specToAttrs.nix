@@ -24,6 +24,14 @@ let
       };
     in
     obj // listToAttrs [(attr buildPhase) (attr installPhase)];
+    
+  copyFilesHook = prev.makeHook "copy-files" ''
+    function copyOpamFiles {
+      echo "+ copyOpamFiles"
+      cp -Rv $files/ ./
+    }
+    preBuildHooks+=(copyOpamFiles)
+  '';
 in
 {
   key, pname, version,
@@ -31,6 +39,7 @@ in
   src ? prev.emptyDrv,
   build ? { mode = "esy"; }, #TODO: after we support link-dev, use abort "no build instructions passed for derivation ${key}"
   opamName ? null,
+  files ? null,
 }:
   let finalBuild = populateBuildPhases build; in addHooks build.mode ({
     inherit pname version depKeys src;
@@ -40,5 +49,8 @@ in
     # TODO don't need to include ocaml as dependency if it's a node package
     propagatedBuildInputs = (map final.getDrv depKeys) ++ (build.depexts or []);
     
-    buildInputs = commonBuildDeps;
-  } // (if opamName != null then { inherit opamName; } else {}))
+    buildInputs = commonBuildDeps ++ (if files != null then [ copyFilesHook ] else []);
+  }
+    // (if opamName != null then { inherit opamName; } else {})
+    // (if files != null then { inherit files; } else {})
+  )

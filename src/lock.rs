@@ -55,6 +55,7 @@ impl<'de> Deserialize<'de> for Key {
 	where
 		D: Deserializer<'de>,
 	{
+		// TODO remove hash part of key, it's unnecessary
 		Ok(Key(String::deserialize(deserializer)?))
 	}
 }

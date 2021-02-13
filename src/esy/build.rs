@@ -19,7 +19,6 @@ pub enum Depext {
 pub enum PkgType {
   Esy,
   Opam,
-  Node,
 }
 
 #[derive(Debug, Clone)]
@@ -160,7 +159,7 @@ impl NixBuild {
     let mode_str = match mode {
       PkgType::Esy => "esy",
       PkgType::Opam => "opam",
-      PkgType::Node => "node",
+      // PkgType::Node => "node",
     };
     
     map.insert("mode".to_owned(), Box::new(Expr::str(mode_str.to_owned())));

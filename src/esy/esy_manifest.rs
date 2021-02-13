@@ -10,6 +10,7 @@ use serde::de::*;
 #[derive(Debug, Clone, Deserialize)]
 pub struct PackageJson {
   pub name: String,
+  pub version: Option<String>,
   pub esy: Option<EsySpec>,
 }
 

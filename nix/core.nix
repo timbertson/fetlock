@@ -37,7 +37,11 @@ let
 								);
 						in (fallback self) // {
 							inherit pkgs getDrv;
-							emptyDrv = pkgs.runCommandLocal "empty" {} "mkdir $out";
+							emptyDrv = stdenv.mkDerivation {
+								name = "empty-drv";
+								phases = "buildPhase fixupPhase";
+								buildPhase = "mkdir $out";
+							};
 							makeHook = name: text:
 								pkgs.makeSetupHook { inherit name; } (pkgs.writeText "setupHook.sh" text);
 							

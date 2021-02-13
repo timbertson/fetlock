@@ -112,9 +112,19 @@ impl EsyLock {
 					let esy = esy_manifest::PackageJson::from_str(&manifest)
 						.with_context(|| format!("deserializing manifest:\n\n{}", &manifest))?;
 
-					let name = Name(esy.name.clone());
-					let nix_ctx = eval::Ctx::from_map(&name, &installed.esy);
+					// Now that we have access to package.json, we can populate a better name/version
+					// than we got from the lockfile:
+					// if the name is e.g. @esy-ocaml/foo, just use "foo" as the name
+					let opam_name = Name(esy.name.rsplit('/').next().expect("split is empty").to_string());
+					if let Some(version) = &esy.version {
+						esy_spec.spec.id.version = version.clone();
+					};
+
+					let nix_ctx = eval::Ctx::from_map(&opam_name, &installed.esy);
 					esy_spec.spec.extra.insert("build".to_owned(), esy.build(&nix_ctx)?.expr());
+					if esy_spec.spec.id.name != opam_name.0 {
+						esy_spec.spec.extra.insert("opamName".to_owned(), Expr::str(opam_name.0));
+					}
 				}
 				Ok(())
 			},

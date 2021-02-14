@@ -55,12 +55,16 @@ impl EsyLock {
 	async fn finalize_spec(esy_spec: &mut EsySpec, installed: &InstalledPkgs) -> Result<()> {
 		info!("[esy]: {}", esy_spec.spec.id.name);
 		let name = Name(esy_spec.spec.id.name.to_owned());
-		match esy_spec.meta.pkg_type.ok_or_else(||anyhow!("pkg_type not set"))? {
-			PkgType::Opam => {
-				let mut files = None;
-				if let Some(path) = fetch::realise_source(&esy_spec.spec).await? {
+		
+		if let Some(path) = fetch::realise_source(&esy_spec.spec).await? {
+			let extract = fetch::ExtractSource::from(&path).await?;
+			// TODO this should happen somewhere centrally, but it's
+			// wasteful to extract multiple times
+			extract.upgrade_gitmodules(&mut esy_spec.spec).await?;
+			match esy_spec.meta.pkg_type.ok_or_else(||anyhow!("pkg_type not set"))? {
+				PkgType::Opam => {
+					let mut files = None;
 					let manifest = if let Some(manifest_path) = esy_spec.meta.manifest_path.as_ref() {
-						let extract = fetch::ExtractSource::from(&path).await?;
 						extract.file_contents(&manifest_path).await?
 					} else {
 						// TODO get your own checkout, stop hardcoding
@@ -86,15 +90,11 @@ impl EsyLock {
 					if let Some(files) = files {
 						esy_spec.spec.extra.insert("files".to_owned(), files);
 					}
-				}
-				Ok(())
-			},
-			PkgType::Esy => {
-				// NOTE: some esy packages are just npm packages, depending on whether they have
-				// an `esy` property in them
-				if let Some(path) = fetch::realise_source(&esy_spec.spec).await? {
+				},
+				PkgType::Esy => {
+					// NOTE: some esy packages are just npm packages, depending on whether they have
+					// an `esy` property in them
 					let manifest = {
-						let extract = fetch::ExtractSource::from(&path).await?;
 						if extract.exists("esy.json").await {
 							extract.file_contents("esy.json").await
 						} else {
@@ -119,10 +119,10 @@ impl EsyLock {
 					if esy_spec.spec.id.name != opam_name.0 {
 						esy_spec.spec.extra.insert("opamName".to_owned(), Expr::str(opam_name.0));
 					}
-				}
-				Ok(())
-			},
+				},
+			}
 		}
+		Ok(())
 	}
 }
 
@@ -389,6 +389,7 @@ impl EsySrcVisitor {
 						owner,
 						repo,
 						git_ref,
+						fetch_submodules: false, // may be modified in fetch::upgrade_gitmodules
 					}),
 					manifest,
 					opam: None,

@@ -50,6 +50,9 @@ let
   # (e.g. esy-whatever) in nix land, but during build we'd prefer it
   # to match the opam name, rather than having to introduce a separate
   # opamName concept (we only populate opamName where it's != pname)
+
+  # Creating stublibs ensures that ocamlfind won't try to mess with ld.conf,
+  # see https://linux.die.net/man/1/ocamlfind
   outputDirs = prev.makeHook "ocaml-output-dirs" ''
     function ocamlInitDirs {
       echo "+ ocamlInitDirs"
@@ -60,6 +63,8 @@ let
       for d in \
         $out/bin \
         ${final.siteLib "$out"}/$pname \
+        ${final.siteLib "$out"}/stublibs/$pname \
+        ${final.siteLib "$out"}/toplevel/$pname \
       ; do
         echo "Creating: $d"
         mkdir -p "$d"
@@ -98,6 +103,8 @@ let
   esyHooks = [
     # Note: use of `$PWD` means we need to run this
     # after srcDir has been detected and `cd`d into
+    # NOTE: can't mkdir -p "$cur__target_dir" since some builds
+    # (e.g. esy-harfbuzz) do a cp to that directory so expect it to be missing
     (prev.makeHook "esy-env" ''
       function esySetupEnvVars {
         echo '+ esySetupEnvVars'
@@ -109,14 +116,12 @@ let
         export cur__share=$out/share
         export cur__man=$out/man
         export cur__doc=$out/doc
-        export cur__stublibs=$out/stublibs/$pname
-        export cur__stublibs=$out/toplevel/$pname
+        export cur__stublibs=${final.siteLib "$out"}/stublibs/$pname
+        export cur__toplevel=${final.siteLib "$out"}/toplevel/$pname
         env | grep '^cur__'
       }
       preBuildHooks+=(esySetupEnvVars)
     '')
-    # NOTE: can't mkdir -p "$cur__target_dir" since some builds
-    # (e.g. esy-harfbuzz) do a cp to that directory so expect it to be missing
   ];
   opamHooks = [
   ];

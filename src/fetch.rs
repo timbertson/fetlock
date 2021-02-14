@@ -158,8 +158,12 @@ pub async fn realise_source(spec: &Spec) -> Result<Option<PathBuf>> {
 	}
 }
 
+#[derive(Debug, Clone)]
+enum ArchiveType { Tar, Zip }
+
 #[derive(Clone)]
 struct ArchiveListing {
+	archive_type: ArchiveType,
 	first_component: String,
 	raw_listing: String,
 }
@@ -189,27 +193,50 @@ impl ExtractSource<'_> {
 		} else {
 			(|| async {
 				let root_str = root.to_str().ok_or_else(||anyhow!("non-utf8 root path"))?;
-				// assume it's some kind of tarball.
-				// first grab the root directory
-				let mut cmd = Command::new("tar");
-				cmd
-					.arg("tf")
-					.arg(root_str)
-					.stdout(Stdio::piped())
-					.kill_on_drop(true);
+				let (mut cmd, archive_type) = if root_str.ends_with(".zip") {
+					let mut cmd = Command::new("unzip");
+					cmd.arg("-Z1").arg(root_str);
+					(cmd, ArchiveType::Zip)
+				} else {
+					// assume it's some kind of tarball.
+					let mut cmd = Command::new("tar");
+					cmd.arg("tf").arg(root_str);
+					(cmd, ArchiveType::Tar)
+				};
 				debug!("{:?}", cmd);
+				cmd.stdout(Stdio::piped()).kill_on_drop(true);
 				let output = cmd.spawn()?.wait_with_output().await?;
 				if !output.status.success() {
 					Err(anyhow!("Process failed: {:?}", cmd))
 				} else {
 					let raw_listing = String::from_utf8(output.stdout)?;
+					// first grab the root directory
 					let first_line = raw_listing.lines().next().ok_or_else(|| anyhow!("no output received from `tar`"))?;
 					let first_component = first_line.split("/").next().expect("empty split").to_owned();
-					Ok(SourceType::Archive(ArchiveListing { raw_listing, first_component }))
+					Ok(SourceType::Archive(ArchiveListing {
+						archive_type,
+						raw_listing,
+						first_component
+					}))
 				}
 			})().await.with_context(||format!("getting archive root for {:?}", root))?
 		};
 		Ok(ExtractSource { root, source_type })
+	}
+	
+	pub async fn upgrade_gitmodules(&self, spec: &mut Spec) -> Result<()> {
+		// note we don't actually switch the extracted source, we assume that any
+		// files we need to inspect as part of fetlock aren't behind a submodule
+		match &mut spec.src {
+			Src::Github(gh) => {
+				if (!gh.fetch_submodules) && self.exists(".gitmodules").await {
+					gh.fetch_submodules = true;
+					spec.digest = Some(do_prefetch(&spec.src).await?);
+				}
+			},
+			_ => ()
+		}
+		Ok(())
 	}
 
 	pub async fn exists(&self, file: &str) -> bool {

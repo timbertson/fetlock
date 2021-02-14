@@ -144,6 +144,7 @@ pub struct Github {
 	pub owner: String,
 	pub repo: String,
 	pub git_ref: String,
+	pub fetch_submodules: bool,
 }
 
 #[derive(Debug, Clone)]

@@ -174,7 +174,7 @@ impl Ctx {
       => Ok((Some(ident), simple, PathScope::Root)),
 
       "lib" => Ok((None, PathType::Lib, named)),
-      "stublibs" | "toplevel" => Ok((Some(ident), simple, named)),
+      "stublibs" | "toplevel" => Ok((Some(ident), PathType::Lib, named)),
       "lib_root" => Ok((Some("lib"), PathType::Lib, PathScope::Root)),
       "share_root" => Ok((Some("share"), PathType::Simple, PathScope::Root)),
 
@@ -196,7 +196,7 @@ impl Ctx {
               subject: Expr::Literal("final.siteLib".to_owned()),
               args: vec!(path),
             }))),
-            StringComponent::Literal(format!("/{}", name.0)),
+            StringComponent::Literal(suffix),
           ))
         },
         PathType::Simple => Expr::Str(vec!(
@@ -413,5 +413,59 @@ impl Eval {
         Ok(Expr::List(exprs))
       },
     }
+  }
+}
+
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  
+  fn resolve(p: &'static str) -> Vec<StringComponent> {
+    let name = Name("mypkg".to_owned());
+    let pkg = PkgImpl {
+      path: out(),
+      name: &name,
+    };
+    match Ctx::resolve_path(pkg, p) {
+      Ok(Eval::Nix(Expr::Str(v))) => v,
+      other => panic!("Expected nix str, got {:?}", other),
+    }
+  }
+  
+  fn out() -> Expr {
+    Expr::str("$out".to_owned())
+  }
+
+  fn site_lib() -> StringComponent {
+    StringComponent::Expr(Expr::FunCall(Box::new(FunCall {
+      subject: Expr::Literal("final.siteLib".to_owned()),
+      args: vec!(out()),
+    })))
+  }
+
+  #[test]
+  fn test_paths() {
+    assert_eq!(
+      resolve("lib"),
+      vec!(site_lib(), StringComponent::Literal("/mypkg".to_owned()))
+    );
+    for dir in vec!("man", "doc", "share", "bin") {
+      assert_eq!(
+        resolve(dir),
+        vec!(
+          StringComponent::Expr(out()),
+          StringComponent::Literal(format!("/{}", dir)),
+        )
+      );
+    }
+    assert_eq!(
+      resolve("stublibs"),
+      vec!(site_lib(), StringComponent::Literal("/stublibs/mypkg".to_owned()))
+    );
+    assert_eq!(
+      resolve("toplevel"),
+      vec!(site_lib(), StringComponent::Literal("/toplevel/mypkg".to_owned()))
+    );
   }
 }

@@ -376,13 +376,18 @@ impl Writeable for SrcDigest<'_> {
 					owner,
 					repo,
 					git_ref,
+					fetch_submodules,
 				} = github;
 				c.write_str("pkgs.fetchFromGitHub ")?;
 				c.bracket_attrs(|c| {
 					c.attr(&"owner", &owner)?;
 					c.attr(&"repo", &repo)?;
 					c.attr(&"rev", &git_ref)?;
-					c.attr(&"sha256", digest)
+					c.attr(&"sha256", digest)?;
+					if *fetch_submodules {
+						c.attr(&"fetchSubmodules", &Expr::Bool(true))?;
+					}
+					Ok(())
 				})
 			}
 			Src::Archive(url) => {

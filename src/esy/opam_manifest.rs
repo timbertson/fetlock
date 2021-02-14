@@ -52,11 +52,20 @@ impl<'a> Opam<'a> {
   pub fn into_nix<'c: 'a, Ctx: NixCtx>(self, ctx: &'c Ctx) -> Result<NixBuild> {
     let Self { build, install, depexts } = self;
     let mode = PkgType::Opam;
+
+    let mut depexts = Some(Value::List(depexts).into_nix(ctx)?.flatten());
+    // suppress empty depexts
+    if let Some(Expr::List(l)) = &depexts {
+      if l.len() == 0 {
+        depexts = None;
+      }
+    }
+    
     Ok(NixBuild {
       mode,
+      depexts,
       build: build.map_or(Ok(None), |x| NixBuild::script(mode, ctx, x).map(Some))?,
       install: install.map_or(Ok(None), |x| NixBuild::script(mode, ctx, x).map(Some))?,
-      depexts: depexts.into_iter().map(|x| x.into_nix(ctx)).collect::<Result<Vec<Expr>>>()?,
     })
   }
 }

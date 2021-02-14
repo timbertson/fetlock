@@ -9,12 +9,6 @@ use crate::{Expr,StringComponent};
 use crate::esy::parser::Value;
 use crate::esy::eval::{Eval, NixCtx};
 
-#[derive(Clone, Debug)]
-pub enum Depext {
-  Mandatory(String),
-  IfPresent(String),
-}
-
 #[derive(Clone, Debug, Copy, PartialEq, Eq)]
 pub enum PkgType {
   Esy,
@@ -58,7 +52,7 @@ pub struct NixBuild {
   pub mode: PkgType,
   pub build: Option<Expr>,
   pub install: Option<Expr>,
-  pub depexts: Vec<Expr>,
+  pub depexts: Option<Expr>,
 }
 
 impl NixBuild {
@@ -67,7 +61,7 @@ impl NixBuild {
       mode,
       build: None,
       install: None,
-      depexts: Vec::new(),
+      depexts: None,
     }
   }
   
@@ -170,8 +164,9 @@ impl NixBuild {
     if let Some(install) = install {
       map.insert("installPhase".to_owned(), Box::new(install));
     }
-
-    map.insert("depexts".to_owned(), Box::new(Expr::List(depexts)));
+    if let Some(depexts) = depexts {
+      map.insert("depexts".to_owned(), Box::new(depexts));
+    }
     Expr::AttrSet(map)
   }
 }

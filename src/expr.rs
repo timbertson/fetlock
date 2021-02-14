@@ -114,6 +114,28 @@ impl Expr {
 		}
 	}
 	
+	pub fn flatten(self) -> Expr {
+		match self {
+			Expr::List(_) => {
+				let mut dest = Vec::new();
+				self.flatten_into(&mut dest);
+				Expr::List(dest)
+			},
+			other => other,
+		}
+	}
+
+	pub fn flatten_into(self, dest: &mut Vec<Expr>) -> () {
+		match self {
+			Expr::List(l) => {
+				for item in l {
+					item.flatten_into(dest);
+				}
+			},
+			other => { dest.push(other); },
+		}
+	}
+	
 	pub fn needs_bash_quotes(&self) -> bool {
 		match self {
 			Expr::Str(parts) => parts.iter().any(|part| {

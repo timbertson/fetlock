@@ -1,7 +1,7 @@
 // nix wrapper for build instructions extracted from a manifest,
 // whether that be `esy`, `opam` or `npm`
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt;
 use log::*;
 use anyhow::*;
@@ -148,7 +148,7 @@ impl NixBuild {
   }
 
   pub fn expr(self) -> Expr {
-    let mut map = HashMap::new();
+    let mut map = BTreeMap::new();
     let Self { mode, build, install, depexts } = self;
     let mode_str = match mode {
       PkgType::Esy => "esy",

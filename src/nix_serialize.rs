@@ -5,7 +5,7 @@ use crate::lock::*;
 use lazy_static::lazy_static;
 use log::*;
 use regex::Regex;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Debug;
 use std::io::{Result, Write};
@@ -464,9 +464,8 @@ impl<V: Writeable> Writeable for Box<V> {
 	}
 }
 
-impl<K: fmt::Display + Debug + Clone, V: Writeable> Writeable for HashMap<K, V> {
+impl<K: fmt::Display + Debug + Clone, V: Writeable> Writeable for BTreeMap<K, V> {
 	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
-		// TODO: sort keys
 		c.bracket_attrs(|c| {
 			for (k, v) in self.iter() {
 				c.attr(k, v)?;

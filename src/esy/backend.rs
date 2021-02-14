@@ -14,7 +14,7 @@ use serde::de::*;
 use serde::Deserialize;
 use futures::StreamExt;
 use std::borrow::{Borrow,BorrowMut};
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use std::fmt;
 use std::io::Write;
 
@@ -238,7 +238,7 @@ impl<'de> Visitor<'de> for EsyVisitor {
 				}
 				"node" => {
 					ret.lock.specs = map
-						.next_value::<HashMap<Key, EsySpec>>()?
+						.next_value::<BTreeMap<Key, EsySpec>>()?
 						.into_iter()
 						.collect();
 				}

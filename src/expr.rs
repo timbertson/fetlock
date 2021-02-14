@@ -1,7 +1,7 @@
 use anyhow::*;
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt;
 
 static S_TRUE: &str = "true";
@@ -98,7 +98,7 @@ pub enum Expr {
 	Identifier(String),
 	FunCall(Box<FunCall>),
 	AttrPath(Box<AttrPath>),
-	AttrSet(HashMap<String, Box<Expr>>),
+	AttrSet(BTreeMap<String, Box<Expr>>),
 	List(Vec<Expr>),
 }
 

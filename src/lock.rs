@@ -3,7 +3,7 @@ use crate::nix_serialize::Writeable;
 use anyhow::*;
 use lazy_static::lazy_static;
 use serde::de::{Deserialize, Deserializer};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Debug;
 
@@ -22,11 +22,11 @@ impl fmt::Display for Type {
 }
 
 // newtype for a package key
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Key(String);
 
 // newtype for a logical package name
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Name(pub String);
 impl std::borrow::Borrow<str> for Name {
   fn borrow(&self) -> &str {
@@ -118,7 +118,7 @@ impl PartialId {
 pub struct LockContext {
 	pub lock_type: Type,
 	pub toplevel: Vec<Key>,
-	pub extra: HashMap<String, Expr>,
+	pub extra: BTreeMap<String, Expr>,
 }
 
 impl LockContext {
@@ -130,7 +130,7 @@ impl LockContext {
 		LockContext {
 			lock_type,
 			toplevel: vec![],
-			extra: HashMap::new(),
+			extra: BTreeMap::new(),
 		}
 	}
 
@@ -234,7 +234,7 @@ pub struct Spec {
 	pub dep_keys: Vec<Key>,
 	pub src: Src,
 	pub digest: Option<Sha256>,
-	pub extra: HashMap<String, Expr>,
+	pub extra: BTreeMap<String, Expr>,
 }
 
 impl Spec {
@@ -251,7 +251,7 @@ pub struct PartialSpec {
 	pub id: PartialId,
 	pub dep_keys: Vec<Key>,
 	pub src: Option<Src>,
-	pub extra: HashMap<String, Expr>,
+	pub extra: BTreeMap<String, Expr>,
 }
 
 impl PartialSpec {
@@ -260,7 +260,7 @@ impl PartialSpec {
 			id: PartialId::empty(),
 			dep_keys: Vec::new(),
 			src: None,
-			extra: HashMap::new(),
+			extra: BTreeMap::new(),
 		}
 	}
 
@@ -297,16 +297,16 @@ impl PartialSpec {
 #[derive(Debug, Clone)]
 pub struct Lock<Spec: Writeable> {
 	pub context: LockContext,
-	pub specs: HashMap<Key, Spec>,
-	pub vars: HashMap<&'static str, Expr>,
+	pub specs: BTreeMap<Key, Spec>,
+	pub vars: BTreeMap<&'static str, Expr>,
 }
 
 impl<Spec: Writeable> Lock<Spec> {
 	pub fn new(context: LockContext) -> Lock<Spec> {
 		Lock {
 			context,
-			specs: HashMap::new(),
-			vars: HashMap::new(),
+			specs: BTreeMap::new(),
+			vars: BTreeMap::new(),
 		}
 	}
 

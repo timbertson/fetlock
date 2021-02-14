@@ -2,6 +2,7 @@ use anyhow::*;
 use log::*;
 use std::collections::HashMap;
 use std::cmp::Ordering;
+use std::cmp::PartialOrd;
 use crate::esy::parser::*;
 use crate::esy::parser;
 use crate::esy::build::PkgType;
@@ -293,18 +294,6 @@ impl Eval {
     }
   }
   
-  fn static_cmp(&self, other: &Eval) -> Option<Ordering> {
-    // statically evaluates equality for certain simple types
-    let result = match (self, other) {
-      (Eval::Bool(a), Eval::Bool(b)) => Some(a.cmp(b)),
-      // TODO implement version ordering for inequal strings
-      (Eval::Str(a), Eval::Str(b)) => Some(a.cmp(b)),
-      _ => None,
-    };
-    debug!("static_cmp({:?}, {:?}) => {:?}", self, other, result);
-    result
-  }
-
   pub fn evaluate<'a, 'c: 'a, C: NixCtx>(v: Value<'a>, c: &'c C) -> Result<Eval> {
     use Value::*;
     match v {
@@ -388,7 +377,7 @@ impl Eval {
             Ok(Eval::Bool(true))
           },
 
-          Eq => Ok(match a_eval()?.static_cmp(&b_eval()?) {
+          Eq => Ok(match a_eval()?.partial_cmp(&b_eval()?) {
             Some(b) => Eval::Bool(b == Ordering::Equal),
             None => Eval::Nix(Expr::LitSeq(vec!(
               a.into_nix(c)?,
@@ -458,6 +447,20 @@ impl Eval {
         Ok(Expr::List(exprs))
       },
     }
+  }
+}
+
+impl PartialOrd for Eval {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    // statically evaluates equality for certain simple types
+    let result = match (self, other) {
+      (Eval::Bool(a), Eval::Bool(b)) => Some(a.cmp(b)),
+      // TODO implement version ordering for inequal strings
+      (Eval::Str(a), Eval::Str(b)) => Some(a.cmp(b)),
+      _ => None,
+    };
+    debug!("partial_cmp({:?}, {:?}) => {:?}", self, other, result);
+    result
   }
 }
 

@@ -1,8 +1,10 @@
 use anyhow::*;
 use log::*;
 use std::collections::HashMap;
+use std::cmp::Ordering;
 use crate::esy::parser::*;
 use crate::esy::parser;
+use crate::esy::build::PkgType;
 use crate::{Name, Key, Expr, FunCall, StringComponent, StringComponentOf};
 
 #[derive(Debug, Clone)]
@@ -14,28 +16,33 @@ pub struct Pkg {
 // TODO we only have one concrete implementation, drop this trait
 pub trait NixCtx {
   fn name<'a>(&'a self) -> &'a Name;
+  fn pkg_type(&self) -> PkgType;
   // TODO make this a KeyRef (again!)
   fn get<'a, 'b>(&'a self, name: &'b str) -> Option<&'a Pkg>;
 }
 
 pub struct NixCtxMap<'a> {
   name: &'a Name,
+  pkg_type: PkgType,
   map: &'a HashMap<Name, Pkg>
 }
 
 impl<'c> NixCtx for NixCtxMap<'c> {
   fn name(&self) -> &Name { self.name }
+  fn pkg_type(&self) -> PkgType { self.pkg_type }
   fn get<'a, 'b>(&'a self, name: &'b str) -> Option<&'a Pkg> {
     self.map.get(name)
   }
 }
 
+// used for tests
 pub struct EmptyCtx {
   name: Name,
 }
 
 impl NixCtx for EmptyCtx {
   fn name(&self) -> &Name { &self.name }
+  fn pkg_type(&self) -> PkgType { PkgType::Opam }
   fn get<'a, 'b>(&'a self, name: &'b str) -> Option<&'a Pkg> {
     None
   }
@@ -68,8 +75,8 @@ enum PathType {
 
 pub struct Ctx;
 impl Ctx {
-  pub fn from_map<'a>(name: &'a Name, map: &'a HashMap<Name, Pkg>) -> NixCtxMap<'a> {
-    NixCtxMap { name, map }
+  pub fn from_map<'a>(pkg_type: PkgType, name: &'a Name, map: &'a HashMap<Name, Pkg>) -> NixCtxMap<'a> {
+    NixCtxMap { pkg_type, name, map }
   }
 
   pub fn empty<'a>(name: &'a str) -> EmptyCtx {
@@ -82,7 +89,24 @@ impl Ctx {
     let resolved = match scope {
       VarScope::Unknown => match ident {
         "jobs" => Ok(Eval::Str("$NIX_BUILD_CORES".to_owned())),
-        "os" => Ok(Eval::Nix(Expr::Literal("final.os".to_owned()))),
+
+        "os" => {
+          match ctx.pkg_type() {
+            // for esy, used in a ternary
+            PkgType::Esy => Ok(Eval::Nix(Expr::Literal("final.os".to_owned()))),
+            // for opam, used in a filter (so we need it to be static, we don't support dynamic filters)
+            // "nixos" is useful for depexts, but not for branched build instructions :/
+            PkgType::Opam => Ok(Eval::Str("nixos".to_owned())),
+          }
+        },
+
+        "os-family" | "os-distribution" => {
+          match ctx.pkg_type() {
+            PkgType::Esy => Err(anyhow!("os-family not defined for esy packages")),
+            PkgType::Opam => Ok(Eval::Str("nixos".to_owned())),
+          }
+        },
+
         "make" => Ok(Eval::Str("make".to_owned())),
 
         "opam-version" => Ok(Eval::Str("2.0".to_owned())),
@@ -253,7 +277,8 @@ use Eval::*;
 impl Eval {
   fn truthy(&self) -> bool {
     match self {
-      Nix(_) | Str(_) | StrInterp(_) => true,
+      Nix(_) | Str(_) => true,
+      StrInterp(parts) => parts.len() > 0,
       Undefined => false,
       Bool(b) => *b,
       List(l) => l.iter().filter(|x| x.truthy()).count() > 0,
@@ -267,6 +292,18 @@ impl Eval {
       _ => Err(anyhow!("Can't coerce {:?} into boolean")),
     }
   }
+  
+  fn static_cmp(&self, other: &Eval) -> Option<Ordering> {
+    // statically evaluates equality for certain simple types
+    let result = match (self, other) {
+      (Eval::Bool(a), Eval::Bool(b)) => Some(a.cmp(b)),
+      // TODO implement version ordering for inequal strings
+      (Eval::Str(a), Eval::Str(b)) => Some(a.cmp(b)),
+      _ => None,
+    };
+    debug!("static_cmp({:?}, {:?}) => {:?}", self, other, result);
+    result
+  }
 
   pub fn evaluate<'a, 'c: 'a, C: NixCtx>(v: Value<'a>, c: &'c C) -> Result<Eval> {
     use Value::*;
@@ -274,14 +311,17 @@ impl Eval {
       // TODO could canonicalize() a string to turn it into a Str, but it's unclear if that
       // is ever needed
       Int(x) => Ok(Eval::Nix(Expr::Literal(format!("{}", x)))),
-      String(parts) => {
-        let parts = parts.into_iter()
-          .map(|component| component.map_result(|v| {
-            v.clone().into_nix(c)
-            .with_context(|| format!("evaluating {:?}", v))
-          }))
-          .collect::<Result<Vec<StringComponent>>>()?;
-        Ok(Eval::Nix(Expr::Str(parts).canonicalize()))
+      String(parts) => match StringComponentOf::as_static_string(&parts) {
+        Ok(s) => Ok(Eval::Str(s)),
+        Err(()) => { 
+          let parts = parts.into_iter()
+            .map(|component| component.map_result(|v| {
+              v.clone().into_nix(c)
+              .with_context(|| format!("evaluating {:?}", v))
+            }))
+            .collect::<Result<Vec<StringComponent>>>()?;
+          Ok(Eval::Nix(Expr::Str(parts).canonicalize()))
+        }
       },
 
       List(l) => Ok(Eval::List(
@@ -317,8 +357,10 @@ impl Eval {
       Binop(binop) => {
         let parser::Binop { a, op, b } = *binop;
         // TODO: it's a bit annoying that we need to clone here...
-        let a_bool = || Self::evaluate(a.clone(), c).and_then(|x| x.as_bool());
-        let b_bool = || Self::evaluate(b.clone(), c).and_then(|x| x.as_bool());
+        let a_eval = || Self::evaluate(a.clone(), c);
+        let b_eval = || Self::evaluate(b.clone(), c);
+        let a_bool = || a_eval().and_then(|x| x.as_bool());
+        let b_bool = || b_eval().and_then(|x| x.as_bool());
         let bools = a_bool().and_then(|a| b_bool().map(|b| (a,b)));
 
         use Op::*;
@@ -346,11 +388,14 @@ impl Eval {
             Ok(Eval::Bool(true))
           },
 
-          Eq => Ok(Eval::Nix(Expr::LitSeq(vec!(
-            a.into_nix(c)?,
-            Expr::Literal("==".to_owned()),
-            b.into_nix(c)?,
-          )))),
+          Eq => Ok(match a_eval()?.static_cmp(&b_eval()?) {
+            Some(b) => Eval::Bool(b == Ordering::Equal),
+            None => Eval::Nix(Expr::LitSeq(vec!(
+              a.into_nix(c)?,
+              Expr::Literal("==".to_owned()),
+              b.into_nix(c)?,
+            ))),
+          }),
 
           Slash => Ok(Eval::StrInterp(vec!(
             EvalSC::Expr(Self::evaluate(a, c)?),
@@ -399,7 +444,7 @@ impl Eval {
   pub fn into_nix<C: NixCtx>(self, c: &C) -> Result<Expr> {
     match self {
       Eval::Nix(expr) => Ok(expr),
-      Eval::Undefined => Ok(Expr::str("".to_owned())),
+      Eval::Undefined => Ok(Expr::Str(Vec::new())),
       Eval::Bool(b) => Ok(Expr::Bool(b)),
       Eval::Str(s) => Ok(Expr::str(s)),
       Eval::StrInterp(parts) => {

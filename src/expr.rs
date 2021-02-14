@@ -54,6 +54,17 @@ impl<X: fmt::Debug + Clone + PartialEq + Eq> StringComponentOf<X> {
 			}
 		}
 	}
+	
+	pub fn as_static_string(parts: &Vec<StringComponentOf<X>>) -> Result<String, ()> {
+		let mut literals = Vec::new();
+		for v in parts {
+			match v {
+				StringComponentOf::Literal(l) => literals.push(l.as_str()),
+				StringComponentOf::Expr(_) => { return Err(()) },
+			}
+		}
+		Ok(literals.join(""))
+	}
 }
 
 impl<T: fmt::Debug + Clone + Eq> StringComponentOf<T> {

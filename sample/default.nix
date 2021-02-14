@@ -53,6 +53,13 @@ let
         esy-cmake = [ pkgs.cmake cmakeHook ];
       })
       (self.overrideAttrs {
+        ocaml = (o: {
+          # upstream puts stuff in $out/lib, not the site-packages dir
+          buildPhase = ''
+            ./esy-configure --disable-cfi --prefix $out --libdir $OCAMLFIND_DESTDIR
+            ./esy-build
+          '';
+        });
         ocamlfind = (o: {
           buildInputs = (o.buildInputs or []) ++ [ m4 ];
           # default build lacks topfind, we need to hack its destination so it doesn't
@@ -92,7 +99,7 @@ let
         # TODO this is specified in `exportedEnv` of package.json,
         # but fetlock doesn't support that
         esy-fzy = (o: {
-          installPhase = (super.installPhase or "") + ''
+          installPhase = (o.installPhase or "") + ''
             mkdir -p $out/nix-support
             cat <<EOF > $out/nix-support/setup-hook
               function exportFzyEnv {
@@ -105,6 +112,14 @@ let
             EOF
           '';
         });
+        # ctypes = (o: {
+        #   # TODO promote this to general setup hook?
+        #   # see https://linux.die.net/man/1/ocamlfind
+        #   installPhase = ''
+        #     mkdir -p $out/stublibs
+        #     #mkdir -p ${self.siteLib "$out"}/stublibs
+        #   '' + o.installPhase;
+        # });
       })
       (self.override {
         # skip esy builds entirely for things that are already packaged in nix

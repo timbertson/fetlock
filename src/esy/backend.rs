@@ -56,42 +56,51 @@ impl EsyLock {
 		info!("[esy]: {}", esy_spec.spec.id.name);
 		let name = Name(esy_spec.spec.id.name.to_owned());
 		
-		if let Some(path) = fetch::realise_source(&esy_spec.spec).await? {
-			let extract = fetch::ExtractSource::from(&path).await?;
-			// TODO this should happen somewhere centrally, but it's
-			// wasteful to extract multiple times
+		let path = fetch::realise_source(&esy_spec.spec).await?;
+		let path_ref = path.as_ref();
+		let extract = if let Some(path_ref) = path_ref {
+			let extract = fetch::ExtractSource::from(path_ref).await?;
+			// TODO this upgrade should happen somewhere centrally,
+			// but it's wasteful to extract multiple times
 			extract.upgrade_gitmodules(&mut esy_spec.spec).await?;
-			match esy_spec.meta.pkg_type.ok_or_else(||anyhow!("pkg_type not set"))? {
-				PkgType::Opam => {
-					let mut files = None;
-					let manifest = if let Some(manifest_path) = esy_spec.meta.manifest_path.as_ref() {
-						extract.file_contents(&manifest_path).await?
-					} else {
-						// TODO get your own checkout, stop hardcoding
-						let repo_path = std::path::PathBuf::from("/Users/tcuthbertson/.cache/opam2nix/repos/opam-repository/");
-						let repo = fetch::ExtractSource::from(&repo_path).await?;
-						let version = &esy_spec.spec.id.version;
-						let prefix = format!("packages/{}/{}.{}", name.0, name.0, version);
-						// TODO as above...
-						let files_path = repo_path.join(format!("{}/files", prefix));
-						if files_path.exists() {
-							files = Some(Expr::Literal(files_path.to_string_lossy().to_string()));
-						}
-						repo.file_contents(&format!("{}/opam", prefix)).await?
-					};
-					let nix_ctx = eval::Ctx::from_map(&name, &installed.opam);
-					let opam = Opam::from_str(&manifest)
-						.with_context(|| format!("parsing opam manifest:\n{}", &manifest))?;
-					debug!("parsed opam: {:?}", opam);
-					let build = opam.into_nix(&nix_ctx)
-						.with_context(|| format!("evaluating opam:\n{:?}", &manifest))?;
-					debug!(" -> as nix: {:?}", build);
-					esy_spec.spec.extra.insert("build".to_owned(), build.expr());
-					if let Some(files) = files {
-						esy_spec.spec.extra.insert("files".to_owned(), files);
+			Some(extract)
+		} else {
+			None
+		};
+
+		match esy_spec.meta.pkg_type.ok_or_else(||anyhow!("pkg_type not set"))? {
+			PkgType::Opam => {
+				let mut files = None;
+				let manifest = if let Some(manifest_path) = esy_spec.meta.manifest_path.as_ref() {
+					extract.ok_or_else(||anyhow!("manifest path given, but no source given"))?
+						.file_contents(&manifest_path).await?
+				} else {
+					// TODO get your own checkout, stop hardcoding
+					let repo_path = std::path::PathBuf::from("/Users/tcuthbertson/.cache/opam2nix/repos/opam-repository/");
+					let repo = fetch::ExtractSource::from(&repo_path).await?;
+					let version = &esy_spec.spec.id.version;
+					let prefix = format!("packages/{}/{}.{}", name.0, name.0, version);
+					// TODO as above...
+					let files_path = repo_path.join(format!("{}/files", prefix));
+					if files_path.exists() {
+						files = Some(Expr::Literal(files_path.to_string_lossy().to_string()));
 					}
-				},
-				PkgType::Esy => {
+					repo.file_contents(&format!("{}/opam", prefix)).await?
+				};
+				let nix_ctx = eval::Ctx::from_map(PkgType::Opam, &name, &installed.opam);
+				let opam = Opam::from_str(&manifest)
+					.with_context(|| format!("parsing opam manifest:\n{}", &manifest))?;
+				debug!("parsed opam: {:?}", opam);
+				let build = opam.into_nix(&nix_ctx)
+					.with_context(|| format!("evaluating opam:\n{:?}", &manifest))?;
+				debug!(" -> as nix: {:?}", build);
+				esy_spec.spec.extra.insert("build".to_owned(), build.expr());
+				if let Some(files) = files {
+					esy_spec.spec.extra.insert("files".to_owned(), files);
+				}
+			},
+			PkgType::Esy => {
+				if let Some(extract) = extract {
 					// NOTE: some esy packages are just npm packages, depending on whether they have
 					// an `esy` property in them
 					let manifest = {
@@ -114,13 +123,13 @@ impl EsyLock {
 						esy_spec.spec.id.version = version.clone();
 					};
 
-					let nix_ctx = eval::Ctx::from_map(&opam_name, &installed.esy);
+					let nix_ctx = eval::Ctx::from_map(PkgType::Esy, &opam_name, &installed.esy);
 					esy_spec.spec.extra.insert("build".to_owned(), esy.build(&nix_ctx)?.expr());
 					if esy_spec.spec.id.name != opam_name.0 {
 						esy_spec.spec.extra.insert("opamName".to_owned(), Expr::str(opam_name.0));
 					}
-				},
-			}
+				}
+			},
 		}
 		Ok(())
 	}

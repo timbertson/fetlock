@@ -28,10 +28,12 @@ let
   copyFilesHook = prev.makeHook "copy-files" ''
     function copyOpamFiles {
       echo "+ copyOpamFiles"
-      cp -Rv $files/ ./
+      cp -r --no-preserve=mode --dereference -v $files/. ./
     }
     preBuildHooks+=(copyOpamFiles)
   '';
+  
+  getDepext = p: getAttrFromPath (splitString "." p) final.pkgs;
 in
 {
   key, pname, version,
@@ -47,8 +49,10 @@ in
     inherit (finalBuild) buildPhase installPhase;
 
     # TODO don't need to include ocaml as dependency if it's a node package
-    propagatedBuildInputs = (map final.getDrv depKeys) ++ (build.depexts or []);
-    
+    propagatedBuildInputs =
+      (map final.getDrv depKeys) ++
+      (map getDepext (build.depexts or []));
+ 
     buildInputs = commonBuildDeps ++ (if files != null then [ copyFilesHook ] else []);
   }
     // (if opamName != null then { inherit opamName; } else {})

@@ -344,12 +344,18 @@ impl Writeable for Spec {
 			extra,
 			src,
 			digest,
+			..
 		} = self;
 		let Id { name, version } = id;
 		c.bracket_attrs(|c| {
 			c.attr(&"pname", &DrvName::new(name))?;
 			c.attr(&"version", &DrvName::new(version))?;
 			c.attr(&"depKeys", dep_keys)?;
+			
+			let build_inputs = self.build_inputs();
+			if build_inputs.len() > 0 {
+				c.attr(&"buildInputs", &Expr::List(build_inputs))?;
+			}
 
 			if let Some(digest) = digest.as_ref() {
 				c.attr(&"src", &SrcDigest::new(src, digest))?;

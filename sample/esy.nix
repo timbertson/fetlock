@@ -995,6 +995,9 @@ in
         ("@opam/dune@opam:2.5.0@e0bac278")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
+      buildInputs = [
+        (pkgs.unzip)
+      ];
       src = pkgs.fetchurl {
         url = "https://github.com/ocsigen/lwt/archive/5.4.0.zip";
         sha256 = "1lv5i3znmiqx6fiq2q1lapsq1bk20bgw7h57wmk9czx9x050a5n5";
@@ -1243,7 +1246,7 @@ in
       };
       build = {
         buildPhase = ''
-          make -f configure.make all OCAMLBUILD_PREFIX=$out OCAMLBUILD_BINDIR=$out/bin "OCAMLBUILD_LIBDIR=${(final.siteLib "$out")}/ocamlbuild" OCAMLBUILD_MANDIR=$out/man OCAML_NATIVE=true OCAML_NATIVE_TOOLS=true
+          make -f configure.make all OCAMLBUILD_PREFIX=$out OCAMLBUILD_BINDIR=$out/bin "OCAMLBUILD_LIBDIR=${(final.siteLib "$out")}" OCAMLBUILD_MANDIR=$out/man OCAML_NATIVE=true OCAML_NATIVE_TOOLS=true
           make check-if-preinstalled all opam-install
         '';
         mode = "opam";
@@ -1263,7 +1266,7 @@ in
       };
       build = {
         buildPhase = ''
-          ./configure -bindir ${"$out"}/bin -sitelib "${(final.siteLib "$out")}/ocamlfind" -mandir ${"$out"}/man -config "${(final.siteLib "$out")}/ocamlfind/findlib.conf" -no-custom -no-topfind
+          ./configure -bindir ${"$out"}/bin -sitelib "${(final.siteLib "$out")}" -mandir ${"$out"}/man -config "${(final.siteLib "$out")}/findlib.conf" -no-custom -no-topfind
           make all
           make opt
         '';

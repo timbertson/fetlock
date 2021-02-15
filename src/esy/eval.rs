@@ -51,7 +51,7 @@ impl NixCtx for EmptyCtx {
 
 #[derive(Debug, Clone)]
 pub struct PkgImpl<'a> {
-  pub name: &'a Name,
+  pub name: Option<&'a Name>,
   pub path: Expr,
 }
 
@@ -113,18 +113,25 @@ impl Ctx {
         "opam-version" => Ok(Eval::Str("2.0".to_owned())),
         ident if ident == ctx.name().0 => Ok(Eval::Str("$out".to_owned())),
         
-        // is it a package variable implicitly on `self`?
-        ident => Self::resolve(ctx, VarScope::SelfScope, ident).or_else(|_| {
-          // otherwise try looking it up as a package name
-          match ctx.get(ident) {
-            Some(pkg) => Self::resolve(ctx, VarScope::Package(Some(pkg)), "prefix"),
-            
-            // otherwise it might either be an uninstalled package,
-            // an unknown global or possibly a dynamic var, which we don't support
-            // TODO quietly return undefined once this is more mature
-            None => Err(anyhow!("TODO unknown ident: {:?}", ident)),
-          }
-        })
+        // try resolving as a global, a self-scoped var, or a package name
+        ident => {
+          Self::resolve_path(PkgImpl {
+            path: Expr::str("$out".to_owned()),
+            name: None, // global path
+          }, ident).or_else(|_| {
+            Self::resolve(ctx, VarScope::SelfScope, ident)
+          }).or_else(|_| {
+            // otherwise try looking it up as a package name
+            match ctx.get(ident) {
+              Some(pkg) => Self::resolve(ctx, VarScope::Package(Some(pkg)), "prefix"),
+              
+              // otherwise it might either be an uninstalled package,
+              // an unknown global or possibly a dynamic var, which we don't support
+              // TODO quietly return undefined once this is more mature
+              None => Err(anyhow!("TODO unknown ident: {:?}", ident)),
+            }
+          })
+        },
       },
       VarScope::SelfScope => match ident {
         "name" => Ok(Eval::Str(ctx.name().0.to_owned())),
@@ -132,28 +139,29 @@ impl Ctx {
         ident => Self::resolve_bool(true, ident).map(Ok)
           .unwrap_or_else(|| Self::resolve_path(PkgImpl {
             path: Expr::str("$out".to_owned()),
-            name: ctx.name(),
+            name: Some(ctx.name()),
           }, ident)),
       },
       // TODO pseudo-package for `ocaml`?
-      VarScope::Package(pkg) => Self::resolve_bool(pkg.is_some(), ident).map(Ok).unwrap_or_else(|| {
-        // Unimplemented:
-        // depends: resolved direct dependencies of the package
-        // enable: takes the value "enable" or "disable" depending on whether the package is installed
-        // bin, sbin, lib, man, doc, share, etc: the corresponding directories for this package (similar to <pkgname>.install)
-        // build: directory where the package was built
-        // hash: hash of the package archive
-        // dev: true if this is a development package, i.e. it was not built from a release archive
-        // build-id: a hash identifying the precise package version and metadata, and that of all its dependencies
-        // opamfile: if the package is installed, path of its opam file, from opam internals, otherwise not defined
-        match pkg {
-          None => Ok(Eval::Undefined),
-          Some(pkg) => Self::resolve_path(PkgImpl {
-            path: Expr::get_drv(pkg.key.to_string()),
-            name: &pkg.name,
-          }, ident),
-        }
-      }),
+      VarScope::Package(pkg) => {
+        Self::resolve_bool(pkg.is_some(), ident).map(Ok).unwrap_or_else(|| {
+          // Unimplemented:
+          // depends: resolved direct dependencies of the package
+          // enable: takes the value "enable" or "disable" depending on whether the package is installed
+          // build: directory where the package was built
+          // hash: hash of the package archive
+          // dev: true if this is a development package, i.e. it was not built from a release archive
+          // build-id: a hash identifying the precise package version and metadata, and that of all its dependencies
+          // opamfile: if the package is installed, path of its opam file, from opam internals, otherwise not defined
+          match pkg {
+            None => Ok(Eval::Undefined),
+            Some(pkg) => Self::resolve_path(PkgImpl {
+              path: Expr::get_drv(pkg.key.to_string()),
+              name: Some(&pkg.name),
+            }, ident),
+          }
+        })
+      },
     };
     resolved.with_context(|| format!("resolving {:?} in scope {:?}", ident, &scope))
   }
@@ -200,18 +208,24 @@ impl Ctx {
 
       "lib" => Ok((None, PathType::Lib, named)),
       "stublibs" | "toplevel" => Ok((Some(ident), PathType::Lib, named)),
-      "lib_root" => Ok((Some("lib"), PathType::Lib, PathScope::Root)),
+      "lib_root" => Ok((None, PathType::Lib, PathScope::Root)),
       "share_root" => Ok((Some("share"), PathType::Simple, PathScope::Root)),
 
       _ => Err(anyhow!("TODO unknown package[{:?}] var: {:?}", &pkg, ident)),
     };
 
     rel_lib_and_scope.map(|(rel, lib, scope)| {
-      let suffix = match (rel, scope) {
-        (Some(rel), PathScope::Named) => format!("/{}/{}", rel, pkg.name.0),
-        (None, PathScope::Named) => format!("/{}", pkg.name.0),
-        (Some(rel), PathScope::Root) => format!("/{}", rel),
-        (None, PathScope::Root) => "".to_owned(),
+      // we only include the pkgname if this was a lookup specifically for a pacakge scope
+      // (e.g. global `lib` resolves to $out/..../lib, while `_:lib` resolves to $out/..../lib/$pname)
+      let name_suffix = match (scope, pkg.name) {
+        (PathScope::Named, Some(name)) => Some(&name.0),
+        _ => None,
+      };
+      let suffix = match (rel, name_suffix) {
+        (Some(rel), Some(name)) => format!("/{}/{}", rel, name),
+        (None, Some(name)) => format!("/{}", name),
+        (Some(rel), None) => format!("/{}", rel),
+        (None, None) => "".to_owned(),
       };
       Eval::Nix(match lib {
         PathType::Lib => {
@@ -473,7 +487,7 @@ mod tests {
     let name = Name("mypkg".to_owned());
     let pkg = PkgImpl {
       path: out(),
-      name: &name,
+      name: Some(&name),
     };
     match Ctx::resolve_path(pkg, p) {
       Ok(Eval::Nix(Expr::Str(v))) => v,

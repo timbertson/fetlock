@@ -6,6 +6,7 @@ use serde::de::{Deserialize, Deserializer};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Debug;
+use std::iter::Iterator;
 
 #[derive(Debug, Copy, Clone)]
 pub enum Type {
@@ -232,6 +233,7 @@ impl SrcDigest<'_> {
 pub struct Spec {
 	pub id: Id,
 	pub dep_keys: Vec<Key>,
+	build_inputs: Vec<Expr>,
 	pub src: Src,
 	pub digest: Option<Sha256>,
 	pub extra: BTreeMap<String, Expr>,
@@ -243,6 +245,18 @@ impl Spec {
 			src: &self.src,
 			digest,
 		})
+	}
+	
+	pub fn build_inputs(&self) -> Vec<Expr> {
+		let mut ret = self.build_inputs.clone();
+		if self.src.extension().map_or(false, |ext| ext == "zip") {
+			ret.push(Expr::Literal("pkgs.unzip".to_owned()));
+		}
+		ret
+	}
+
+	pub fn add_build_input(&mut self, dep: Expr) {
+		self.build_inputs.push(dep)
 	}
 }
 
@@ -277,6 +291,7 @@ impl PartialSpec {
 				Ok(Spec {
 					id,
 					dep_keys,
+					build_inputs: Vec::new(),
 					src,
 					extra,
 					digest: None,

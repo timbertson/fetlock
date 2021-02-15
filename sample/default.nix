@@ -2,6 +2,7 @@
 with pkgs;
 let
   osx = darwin.apple_sdk.frameworks;
+  ifDarwin = deps: if stdenv.isDarwin then deps else [];
   esy = (callPackage ../nix/esy {});
 
   glibtool = if stdenv.isDarwin
@@ -35,16 +36,12 @@ let
         automake = [perl];
         esy-help2man = [perl];
         esy-tree-sitter = [gcc];
-        esy-sdl2 = [libGL.dev] ++ (if stdenv.isDarwin
-          then [
+        esy-sdl2 = [libGL.dev] ++ (ifDarwin [
             osx.IOKit osx.CoreAudio
             osx.Foundation osx.AudioToolbox
             osx.AudioUnit osx.ForceFeedback
-          ]
-          else []);
-        libvim = [ncurses.dev] ++ (if stdenv.isDarwin
-          then [ osx.AppKit ]
-          else []);
+          ]);
+        libvim = [ncurses.dev] ++ (ifDarwin [ osx.AppKit ]);
         revery-esy-libvterm = [ perl ];
         texinfo = [ perl ];
         yarn-pkg-config = [ libiconv ];
@@ -105,12 +102,18 @@ let
               function exportFzyEnv {
                 echo '+ exportFzyEnv'
                 export FZY_INCLUDE_PATH=$out/include
-                export FZY_LIB_PATH=$cur__lib
+                export FZY_LIB_PATH=$cur__lib/esy-fzy
                 env | grep '^FZY_'
               }
               preBuildHooks+=(exportFzyEnv)
             EOF
           '';
+        });
+        revery = (o: {
+          # TODO promote this more broadly, and maybe onoly on darwin?
+          # https://github.com/NixOS/nixpkgs/issues/39687
+          hardeningDisable = ["strictoverflow"];
+          buildInputs = (o.buildInputs or []) ++ (ifDarwin [ osx.Cocoa ]);
         });
         # ctypes = (o: {
         #   # TODO promote this to general setup hook?

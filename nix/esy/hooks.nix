@@ -112,12 +112,12 @@ let
         export cur__root=$PWD
         export cur__target_dir=$PWD/_build
         export cur__install=$out
-        export cur__lib=${final.siteLib "$out"}/$pname
+        export cur__lib=${final.siteLib "$out"}
         export cur__share=$out/share
         export cur__man=$out/man
         export cur__doc=$out/doc
-        export cur__stublibs=${final.siteLib "$out"}/stublibs/$pname
-        export cur__toplevel=${final.siteLib "$out"}/toplevel/$pname
+        export cur__stublibs=${final.siteLib "$out"}/stublibs
+        export cur__toplevel=${final.siteLib "$out"}/toplevel
         env | grep '^cur__'
       }
       preBuildHooks+=(esySetupEnvVars)

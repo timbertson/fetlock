@@ -3,9 +3,9 @@ with prev.pkgs.lib;
 let
   addHooks = import ./hooks.nix final prev;
   stdenv = prev.pkgs.stdenv;
+  # too inconvenient to declare as a dependency, just include it always
   commonBuildDeps = [ prev.pkgs.which ];
 
-  
   # surround an (optional) `*Phase` attribute with
   # pre / post hooks
   populateBuildPhases = obj:
@@ -40,6 +40,7 @@ in
   depKeys,
   src ? prev.emptyDrv,
   build ? { mode = "esy"; }, #TODO: after we support link-dev, use abort "no build instructions passed for derivation ${key}"
+  buildInputs ? [],
   opamName ? null,
   files ? null,
 }:
@@ -49,11 +50,13 @@ in
     inherit (finalBuild) buildPhase installPhase;
 
     # TODO don't need to include ocaml as dependency if it's a node package
+    # TODO which deps can we get away with not propagating?
     propagatedBuildInputs =
       (map final.getDrv depKeys) ++
       (map getDepext (build.depexts or []));
  
-    buildInputs = commonBuildDeps ++ (if files != null then [ copyFilesHook ] else []);
+    buildInputs = buildInputs ++ commonBuildDeps ++
+      (if files != null then [ copyFilesHook ] else []);
   }
     // (if opamName != null then { inherit opamName; } else {})
     // (if files != null then { inherit files; } else {})

@@ -66,6 +66,7 @@ impl<'a> Opam<'a> {
       depexts,
       build: build.map_or(Ok(None), |x| NixBuild::script(mode, ctx, x).map(Some))?,
       install: install.map_or(Ok(None), |x| NixBuild::script(mode, ctx, x).map(Some))?,
+      extra: Default::default(),
     })
   }
 }

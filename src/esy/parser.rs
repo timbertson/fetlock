@@ -399,22 +399,24 @@ mod dialect {
 
   pub fn value_lvl2<'a>(d: SrcDialect<'a>, s: Src<'a>) -> Res<'a, Value<'a>> {
     // lvl1 or comparison binop
-    let value_lvl1 = parser(d, value_lvl1);
+    let lvl1 = parser(d, value_lvl1);
+    let lvl2 = parser(d, value_lvl2);
     alt((
       map(
-        tuple((value_lvl1.clone(), ws(basic_op), value_lvl1)),
+        tuple((lvl1, ws(basic_op), lvl2)),
         |(a, op, b)| Value::Binop(Box::new(Binop { a, op, b }))
       ),
-      value_lvl1
+      lvl1
     ))(s)
   }
 
   pub fn value_lvl3<'a>(d: SrcDialect<'a>, s: Src<'a>) -> Res<'a, Value<'a>> {
     // lvl2 or logic binop
     let lvl2 = parser(d, value_lvl2);
+    let lvl3 = parser(d, value_lvl3);
     alt((
       map(
-        tuple((lvl2.clone(), ws(logic_op), lvl2.clone())),
+        tuple((lvl2, ws(logic_op), lvl3)),
         |(a, op, b)| Value::Binop(Box::new(Binop { a, op, b }))
       ),
       lvl2
@@ -424,13 +426,13 @@ mod dialect {
   pub fn value_lvl4<'a>(d: SrcDialect<'a>, s: Src<'a>) -> Res<'a, Value<'a>> {
     // lvl3 or ternop
     let lvl3 = parser(d, value_lvl3);
-    let value = parser(d, value);
+    let lvl4 = parser(d, value_lvl4);
     alt((
       map(
         tuple((
           lvl3,
-          preceded(ws(question), value),
-          preceded(ws(colon), value),
+          preceded(ws(question), lvl4),
+          preceded(ws(colon), lvl4),
         )),
         |(test, iftrue, iffalse)| Value::Ternop(Box::new(Ternop { test, iftrue, iffalse }))
       ),
@@ -438,8 +440,21 @@ mod dialect {
     ))(s)
   }
 
+  pub fn value_lvl5<'a>(d: SrcDialect<'a>, s: Src<'a>) -> Res<'a, Value<'a>> {
+    // lvl4 or colon binop (note: only valid for esy, hopefully doesn't affect opam parsing)
+    let lvl4 = parser(d, value_lvl4);
+    let lvl5 = parser(d, value_lvl5);
+    alt((
+      map(
+        tuple(( lvl4, ws(colon), lvl5)),
+        |(a, op, b)| Value::Binop(Box::new(Binop { a, op, b }))
+      ),
+      lvl4
+    ))(s)
+  }
+
   pub fn value<'a>(d: Dialect<Src<'a>, Value<'a>, SrcError<'a>>, s: Src<'a>) -> Res<'a, Value<'a>> {
-    value_lvl4(d, s)
+    value_lvl5(d, s)
   }
 }
 
@@ -659,7 +674,7 @@ pub mod esy {
   fn envvar(s: Src) -> Res<Varident> {
     map(
       preceded(char('$'), ident),
-      |ident| Varident { scope:"env", additional_scopes: Vec::new(), ident }
+      |ident| Varident { scope:"$", additional_scopes: Vec::new(), ident }
     )(s)
   }
 
@@ -806,6 +821,9 @@ mod tests {
     valid(interpolation, "#{ os = 'linux'}");
     valid(interpolation, "#{ true ? 1 : 2 }");
     valid(value, "self.bin / 'makeinfo'");
+    valid(value, "self.install / 'include' / 'harfbuzz'");
+    valid(value, "$PKG_CONFIG_PATH");
+    valid(value, "self.lib / 'pkgconfig' : $PKG_CONFIG_PATH");
     valid(entire_string, "ln #{self.bin / 'makeinfo'}");
     assert_eq!(
       p(value, "true == true ? 1 : 2"),

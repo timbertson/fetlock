@@ -148,6 +148,7 @@ pub async fn realise_source(spec: &Spec) -> Result<Option<PathBuf>> {
 		let output: std::process::Output = command.output().await?;
 		if output.status.success() {
 			let stdout = String::from_utf8(output.stdout)?;
+			debug!("realised: {}", stdout.trim());
 			Ok(Some(PathBuf::from(stdout.trim())))
 		} else {
 			warn_output("nix stderr", &output.stderr);

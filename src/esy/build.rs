@@ -53,6 +53,7 @@ pub struct NixBuild {
   pub build: Option<Expr>,
   pub install: Option<Expr>,
   pub depexts: Option<Expr>,
+  pub extra: BTreeMap<String, Expr>,
 }
 
 impl NixBuild {
@@ -62,6 +63,7 @@ impl NixBuild {
       build: None,
       install: None,
       depexts: None,
+      extra: BTreeMap::new(),
     }
   }
   
@@ -149,7 +151,7 @@ impl NixBuild {
 
   pub fn expr(self) -> Expr {
     let mut map = BTreeMap::new();
-    let Self { mode, build, install, depexts } = self;
+    let Self { mode, build, install, depexts, extra } = self;
     let mode_str = match mode {
       PkgType::Esy => "esy",
       PkgType::Opam => "opam",
@@ -166,6 +168,9 @@ impl NixBuild {
     }
     if let Some(depexts) = depexts {
       map.insert("depexts".to_owned(), Box::new(depexts));
+    }
+    for (k, v) in extra {
+      map.insert(k, Box::new(v));
     }
     Expr::AttrSet(map)
   }

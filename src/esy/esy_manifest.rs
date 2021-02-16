@@ -1,10 +1,12 @@
 use anyhow::*;
 use serde::Deserialize;
+use crate::{Expr,StringComponent};
 use crate::esy::build::*;
 use crate::esy::eval::*;
 use crate::esy::parser;
 use crate::esy::parser::Value;
 use std::fmt;
+use std::collections::BTreeMap;
 use serde::de::*;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -19,10 +21,14 @@ impl PackageJson {
     Ok(serde_json::from_str(&contents)?)
   }
 
+  fn parse_str<'a>(s: &'a str) -> Result<Value<'a>> {
+    parser::parse(parser::esy::entire_string, &s)
+      .with_context(|| format!("Parsing esy string: {:?}", s))
+  }
+
   fn parse<'a>(script: &'a Script<String>) -> Result<Value<'a>> {
     let script: Script<Value<'a>> = script.map_result(|arg| {
-      parser::parse(parser::esy::entire_string, &arg)
-        .with_context(|| format!("Parsing esy command: {:?}", arg))
+      Self::parse_str(&arg)
     })?;
     let mut cmds = Vec::new();
     for cmd in script.0 {
@@ -37,9 +43,24 @@ impl PackageJson {
   pub fn build<'c, C: NixCtx>(self, ctx: &C) -> Result<NixBuild> {
     let mut nix_build = NixBuild::empty(PkgType::Esy);
 
-    if let Some(EsySpec { build }) = self.esy {
+    if let Some(EsySpec { build, exported_env }) = self.esy {
       let parsed = Self::parse(&build.0)?;
       nix_build.build = Some(NixBuild::script(PkgType::Esy, ctx, parsed)?);
+
+      let env_list = exported_env.into_iter()
+        .filter(|(k,export)| export.scope == "global")
+        .map(|(k,export)| (|| {
+          let eval = Self::parse_str(&export.val)?;
+          let expr = Eval::evaluate(eval, ctx)?.into_nix(ctx)?.canonicalize();
+          Ok(Expr::Str(vec!(
+            StringComponent::Literal(k),
+            StringComponent::Literal("=".to_owned()),
+            StringComponent::Expr(expr))))
+        })())
+        .collect::<Result<Vec<Expr>>>()?;
+      if !env_list.is_empty() {
+        nix_build.extra.insert("exportedEnv".to_owned(), Expr::List(env_list));
+      }
     }
     Ok(nix_build)
   }
@@ -51,12 +72,22 @@ pub struct EsyScript(Script<String>);
 #[derive(Debug, Clone)]
 pub struct EsyCommand(Command<String>);
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct ExportedEnv {
+  pub val: String,
+  pub scope: String,
+}
+
 // see:
 // https://esy.sh/docs/en/configuration.html
 // https://esy.sh/docs/en/environment.html#variable-substitution-syntax
 #[derive(Debug, Clone, Deserialize)]
 pub struct EsySpec {
-  pub build: EsyScript
+  pub build: EsyScript,
+  
+  #[serde(rename = "exportedEnv")]
+  #[serde(default)]
+  pub exported_env: BTreeMap<String, ExportedEnv>,
 }
 
 impl<'de> Deserialize<'de> for EsyScript {

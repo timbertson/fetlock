@@ -397,60 +397,65 @@ mod dialect {
     ))(s)
   }
 
+  // each layer of precedence accepts a LHS of <the more primitive layer>,
+  // and a RHS of <its own layer>. This ensures that e.g. a ternop happens
+  // at a low precedence, since its at a high layer and thus earlier layers
+  // consume tokens more eagerly.
+  // based on https://github.com/Geal/nom/blob/master/tests/arithmetic.rs
+  fn binop_layer<'a>(
+    d: SrcDialect<'a>,
+    prev_lvl: fn(SrcDialect<'a>, Src<'a>) -> Res<'a, Value<'a>>,
+    op: fn(Src<'a>) -> Res<'a, Op>,
+    self_lvl: fn(SrcDialect<'a>, Src<'a>) -> Res<'a, Value<'a>>,
+    s: Src<'a>
+  ) -> Res<'a, Value<'a>> {
+    let prev = parser(d, prev_lvl);
+    let self_ = parser(d, self_lvl);
+    map(
+      tuple((
+        prev,
+        opt(tuple((ws(op), self_)))
+      )),
+      |(a, maybe_op)| match maybe_op {
+        None => a,
+        Some((op, b)) => Value::Binop(Box::new(Binop { a, op, b })),
+      }
+    )(s)
+  }
+
   pub fn value_lvl2<'a>(d: SrcDialect<'a>, s: Src<'a>) -> Res<'a, Value<'a>> {
     // lvl1 or comparison binop
-    let lvl1 = parser(d, value_lvl1);
-    let lvl2 = parser(d, value_lvl2);
-    alt((
-      map(
-        tuple((lvl1, ws(basic_op), lvl2)),
-        |(a, op, b)| Value::Binop(Box::new(Binop { a, op, b }))
-      ),
-      lvl1
-    ))(s)
+    binop_layer(d, value_lvl1, basic_op, value_lvl2, s)
   }
 
   pub fn value_lvl3<'a>(d: SrcDialect<'a>, s: Src<'a>) -> Res<'a, Value<'a>> {
     // lvl2 or logic binop
-    let lvl2 = parser(d, value_lvl2);
-    let lvl3 = parser(d, value_lvl3);
-    alt((
-      map(
-        tuple((lvl2, ws(logic_op), lvl3)),
-        |(a, op, b)| Value::Binop(Box::new(Binop { a, op, b }))
-      ),
-      lvl2
-    ))(s)
+    binop_layer(d, value_lvl2, logic_op, value_lvl3, s)
   }
 
   pub fn value_lvl4<'a>(d: SrcDialect<'a>, s: Src<'a>) -> Res<'a, Value<'a>> {
     // lvl3 or ternop
     let lvl3 = parser(d, value_lvl3);
     let lvl4 = parser(d, value_lvl4);
-    alt((
-      map(
-        tuple((
-          lvl3,
+    map(
+      tuple((
+        lvl3,
+        opt(tuple((
           preceded(ws(question), lvl4),
-          preceded(ws(colon), lvl4),
-        )),
-        |(test, iftrue, iffalse)| Value::Ternop(Box::new(Ternop { test, iftrue, iffalse }))
-      ),
-      lvl3
-    ))(s)
+          preceded(ws(colon), lvl4)
+        )))
+      )),
+      |(a, maybe_tern)| match maybe_tern {
+        None => a,
+        Some((iftrue, iffalse)) =>
+          Value::Ternop(Box::new(Ternop { test: a, iftrue, iffalse })),
+      }
+    )(s)
   }
 
   pub fn value_lvl5<'a>(d: SrcDialect<'a>, s: Src<'a>) -> Res<'a, Value<'a>> {
     // lvl4 or colon binop (note: only valid for esy, hopefully doesn't affect opam parsing)
-    let lvl4 = parser(d, value_lvl4);
-    let lvl5 = parser(d, value_lvl5);
-    alt((
-      map(
-        tuple(( lvl4, ws(colon), lvl5)),
-        |(a, op, b)| Value::Binop(Box::new(Binop { a, op, b }))
-      ),
-      lvl4
-    ))(s)
+    binop_layer(d, value_lvl4, colon, value_lvl5, s)
   }
 
   pub fn value<'a>(d: Dialect<Src<'a>, Value<'a>, SrcError<'a>>, s: Src<'a>) -> Res<'a, Value<'a>> {

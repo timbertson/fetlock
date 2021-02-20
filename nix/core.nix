@@ -52,7 +52,7 @@ let
 										# ensure `spec` and `key` are accessible through the drv
 										spec = { inherit key; } // v;
 										attrs = self.specToAttrs spec;
-										passthru = spec;
+										passthru = { inherit spec; };
 									in
 									self.mkDerivation (attrs // {
 										passthru = (attrs.passthru or {}) // passthru;

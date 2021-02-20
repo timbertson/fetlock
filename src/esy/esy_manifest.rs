@@ -1,4 +1,5 @@
 use anyhow::*;
+use lazy_static::lazy_static;
 use serde::Deserialize;
 use crate::{Expr,StringComponent};
 use crate::esy::build::*;
@@ -42,13 +43,27 @@ impl PackageJson {
   
   pub fn build<'c, C: NixCtx>(self, ctx: &C) -> Result<NixBuild> {
     let mut nix_build = NixBuild::empty(PkgType::Esy);
+    lazy_static! {
+      static ref IGNORE_ENV: Vec<&'static str> = vec!(
+        // ignore env vars that typical nix hooks take care of, since
+        // the nix hooks are more likely to get it right
+        "PATH",
+        "LD_LIBRARY_PATH",
+        "DYLD_LIBRARY_PATH",
+        "PKG_CONFIG_PATH",
+        "CAML_LD_LIBRARY_PATH",
+        "OCAMLLIB",
+        "OCAML_TOPLEVEL_PATH",
+      );
+    }
 
     if let Some(EsySpec { build, exported_env }) = self.esy {
       let parsed = Self::parse(&build.0)?;
       nix_build.build = Some(NixBuild::script(PkgType::Esy, ctx, parsed)?);
 
       let env_list = exported_env.into_iter()
-        .filter(|(k,export)| export.scope == "global")
+        .filter(|(k,export)| export.scope == "global"
+         && !IGNORE_ENV.iter().any(|ignored| ignored == k))
         .map(|(k,export)| (|| {
           let eval = Self::parse_str(&export.val)?;
           let expr = Eval::evaluate(eval, ctx)?.into_nix(ctx)?.canonicalize();

@@ -30,24 +30,66 @@ let
           }
           postUnpackHooks+=(esyCmake)
         '';
+        fixupLibPath = name: o: stdenv.mkDerivation (self.specToAttrs (o.spec // {
+          build = o.spec.build // {
+            exportedEnv = (o.spec.build.exportedEnv or []) ++ ["${name}_LIB_PATH=$out/lib"];
+          };
+        }));
+
       in [
-      (self.addBuildInputs {
-        autoconf = [m4 perl];
-        automake = [perl];
-        esy-help2man = [perl];
-        esy-tree-sitter = [gcc];
-        esy-sdl2 = [libGL.dev] ++ (ifDarwin [
-            osx.IOKit osx.CoreAudio
-            osx.Foundation osx.AudioToolbox
-            osx.AudioUnit osx.ForceFeedback
-          ]);
-        libvim = [ncurses.dev] ++ (ifDarwin [ osx.AppKit ]);
-        revery-esy-libvterm = [ perl ];
-        texinfo = [ perl ];
-        yarn-pkg-config = [ libiconv ];
-      })
-      (self.addPropagatedBuildInputs {
-        esy-cmake = [ pkgs.cmake cmakeHook ];
+      (self.override {
+        # skip esy builds entirely for things that are already packaged in nix
+        esy-nasm = _: pkgs.nasm;
+        #esy-skia = _: pkgs.aseprite.skia.overrideAttrs (_: {
+        #  pname = "esy-skia";
+        #});
+
+        # we could almost use upstream, except the esy-skia implementation
+        # exports some variables in its setuphook
+        esy-skia = o:
+        let attrs = self.specToAttrs (o.spec // {
+          build = {
+            inherit (o.spec.build) mode;
+            # strange path, but it's what aseprite produces :shrug:
+            exportedEnv = o.spec.build.exportedEnv ++ [ "SKIA_LIB_PATH=$out/out/Release" ];
+              # Cflags: -I$cur__install -I\${includedir}/android -I\${includedir}/atlastext -I\${includedir}/c -I\${includedir}/codec -I\${includedir}/config -I\${includedir}/core -I\${includedir}/docs -I\${includedir}/effects -I\${includedir}/encode -I\${includedir}/gpu -I\${includedir}/pathops -I\${includedir}/ports -I\${includedir}/private -I\${includedir}/svg -I\${includedir}/third_party -I\${includedir}/utils $extraCFlags
+            installPhase = ''
+              mkdir -p $out
+              cp -r ${pkgs.aseprite.skia}/. $out/
+              cp -r include/c $out/include/c
+            '';
+             #
+             # cat >$cur__lib/pkg-config/skia.pc << EOF
+             # includedir=$cur__install/include
+             # Name: skia
+             # Description: 2D graphics library
+             # Version: $cur__version
+             # Libs: -lskia -lstdc++
+             # EOF
+          };
+          # src = self.emptyDrv;
+        }); in
+        stdenv.mkDerivation (attrs // {
+          # propagatedBuildInputs = (attrs.propagatedBuildInputs or []) ++ [ libcxx ];
+        });
+        
+        # TODO raise PRs upstream
+        # all these packages make the mistake of exporting "${self.lib}" as an
+        # env var, despite not actually respecting that during build
+        # - they actually install into a hardcoded $out/lib
+        esy-sdl2 = fixupLibPath "SDL2";
+        esy-harfbuzz = fixupLibPath "HARFBUZZ";
+        esy-libjpeg-turbo = fixupLibPath "JPEG";
+        esy-tree-sitter = fixupLibPath "TREESITTER_LIB_PATH";
+        libvim = fixupLibPath "LIBVIM";
+
+        revery-esy-cmake = _: stdenv.mkDerivation rec {
+          pname = "revery-esy-cmake";
+          name = pname;
+          src = self.emptyDrv;
+          installPhase = "true";
+          propagatedBuildInputs = [ cmake cmakeHook ];
+        };
       })
       (self.overrideAttrs {
         ocaml = (o: {
@@ -93,62 +135,41 @@ let
           buildInputs = (o.buildInputs or []) ++ [m4 perl];
           propagatedBuildInputs = (o.propagatedBuildInputs or []) ++ [glibtool];
         });
-        # TODO this is specified in `exportedEnv` of package.json,
-        # but fetlock doesn't support that
-        esy-fzy = (o: {
-          installPhase = (o.installPhase or "") + ''
-            mkdir -p $out/nix-support
-            cat <<EOF > $out/nix-support/setup-hook
-              function exportFzyEnv {
-                echo '+ exportFzyEnv'
-                export FZY_INCLUDE_PATH=$out/include
-                export FZY_LIB_PATH=$cur__lib/esy-fzy
-                env | grep '^FZY_'
-              }
-              preBuildHooks+=(exportFzyEnv)
-            EOF
-          '';
-        });
         revery = (o: {
-          # TODO promote this more broadly, and maybe onoly on darwin?
+          # TODO promote this more broadly, and maybe only on darwin?
           # https://github.com/NixOS/nixpkgs/issues/39687
           hardeningDisable = ["strictoverflow"];
-          buildInputs = (o.buildInputs or []) ++ (ifDarwin [ osx.Cocoa ]);
-        });
-        # ctypes = (o: {
-        #   # TODO promote this to general setup hook?
-        #   # see https://linux.die.net/man/1/ocamlfind
-        #   installPhase = ''
-        #     mkdir -p $out/stublibs
-        #     #mkdir -p ${self.siteLib "$out"}/stublibs
-        #   '' + o.installPhase;
-        # });
-      })
-      (self.override {
-        # skip esy builds entirely for things that are already packaged in nix
-        esy-nasm = _: pkgs.nasm;
-        esy-skia = _: pkgs.aseprite.skia.overrideAttrs (_: {
-          pname = "esy-skia";
-        });
 
-        revery-esy-cmake = _: stdenv.mkDerivation rec {
-          pname = "revery-esy-cmake";
-          name = pname;
-          src = self.emptyDrv;
-          installPhase = "true";
-          propagatedBuildInputs = [ cmake cmakeHook ];
-        };
+          buildInputs = (o.buildInputs or [])
+            ++ [ libiconv ]
+            ++ (ifDarwin [ osx.Cocoa osx.ForceFeedback ]);
+          patches = [
+            # TODO:
+            # the stdcxx stuff should be fixed by https://github.com/ocaml/dune/pull/3802
+            # in dune 2.8
+            # The Foundation include should be upstreamed
+            ./revery-libcxx.diff # note: only works on darwin
+          ];
+        });
       })
-
-      #(self.override {
-      #  revery-esy-cmake = _: stdenv.mkDerivation rec {
-      #    pname = "revery-esy-cmake";
-      #    name = pname;
-      #    src = self.emptyDrv;
-      #    installPhase = "true";
-      #    propagatedBuildInputs = [ cmake cmakeHook ];
-      #  };
-      #})
+      (self.addBuildInputs {
+        autoconf = [m4 perl];
+        automake = [perl];
+        esy-help2man = [perl];
+        esy-sdl2 = [libGL.dev] ++ (ifDarwin [
+          osx.IOKit osx.CoreAudio
+          osx.Foundation osx.AudioToolbox
+          osx.AudioUnit osx.ForceFeedback
+        ]);
+        esy-tree-sitter = [gcc];
+        libvim = [ncurses.dev] ++ (ifDarwin [ osx.AppKit ]);
+        revery-esy-libvterm = [ perl ];
+        texinfo = [ perl ];
+        yarn-pkg-config = [ libiconv ];
+      })
+      (self.addPropagatedBuildInputs {
+        esy-cmake = [ pkgs.cmake cmakeHook ];
+      })
     ];
   };
 in

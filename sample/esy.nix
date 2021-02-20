@@ -2325,6 +2325,11 @@ in
           bash -c "${if final.os == "linux" then "./esy/configure-linux.sh" else "echo"}"
           ./esy/build.sh
         '';
+        exportedEnv = [
+          ("HARFBUZZ_BIN_PATH=${"$out/bin"}")
+          ("HARFBUZZ_INCLUDE_PATH=${"$out/include/harfbuzz"}")
+          ("HARFBUZZ_LIB_PATH=${"${(final.siteLib "$out")}/esy-harfbuzz"}")
+        ];
         mode = "esy";
       };
       opamName = "esy-harfbuzz";
@@ -2341,6 +2346,10 @@ in
       };
       build = {
         buildPhase = "bash -c \"${if final.os == "linux" then "CFLAGS=-fPIC" else ""} PREFIX=$cur__install ${if final.os == "windows" then "CC=x86_64-w64-mingw32-gcc" else ""} make install\"";
+        exportedEnv = [
+          ("LIBVTERM_INCLUDE_PATH=${"$out/include"}")
+          ("LIBVTERM_LIB_PATH=${"${(final.siteLib "$out")}/esy-libvterm"}")
+        ];
         mode = "esy";
       };
       opamName = "esy-libvterm";
@@ -2559,6 +2568,9 @@ in
       };
       build = {
         buildPhase = "bash ./build.sh \"${final.os}\"";
+        exportedEnv = [
+          ("ANGLE_LIB_PATH=${"${(final.siteLib "$out")}/esy-angle-prebuilt"}")
+        ];
         mode = "esy";
       };
     };
@@ -2594,6 +2606,10 @@ in
           bash -c "${if final.os == "windows" then "echo \\\"skipping-configure\\\"" else "./esy/configure.sh"}"
           bash -c "${if final.os == "windows" then "echo \\\"skipping-build\\\"" else "./esy/build.sh"}"
         '';
+        exportedEnv = [
+          ("FREETYPE2_INCLUDE_PATH=${"$out/include/freetype2"}")
+          ("FREETYPE2_LIB_PATH=${"${(final.siteLib "$out")}/esy-freetype2"}")
+        ];
         mode = "esy";
       };
     };
@@ -2621,6 +2637,10 @@ in
           ar rcs libfzy.a src/match.o src/choices.o src/options.o
           cp libfzy.a "${(final.siteLib "$out")}/esy-fzy"
         '';
+        exportedEnv = [
+          ("FZY_INCLUDE_PATH=${"$out/include"}")
+          ("FZY_LIB_PATH=${"${(final.siteLib "$out")}/esy-fzy"}")
+        ];
         mode = "esy";
       };
     };
@@ -2662,6 +2682,10 @@ in
       };
       build = {
         buildPhase = "${if final.os == "windows" then "echo esy-libjpeg-turbo currently works on on Linux/OSX" else "bash ./esy-build.sh"}";
+        exportedEnv = [
+          ("JPEG_INCLUDE_PATH=${"$out/include"}")
+          ("JPEG_LIB_PATH=${"${(final.siteLib "$out")}/esy-libjpeg-turbo"}")
+        ];
         mode = "esy";
       };
     };
@@ -2758,6 +2782,10 @@ in
           bash -c "${if final.os == "windows" then "CFLAGS=-O2 CC=x86_64-w64-mingw32-gcc ./configure --prefix=$cur__install --disable-dependency-tracking" else "CFLAGS=\\\"-O2 -fPIC\\\" ./configure --prefix=$cur__install --enable-shared=no --enable-static=yes --disable-dependency-tracking"}"
           make install
         '';
+        exportedEnv = [
+          ("ONIGURUMA_INCLUDE_PATH=${"$out/include"}")
+          ("ONIGURUMA_LIB_PATH=${"${(final.siteLib "$out")}/esy-oniguruma"}")
+        ];
         mode = "esy";
       };
     };
@@ -2772,6 +2800,10 @@ in
       };
       build = {
         buildPhase = "bash -c \"./build-scripts/esybuild.sh --os=${final.os}\"";
+        exportedEnv = [
+          ("SDL2_INCLUDE_PATH=${"$out/include"}")
+          ("SDL2_LIB_PATH=${"${(final.siteLib "$out")}/esy-sdl2"}")
+        ];
         mode = "esy";
       };
     };
@@ -2790,6 +2822,10 @@ in
       };
       build = {
         buildPhase = "bash ./esy/build.sh \"${final.os}\" \"${(final.getDrv "esy-libjpeg-turbo@github:revery-ui/libjpeg-turbo#dbb3dd5@d41d8cd9")}\"";
+        exportedEnv = [
+          ("SKIA_INCLUDE_PATH=${"$out/include"}")
+          ("SKIA_LIB_PATH=${"${(final.siteLib "$out")}/esy-skia"}")
+        ];
         mode = "esy";
       };
     };
@@ -2810,6 +2846,10 @@ in
           bash -c "${if final.os == "darwin" then "CC=gcc script/build-lib" else "echo"}"
           bash -c "${if final.os == "macOS" then "CC=gcc script/build-lib" else "echo"}"
         '';
+        exportedEnv = [
+          ("TREESITTER_INCLUDE_PATH=${"$out/include"}")
+          ("TREESITTER_LIB_PATH=${"${(final.siteLib "$out")}/esy-tree-sitter"}")
+        ];
         mode = "esy";
       };
     };
@@ -3047,6 +3087,10 @@ in
       };
       build = {
         buildPhase = "bash -c \"${if final.os == "windows" then "build/build-windows.sh" else "build/build-posix.sh"}\"";
+        exportedEnv = [
+          ("LIBVIM_INCLUDE_PATH=${"$out/include"}")
+          ("LIBVIM_LIB_PATH=${"${(final.siteLib "$out")}/libvim"}")
+        ];
         mode = "esy";
       };
     };

@@ -32,6 +32,33 @@ let
     }
     preBuildHooks+=(copyOpamFiles)
   '';
+
+  # does nix already have something for this?
+  exportEnvHook = { pname, exportedEnv }:
+    let fname = replaceStrings ["-"] ["_"] pname; in
+    prev.makeHook "export-env" ''
+    function writeEnvSetupHook {
+      echo "+ writeEnvSetupHook"
+      mkdir -p $out/nix-support
+    cat <<EOF > $out/nix-support/setup-hook
+        esyEnvFrom_${fname} () {
+          local out="$out"
+    EOF
+    cat <<"EOF" >> $out/nix-support/setup-hook
+          if [ "''${esyEnv_already_${fname}:-}" = 1 ]; then
+            return
+          fi
+          export esyEnv_already_${fname}=1
+          echo "+ esyEnvFrom_${fname}"
+      ${
+        concatStringsSep "\n" (map (line: "echo \"+ ${line}\"\nexport \"${line}\"") exportedEnv)
+      }
+        }
+        addEnvHooks "$targetOffset" esyEnvFrom_${fname}
+    EOF
+    }
+    preInstallHooks+=(writeEnvSetupHook)
+  '';
   
   getDepext = p: getAttrFromPath (splitString "." p) final.pkgs;
 in
@@ -43,7 +70,7 @@ in
   buildInputs ? [],
   opamName ? null,
   files ? null,
-}:
+}@spec:
   let finalBuild = populateBuildPhases build; in addHooks build.mode ({
     inherit pname version depKeys src;
     configurePhase = "true";
@@ -55,8 +82,11 @@ in
       (map final.getDrv depKeys) ++
       (map getDepext (build.depexts or []));
  
-    buildInputs = buildInputs ++ commonBuildDeps ++
-      (if files != null then [ copyFilesHook ] else []);
+    buildInputs = buildInputs ++ commonBuildDeps
+      ++ (if files != null then [ copyFilesHook ] else [])
+      ++ (if build ? exportedEnv
+        then [ (exportEnvHook { inherit pname; inherit (build) exportedEnv; }) ]
+        else []);
   }
     // (if opamName != null then { inherit opamName; } else {})
     // (if files != null then { inherit files; } else {})

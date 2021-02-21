@@ -16,6 +16,8 @@ use futures::StreamExt;
 use std::borrow::{Borrow,BorrowMut};
 use std::collections::{HashMap, BTreeMap};
 use std::fmt;
+use std::rc::Rc;
+use std::path::*;
 use std::io::Write;
 
 #[derive(Clone, Debug)]
@@ -52,7 +54,7 @@ impl EsyLock {
 		Ok(InstalledPkgs { esy, opam })
 	}
 	
-	async fn finalize_spec(esy_spec: &mut EsySpec, installed: &InstalledPkgs) -> Result<()> {
+	async fn finalize_spec(opam_repo: Rc<PathBuf>, esy_spec: &mut EsySpec, installed: &InstalledPkgs) -> Result<()> {
 		info!("[esy]: {}", esy_spec.spec.id.name);
 		let name = Name(esy_spec.spec.id.name.to_owned());
 		
@@ -75,13 +77,11 @@ impl EsyLock {
 					extract.ok_or_else(||anyhow!("manifest path given, but no source given"))?
 						.file_contents(&manifest_path).await?
 				} else {
-					// TODO get your own checkout, stop hardcoding
-					let repo_path = std::path::PathBuf::from("/Users/tcuthbertson/.cache/opam2nix/repos/opam-repository/");
-					let repo = fetch::ExtractSource::from(&repo_path).await?;
+					let repo = fetch::ExtractSource::from(&opam_repo).await?;
 					let version = &esy_spec.spec.id.version;
 					let prefix = format!("packages/{}/{}.{}", name.0, name.0, version);
 					// TODO as above...
-					let files_path = repo_path.join(format!("{}/files", prefix));
+					let files_path = opam_repo.join(format!("{}/files", prefix));
 					if files_path.exists() {
 						files = Some(Expr::Literal(files_path.to_string_lossy().to_string()));
 					}
@@ -161,6 +161,13 @@ impl Backend for EsyLock {
 			},
 			None => warn!("no `ocaml` implementation found, you will need to supply one at import time"),
 		}
+
+		// TODO this is unnecessary if you don't have any opam packages
+		let opam_repo_git = GithubRepo {
+			owner: "ocaml".to_owned(),
+			repo: "opam-repository".to_owned(),
+		};
+		let opam_repo = Rc::new(crate::cache::cached_repo(&opam_repo_git).await?);
 		
 		let installed = self.partition_specs()?;
 		let installed_ref = &installed;
@@ -172,10 +179,13 @@ impl Backend for EsyLock {
 
 		let specs = self.lock.specs.values_mut(); // .collect::<Vec<EsySpec>>();
 		let mut stream = futures::stream::iter(specs)
-			.map(|esy_spec| async move {
-				// let id = esy_spec.spec.id.clone();
-				Self::finalize_spec(esy_spec, installed_ref).await
-					.with_context(|| format!("Finalizing spec: {:?}", esy_spec))
+			.map(|esy_spec| {
+				let opam_repo_ref = opam_repo.clone();
+				async move {
+					// let id = esy_spec.spec.id.clone();
+					Self::finalize_spec(opam_repo_ref, esy_spec, installed_ref).await
+						.with_context(|| format!("Finalizing spec: {:?}", esy_spec))
+				}
 			})
 			.buffer_unordered(parallelism);
 
@@ -395,8 +405,10 @@ impl EsySrcVisitor {
 				let manifest = manifest.map(|m| m.to_owned());
 				Ok(EsySrc {
 					src: Src::Github(Github {
-						owner,
-						repo,
+					  repo: GithubRepo {
+							owner,
+							repo,
+						},
 						git_ref,
 						fetch_submodules: false, // may be modified in fetch::upgrade_gitmodules
 					}),

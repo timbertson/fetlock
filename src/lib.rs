@@ -5,6 +5,7 @@ pub use expr::*;
 mod lock;
 pub use lock::*;
 mod backend;
+mod cache;
 pub mod err;
 pub mod esy;
 pub mod fetch;

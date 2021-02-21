@@ -140,10 +140,36 @@ impl LockContext {
 	}
 }
 
+pub trait GitUrl {
+	fn git_url(&self) -> String;
+}
+
 #[derive(Debug, Clone)]
-pub struct Github {
+pub struct GithubRepo {
 	pub owner: String,
 	pub repo: String,
+}
+
+impl GitUrl for GithubRepo {
+	fn git_url(&self) -> String {
+		format!("https://github.com/{}/{}.git", &self.owner, &self.repo)
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct GitRepo {
+	url: String,
+}
+
+impl GitUrl for GitRepo {
+	fn git_url(&self) -> String {
+		self.url.to_owned()
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct Github {
+  pub repo: GithubRepo,
 	pub git_ref: String,
 	pub fetch_submodules: bool,
 }

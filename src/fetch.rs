@@ -1,5 +1,6 @@
 use crate::lock::*;
 use crate::nix_serialize::*;
+use crate::cache::{cache_hash, cache_root};
 use anyhow::*;
 use futures::StreamExt;
 use lazy_static::lazy_static;
@@ -37,22 +38,13 @@ async fn ensure_digest(implementation: &mut Spec) -> Result<()> {
 	Ok(())
 }
 
-fn cache_filename(src: &Src) -> String {
-	use sha2::{Digest, Sha256};
-	let mut hasher = Sha256::new();
-	// using Debug formatting is lazy, but easy :shrug:
-	hasher.update(format!("{:?}", src));
-	let mut hex = hex::encode(hasher.finalize());
-	hex.truncate(24);
-	hex
-}
-
 async fn calculate_digest(src: &Src) -> Result<Sha256> {
-	let cache_filename = cache_filename(src);
+	// using Debug formatting is lazy, but easy :shrug:
+	let cache_filename = cache_hash(&format!("{:?}", src));
 	let cache_shard = &cache_filename[0..2];
 
-	let mut cache_dir = PathBuf::from(std::env::var("HOME").unwrap());
-	cache_dir.push(".cache/fetlock/digests");
+	let mut cache_dir = cache_root();
+	cache_dir.push("digests");
 	cache_dir.push(cache_shard);
 
 	let cache_path = cache_dir.join(cache_filename);

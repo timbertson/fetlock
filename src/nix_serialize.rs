@@ -379,8 +379,10 @@ impl Writeable for SrcDigest<'_> {
 		match src {
 			Src::Github(github) => {
 				let Github {
-					owner,
-					repo,
+					repo: GithubRepo {
+						owner,
+						repo,
+					},
 					git_ref,
 					fetch_submodules,
 				} = github;

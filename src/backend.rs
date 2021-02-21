@@ -10,7 +10,7 @@ use std::borrow::BorrowMut;
 // https://github.com/rust-lang/rust/issues/64650
 #[async_trait(?Send)]
 pub trait Backend: Sized {
-	type Spec : BorrowMut<Spec> + Writeable;
+	type Spec: BorrowMut<Spec> + Writeable;
 
 	fn load(path: &str) -> Result<Self>;
 

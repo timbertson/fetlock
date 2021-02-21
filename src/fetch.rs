@@ -1,21 +1,23 @@
+use crate::cache::{cache_hash, cache_root};
 use crate::lock::*;
 use crate::nix_serialize::*;
-use crate::cache::{cache_hash, cache_root};
 use anyhow::*;
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use log::*;
 use regex::Regex;
+use std::borrow::BorrowMut;
+use std::fmt;
 use std::io::{ErrorKind, Write};
 use std::path::PathBuf;
-use std::str;
-use std::fmt;
-use std::borrow::BorrowMut;
 use std::process::Stdio;
+use std::str;
 use tokio::fs;
 use tokio::process::Command;
 
-pub async fn populate_source_digests<S: BorrowMut<Spec> + Writeable>(lock: &mut Lock<S>) -> Result<()> {
+pub async fn populate_source_digests<S: BorrowMut<Spec> + Writeable>(
+	lock: &mut Lock<S>,
+) -> Result<()> {
 	let impls = lock.specs.values_mut().map(|x| x.borrow_mut());
 	let mut stream = futures::stream::iter(impls)
 		.map(|i| ensure_digest(i))
@@ -53,9 +55,7 @@ async fn calculate_digest(src: &Src) -> Result<Sha256> {
 		&cache_path, src
 	);
 	match fs::read(&cache_path).await {
-		Ok(bytes) => {
-			Ok(Sha256::new(String::from_utf8(bytes)?.trim_end().to_owned()))
-		}
+		Ok(bytes) => Ok(Sha256::new(String::from_utf8(bytes)?.trim_end().to_owned())),
 		Err(e) => {
 			if e.kind() == ErrorKind::NotFound {
 				info!("fetch: {:?}", src);
@@ -152,7 +152,10 @@ pub async fn realise_source(spec: &Spec) -> Result<Option<PathBuf>> {
 }
 
 #[derive(Debug, Clone)]
-enum ArchiveType { Tar, Zip }
+enum ArchiveType {
+	Tar,
+	Zip,
+}
 
 #[derive(Clone)]
 struct ArchiveListing {
@@ -170,7 +173,7 @@ impl fmt::Debug for ArchiveListing {
 #[derive(Debug, Clone)]
 enum SourceType {
 	Archive(ArchiveListing),
-	Directory
+	Directory,
 }
 
 #[derive(Debug, Clone)]
@@ -185,7 +188,7 @@ impl ExtractSource<'_> {
 			SourceType::Directory
 		} else {
 			(|| async {
-				let root_str = root.to_str().ok_or_else(||anyhow!("non-utf8 root path"))?;
+				let root_str = root.to_str().ok_or_else(|| anyhow!("non-utf8 root path"))?;
 				let (mut cmd, archive_type) = if root_str.ends_with(".zip") {
 					let mut cmd = Command::new("unzip");
 					cmd.arg("-Z1").arg(root_str);
@@ -204,19 +207,28 @@ impl ExtractSource<'_> {
 				} else {
 					let raw_listing = String::from_utf8(output.stdout)?;
 					// first grab the root directory
-					let first_line = raw_listing.lines().next().ok_or_else(|| anyhow!("no output received from `tar`"))?;
-					let first_component = first_line.split("/").next().expect("empty split").to_owned();
+					let first_line = raw_listing
+						.lines()
+						.next()
+						.ok_or_else(|| anyhow!("no output received from `tar`"))?;
+					let first_component = first_line
+						.split("/")
+						.next()
+						.expect("empty split")
+						.to_owned();
 					Ok(SourceType::Archive(ArchiveListing {
 						archive_type,
 						raw_listing,
-						first_component
+						first_component,
 					}))
 				}
-			})().await.with_context(||format!("getting archive root for {:?}", root))?
+			})()
+			.await
+			.with_context(|| format!("getting archive root for {:?}", root))?
 		};
 		Ok(ExtractSource { root, source_type })
 	}
-	
+
 	pub async fn upgrade_gitmodules(&self, spec: &mut Spec) -> Result<()> {
 		// note we don't actually switch the extracted source, we assume that any
 		// files we need to inspect as part of fetlock aren't behind a submodule
@@ -226,8 +238,8 @@ impl ExtractSource<'_> {
 					gh.fetch_submodules = true;
 					spec.digest = Some(do_prefetch(&spec.src).await?);
 				}
-			},
-			_ => ()
+			}
+			_ => (),
 		}
 		Ok(())
 	}
@@ -238,34 +250,43 @@ impl ExtractSource<'_> {
 			SourceType::Archive(listing) => {
 				let expected = format!("{}/{}", listing.first_component, file);
 				listing.raw_listing.lines().any(|line| line == expected)
-			},
+			}
 		}
 	}
 
 	pub async fn file_contents(&self, file: &str) -> Result<String> {
-		let bytes = (|| async move { match &self.source_type {
-			SourceType::Directory => Ok(fs::read(self.root.join(file)).await?),
-			SourceType::Archive(listing) => {
-				let root_str = self.root.to_str().ok_or_else(||anyhow!("non-utf8 root path"))?;
-				let archive_path = format!("{}/{}", listing.first_component, file);
-				let mut cmd = Command::new("tar");
-				cmd
-					.arg("xf")
-					.arg(root_str)
-					.arg("--to-stdout")
-					.arg("--extract")
-					.arg(&archive_path)
-					.stdout(Stdio::piped())
-					.kill_on_drop(true);
-				debug!("{:?}", cmd);
-				let output = cmd.spawn()?.wait_with_output().await?;
-				if !output.status.success() {
-					Err(anyhow!("Process `tar` failed to extract {} from {:?}", file, self))
-				} else {
-					Ok(output.stdout)
+		let bytes = (|| async move {
+			match &self.source_type {
+				SourceType::Directory => Ok(fs::read(self.root.join(file)).await?),
+				SourceType::Archive(listing) => {
+					let root_str = self
+						.root
+						.to_str()
+						.ok_or_else(|| anyhow!("non-utf8 root path"))?;
+					let archive_path = format!("{}/{}", listing.first_component, file);
+					let mut cmd = Command::new("tar");
+					cmd.arg("xf")
+						.arg(root_str)
+						.arg("--to-stdout")
+						.arg("--extract")
+						.arg(&archive_path)
+						.stdout(Stdio::piped())
+						.kill_on_drop(true);
+					debug!("{:?}", cmd);
+					let output = cmd.spawn()?.wait_with_output().await?;
+					if !output.status.success() {
+						Err(anyhow!(
+							"Process `tar` failed to extract {} from {:?}",
+							file,
+							self
+						))
+					} else {
+						Ok(output.stdout)
+					}
 				}
-			},
-		}})().await?;
+			}
+		})()
+		.await?;
 		Ok(String::from_utf8(bytes)?)
 	}
 }

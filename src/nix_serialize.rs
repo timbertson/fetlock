@@ -31,14 +31,12 @@ impl StringMode {
 			StringMode::DoubleQuote
 		}
 	}
-	
+
 	pub fn preferred_v(s: &Vec<StringComponent>) -> StringMode {
-		let mut preferred = s.iter().map(|part|
-			match part {
-				StringComponent::Literal(s) => Self::preferred(s),
-				StringComponent::Expr(_) => StringMode::DoubleQuote,
-			}
-		);
+		let mut preferred = s.iter().map(|part| match part {
+			StringComponent::Literal(s) => Self::preferred(s),
+			StringComponent::Expr(_) => StringMode::DoubleQuote,
+		});
 		if preferred.any(|p| p == StringMode::Multiline) {
 			StringMode::Multiline
 		} else {
@@ -46,7 +44,6 @@ impl StringMode {
 		}
 	}
 }
-
 
 impl<W: Write> WriteContext<'_, W> {
 	pub fn initial<'a>(file: &'a mut W) -> WriteContext<'a, W> {
@@ -166,9 +163,7 @@ impl<W: Write> WriteContext<'_, W> {
 
 	fn write_nix_string<V: fmt::Display>(&mut self, v: &V) -> Result<()> {
 		let mode = StringMode::DoubleQuote;
-		self.wrap_nix_string(mode, |c| {
-			c.write_nix_string_inner(mode, v)
-		})
+		self.wrap_nix_string(mode, |c| c.write_nix_string_inner(mode, v))
 	}
 
 	fn wrap_nix_string(
@@ -177,12 +172,8 @@ impl<W: Write> WriteContext<'_, W> {
 		f: impl Fn(&mut WriteContext<W>) -> Result<()>,
 	) -> Result<()> {
 		match mode {
-			StringMode::DoubleQuote => {
-				self.bracketed_with(false, "\"", "\"", f)
-			},
-			StringMode::Multiline => {
-				self.bracketed_with(true, "''", "''", f)
-			},
+			StringMode::DoubleQuote => self.bracketed_with(false, "\"", "\"", f),
+			StringMode::Multiline => self.bracketed_with(true, "''", "''", f),
 		}
 	}
 
@@ -269,25 +260,24 @@ impl Writeable for Expr {
 					part.write_to(c)?;
 				}
 				Ok(())
-			},
+			}
 			Expr::Bool(b) => c.write(format_args!("{}", b)),
 			Expr::Str(s) => {
 				let mode = StringMode::preferred_v(&s);
 				c.wrap_nix_string(mode, |c| {
 					for part in s {
 						match part {
-							StringComponent::Literal(s) =>
-								c.write_nix_string_inner(mode, s)?,
+							StringComponent::Literal(s) => c.write_nix_string_inner(mode, s)?,
 							StringComponent::Expr(e) => {
 								c.write_str("${")?;
 								e.write_to(c)?;
 								c.write_str("}")?;
-							},
+							}
 						}
 					}
 					Ok(())
 				})
-			},
+			}
 			Expr::Identifier(s) => c.write_str(s),
 			Expr::AttrSet(h) => h.write_to(c),
 			Expr::FunCall(fc) => {
@@ -351,7 +341,7 @@ impl Writeable for Spec {
 			c.attr(&"pname", &DrvName::new(name))?;
 			c.attr(&"version", &DrvName::new(version))?;
 			c.attr(&"depKeys", dep_keys)?;
-			
+
 			let build_inputs = self.build_inputs();
 			if build_inputs.len() > 0 {
 				c.attr(&"buildInputs", &Expr::List(build_inputs))?;
@@ -379,10 +369,7 @@ impl Writeable for SrcDigest<'_> {
 		match src {
 			Src::Github(github) => {
 				let Github {
-					repo: GithubRepo {
-						owner,
-						repo,
-					},
+					repo: GithubRepo { owner, repo },
 					git_ref,
 					fetch_submodules,
 				} = github;
@@ -485,7 +472,11 @@ impl<K: fmt::Display + Debug + Clone, V: Writeable> Writeable for BTreeMap<K, V>
 
 impl<Spec: Writeable + Debug + Clone> Writeable for Lock<Spec> {
 	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
-		let Lock { context, vars, specs } = self;
+		let Lock {
+			context,
+			vars,
+			specs,
+		} = self;
 		c.write_str("final: prev:")?;
 		c.nl()?;
 		c.write_str("let")?;

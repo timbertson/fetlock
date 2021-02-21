@@ -43,24 +43,27 @@ impl<X: fmt::Debug + Clone + PartialEq + Eq> StringComponentOf<X> {
 		}
 	}
 
-	pub fn append<T: StringMerge>(dest: &mut Vec<StringComponentOf<T>>, v: StringComponentOf<T>) -> () {
+	pub fn append<T: StringMerge>(
+		dest: &mut Vec<StringComponentOf<T>>,
+		v: StringComponentOf<T>,
+	) -> () {
 		match v {
 			StringComponentOf::Literal(s) => Self::push_literal(dest, s),
-			StringComponentOf::Expr(e) => {
-				match e.into_string_components() {
-					Ok(components) => components.into_iter().for_each(|part| Self::append(dest, part)),
-					Err(e) => dest.push(StringComponentOf::Expr(e)),
-				}
-			}
+			StringComponentOf::Expr(e) => match e.into_string_components() {
+				Ok(components) => components
+					.into_iter()
+					.for_each(|part| Self::append(dest, part)),
+				Err(e) => dest.push(StringComponentOf::Expr(e)),
+			},
 		}
 	}
-	
+
 	pub fn as_static_string(parts: &Vec<StringComponentOf<X>>) -> Result<String, ()> {
 		let mut literals = Vec::new();
 		for v in parts {
 			match v {
 				StringComponentOf::Literal(l) => literals.push(l.as_str()),
-				StringComponentOf::Expr(_) => { return Err(()) },
+				StringComponentOf::Expr(_) => return Err(()),
 			}
 		}
 		Ok(literals.join(""))
@@ -69,7 +72,9 @@ impl<X: fmt::Debug + Clone + PartialEq + Eq> StringComponentOf<X> {
 
 impl<T: fmt::Debug + Clone + Eq> StringComponentOf<T> {
 	pub fn map_result<R, F>(self, f: F) -> Result<StringComponentOf<R>>
-		where F: Fn(T) -> Result<R>, R: fmt::Debug + Clone + Eq
+	where
+		F: Fn(T) -> Result<R>,
+		R: fmt::Debug + Clone + Eq,
 	{
 		match self {
 			StringComponentOf::Literal(s) => Ok(StringComponentOf::Literal(s)),
@@ -78,7 +83,9 @@ impl<T: fmt::Debug + Clone + Eq> StringComponentOf<T> {
 	}
 
 	pub fn map<R, F>(self, f: F) -> StringComponentOf<R>
-		where F: Fn(T) -> R, R: fmt::Debug + Clone + Eq
+	where
+		F: Fn(T) -> R,
+		R: fmt::Debug + Clone + Eq,
 	{
 		match self {
 			StringComponentOf::Literal(s) => StringComponentOf::Literal(s),
@@ -104,7 +111,7 @@ pub enum Expr {
 
 impl Expr {
 	pub fn str(s: String) -> Expr {
-		Expr::Str(vec!(StringComponent::Literal(s)))
+		Expr::Str(vec![StringComponent::Literal(s)])
 	}
 
 	pub fn is_list(&self) -> bool {
@@ -113,14 +120,14 @@ impl Expr {
 			_ => false,
 		}
 	}
-	
+
 	pub fn flatten(self) -> Expr {
 		match self {
 			Expr::List(_) => {
 				let mut dest = Vec::new();
 				self.flatten_into(&mut dest);
 				Expr::List(dest)
-			},
+			}
 			other => other,
 		}
 	}
@@ -131,11 +138,13 @@ impl Expr {
 				for item in l {
 					item.flatten_into(dest);
 				}
-			},
-			other => { dest.push(other); },
+			}
+			other => {
+				dest.push(other);
+			}
 		}
 	}
-	
+
 	pub fn needs_bash_quotes(&self) -> bool {
 		match self {
 			Expr::Str(parts) => parts.iter().any(|part| {
@@ -152,14 +161,17 @@ impl Expr {
 
 	pub fn escape_for_bash(self) -> Self {
 		match self {
-			Expr::Str(parts) => Expr::Str(parts.into_iter().map(|part|
-				match part {
-					StringComponent::Literal(s) => StringComponent::Literal(
-						s.replace('\\', r#"\\"#).replace('"', r#"\""#)
-					),
-					StringComponent::Expr(e) => StringComponent::Expr(e.escape_for_bash()),
-				}
-			).collect()),
+			Expr::Str(parts) => Expr::Str(
+				parts
+					.into_iter()
+					.map(|part| match part {
+						StringComponent::Literal(s) => {
+							StringComponent::Literal(s.replace('\\', r#"\\"#).replace('"', r#"\""#))
+						}
+						StringComponent::Expr(e) => StringComponent::Expr(e.escape_for_bash()),
+					})
+					.collect(),
+			),
 
 			Expr::List(v) => Expr::List(v.into_iter().map(|v| v.escape_for_bash()).collect()),
 			Expr::LitSeq(v) => Expr::LitSeq(v.into_iter().map(|v| v.escape_for_bash()).collect()),
@@ -169,8 +181,7 @@ impl Expr {
 			| Expr::Literal(_)
 			| Expr::AttrPath(_)
 			| Expr::FunCall(_)
-			| Expr::AttrSet(_)
-			=> self,
+			| Expr::AttrSet(_) => self,
 		}
 	}
 
@@ -178,7 +189,7 @@ impl Expr {
 		// TODO this is a bit lazy, we could just inline `final.pkgs."key"` but it needs another Expr type
 		Expr::FunCall(Box::new(FunCall {
 			subject: Expr::Literal("final.getDrv".to_owned()),
-			args: vec!(Expr::str(key))
+			args: vec![Expr::str(key)],
 		}))
 	}
 
@@ -191,8 +202,8 @@ impl Expr {
 					StringComponent::append(&mut dest, v);
 				}
 				Str(dest)
-			},
-			other => other
+			}
+			other => other,
 		}
 	}
 }
@@ -201,7 +212,7 @@ impl StringMerge for Expr {
 	fn into_string_components(self) -> Result<Vec<StringComponent>, Self> {
 		match self {
 			Self::Str(components) => Ok(components),
-			Self::Bool(b) => Ok(vec!(StringComponent::Literal(format!("{}", b)))),
+			Self::Bool(b) => Ok(vec![StringComponent::Literal(format!("{}", b))]),
 			expr => Err(expr),
 		}
 	}

@@ -30,9 +30,9 @@ pub struct Key(String);
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Name(pub String);
 impl std::borrow::Borrow<str> for Name {
-  fn borrow(&self) -> &str {
-    self.0.as_str()
-  }
+	fn borrow(&self) -> &str {
+		self.0.as_str()
+	}
 }
 
 impl Key {
@@ -169,7 +169,7 @@ impl GitUrl for GitRepo {
 
 #[derive(Debug, Clone)]
 pub struct Github {
-  pub repo: GithubRepo,
+	pub repo: GithubRepo,
 	pub git_ref: String,
 	pub fetch_submodules: bool,
 }
@@ -272,7 +272,7 @@ impl Spec {
 			digest,
 		})
 	}
-	
+
 	pub fn build_inputs(&self) -> Vec<Expr> {
 		let mut ret = self.build_inputs.clone();
 		if self.src.extension().map_or(false, |ext| ext == "zip") {

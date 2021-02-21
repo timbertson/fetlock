@@ -1,24 +1,24 @@
 // esy.lock backend
 
-use crate::esy::{command, eval, esy_manifest};
-use crate::esy::opam_manifest::Opam;
-use crate::esy::eval::Pkg;
 use crate::esy::build::PkgType;
+use crate::esy::eval::Pkg;
+use crate::esy::opam_manifest::Opam;
+use crate::esy::{command, esy_manifest, eval};
 use crate::fetch;
+use crate::nix_serialize::{WriteContext, Writeable};
 use crate::*;
-use crate::nix_serialize::{Writeable, WriteContext};
 use anyhow::*;
 use async_trait::async_trait;
+use futures::StreamExt;
 use log::*;
 use serde::de::*;
 use serde::Deserialize;
-use futures::StreamExt;
-use std::borrow::{Borrow,BorrowMut};
-use std::collections::{HashMap, BTreeMap};
+use std::borrow::{Borrow, BorrowMut};
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
-use std::rc::Rc;
-use std::path::*;
 use std::io::Write;
+use std::path::*;
+use std::rc::Rc;
 
 #[derive(Clone, Debug)]
 pub struct EsyLock {
@@ -42,22 +42,30 @@ impl EsyLock {
 
 		for (key, spec) in self.lock.specs.iter_mut() {
 			let name = Name(spec.spec.id.name.to_owned());
-			match spec.meta.pkg_type.ok_or_else(||anyhow!("pkg_type not populated: {:?}", spec))? {
+			match spec
+				.meta
+				.pkg_type
+				.ok_or_else(|| anyhow!("pkg_type not populated: {:?}", spec))?
+			{
 				PkgType::Opam => {
 					opam.insert(name.clone(), pkg(name, key));
-				},
+				}
 				PkgType::Esy => {
 					esy.insert(name.clone(), pkg(name, key));
-				},
+				}
 			}
 		}
 		Ok(InstalledPkgs { esy, opam })
 	}
-	
-	async fn finalize_spec(opam_repo: Rc<PathBuf>, esy_spec: &mut EsySpec, installed: &InstalledPkgs) -> Result<()> {
+
+	async fn finalize_spec(
+		opam_repo: Rc<PathBuf>,
+		esy_spec: &mut EsySpec,
+		installed: &InstalledPkgs,
+	) -> Result<()> {
 		info!("[esy]: {}", esy_spec.spec.id.name);
 		let name = Name(esy_spec.spec.id.name.to_owned());
-		
+
 		let path = fetch::realise_source(&esy_spec.spec).await?;
 		let path_ref = path.as_ref();
 		let extract = if let Some(path_ref) = path_ref {
@@ -70,12 +78,18 @@ impl EsyLock {
 			None
 		};
 
-		match esy_spec.meta.pkg_type.ok_or_else(||anyhow!("pkg_type not set"))? {
+		match esy_spec
+			.meta
+			.pkg_type
+			.ok_or_else(|| anyhow!("pkg_type not set"))?
+		{
 			PkgType::Opam => {
 				let mut files = None;
 				let manifest = if let Some(manifest_path) = esy_spec.meta.manifest_path.as_ref() {
-					extract.ok_or_else(||anyhow!("manifest path given, but no source given"))?
-						.file_contents(&manifest_path).await?
+					extract
+						.ok_or_else(|| anyhow!("manifest path given, but no source given"))?
+						.file_contents(&manifest_path)
+						.await?
 				} else {
 					let repo = fetch::ExtractSource::from(&opam_repo).await?;
 					let version = &esy_spec.spec.id.version;
@@ -91,14 +105,15 @@ impl EsyLock {
 				let opam = Opam::from_str(&manifest)
 					.with_context(|| format!("parsing opam manifest:\n{}", &manifest))?;
 				debug!("parsed opam: {:?}", opam);
-				let build = opam.into_nix(&nix_ctx)
+				let build = opam
+					.into_nix(&nix_ctx)
 					.with_context(|| format!("evaluating opam:\n{:?}", &manifest))?;
 				debug!(" -> as nix: {:?}", build);
 				esy_spec.spec.extra.insert("build".to_owned(), build.expr());
 				if let Some(files) = files {
 					esy_spec.spec.extra.insert("files".to_owned(), files);
 				}
-			},
+			}
 			PkgType::Esy => {
 				if let Some(extract) = extract {
 					// NOTE: some esy packages are just npm packages, depending on whether they have
@@ -118,18 +133,30 @@ impl EsyLock {
 					// If the name is e.g. @esy-ocaml/foo, just use "foo" as the name
 					// (we don't replace `pname` since that's used to build the attrset,
 					// but we pass it as `opamName` if it differs from `pname`)
-					let opam_name = Name(esy.name.rsplit('/').next().expect("split is empty").to_string());
+					let opam_name = Name(
+						esy.name
+							.rsplit('/')
+							.next()
+							.expect("split is empty")
+							.to_string(),
+					);
 					if let Some(version) = &esy.version {
 						esy_spec.spec.id.version = version.clone();
 					};
 
 					let nix_ctx = eval::Ctx::from_map(PkgType::Esy, &opam_name, &installed.esy);
-					esy_spec.spec.extra.insert("build".to_owned(), esy.build(&nix_ctx)?.expr());
+					esy_spec
+						.spec
+						.extra
+						.insert("build".to_owned(), esy.build(&nix_ctx)?.expr());
 					if esy_spec.spec.id.name != opam_name.0 {
-						esy_spec.spec.extra.insert("opamName".to_owned(), Expr::str(opam_name.0));
+						esy_spec
+							.spec
+							.extra
+							.insert("opamName".to_owned(), Expr::str(opam_name.0));
 					}
 				}
-			},
+			}
 		}
 		Ok(())
 	}
@@ -146,20 +173,27 @@ impl Backend for EsyLock {
 		let lock: EsyLock = serde_json::from_str(&contents)?;
 		Ok(lock)
 	}
-	
+
 	fn lock_mut(&mut self) -> &mut Lock<Self::Spec> {
 		&mut self.lock
 	}
 
 	async fn finalize(mut self) -> Result<Lock<Self::Spec>> {
-		match self.lock.specs.iter().find(|(key, esy_spec)| esy_spec.spec.id.name == "ocaml") {
+		match self
+			.lock
+			.specs
+			.iter()
+			.find(|(key, esy_spec)| esy_spec.spec.id.name == "ocaml")
+		{
 			Some((key, esy_spec)) => {
-				self.lock.context.extra.insert(
-					"ocaml".to_owned(),
-					Expr::get_drv(key.to_string())
-				);
-			},
-			None => warn!("no `ocaml` implementation found, you will need to supply one at import time"),
+				self.lock
+					.context
+					.extra
+					.insert("ocaml".to_owned(), Expr::get_drv(key.to_string()));
+			}
+			None => {
+				warn!("no `ocaml` implementation found, you will need to supply one at import time")
+			}
 		}
 
 		// TODO this is unnecessary if you don't have any opam packages
@@ -168,10 +202,10 @@ impl Backend for EsyLock {
 			repo: "opam-repository".to_owned(),
 		};
 		let opam_repo = Rc::new(crate::cache::cached_repo(&opam_repo_git).await?);
-		
+
 		let installed = self.partition_specs()?;
 		let installed_ref = &installed;
-		
+
 		let parallelism = 10;
 		// TODO sorting and no parallelism makes ordering deterministic for testing
 		// let parallelism = 1;
@@ -183,7 +217,8 @@ impl Backend for EsyLock {
 				let opam_repo_ref = opam_repo.clone();
 				async move {
 					// let id = esy_spec.spec.id.clone();
-					Self::finalize_spec(opam_repo_ref, esy_spec, installed_ref).await
+					Self::finalize_spec(opam_repo_ref, esy_spec, installed_ref)
+						.await
 						.with_context(|| format!("Finalizing spec: {:?}", esy_spec))
 				}
 			})
@@ -333,7 +368,11 @@ impl<'de> Visitor<'de> for EsySpecVisitor {
 					partial.id.set_version(version);
 				}
 				"source" => {
-					let EsySrc { src, manifest, opam } = map.next_value::<EsySrc>()?;
+					let EsySrc {
+						src,
+						manifest,
+						opam,
+					} = map.next_value::<EsySrc>()?;
 					partial.set_src(src);
 					opam_src = opam;
 					if let Some(manifest) = manifest {
@@ -405,10 +444,7 @@ impl EsySrcVisitor {
 				let manifest = manifest.map(|m| m.to_owned());
 				Ok(EsySrc {
 					src: Src::Github(Github {
-					  repo: GithubRepo {
-							owner,
-							repo,
-						},
+						repo: GithubRepo { owner, repo },
 						git_ref,
 						fetch_submodules: false, // may be modified in fetch::upgrade_gitmodules
 					}),
@@ -499,14 +535,14 @@ impl<'de> Visitor<'de> for EsySrcVisitor {
 				}
 			}
 		}
-		
+
 		err::into_serde(match typ {
 			Some(SrcType::Install) => {
 				if let Some(mut src) = src.as_mut() {
 					src.opam = opam;
 				}
 				src.ok_or_else(|| anyhow!("Missing `source.source`"))
-			},
+			}
 			Some(SrcType::LinkDev) => Ok(EsySrc {
 				src: Src::None,
 				manifest: None,

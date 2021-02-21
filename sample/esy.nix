@@ -2383,7 +2383,7 @@ in
     };
     "Oni2@link-dev:./package.json" = {
       pname = "Oni2";
-      version = "link-dev-.-package.json";
+      version = "0.5.9-nightly";
       depKeys = [
         ("revery-terminal@github:revery-ui/revery-terminal#a9cb168@d41d8cd9")
         ("revery@github:revery-ui/revery#931f3d0@d41d8cd9")
@@ -2432,6 +2432,28 @@ in
         ("@opam/charInfo_width@opam:1.1.0@4296bdfe")
         ("@opam/angstrom@opam:0.15.0@48ede9cb")
       ];
+      src = pkgs.fetchFromGitHub {
+        owner = "onivim";
+        repo = "oni2";
+        rev = "40b0ffc7d935c12bce94a6aeea9603cae964c67c";
+        sha256 = "08gk7zdkfxccbpp2nbw6s113qklcz8bzdl841m7y9ld7izyw83sa";
+      };
+      build = {
+        buildEnv = [
+          ("ONI2_APPCAST_BASEURL=${"http://localhost:8080/"}")
+          ("ONI2_BUILD_MODE=${"Debug"}")
+          ("ONI2_ROOT=${"$PWD"}")
+        ];
+        buildPhase = "refmterr dune build -p libvim,textmate,treesitter,Oni2 -j4";
+        installPhase = ''
+          esy-installer Oni2.install
+          bash -c "${if final.os == "windows" then "cp /usr/x86_64-w64-mingw32/sys-root/mingw/bin/*.dll '$cur__bin'" else "echo"}"
+          bash -c "cp ${(final.getDrv "esy-sdl2@2.0.10008@d41d8cd9")}/bin/*.dll '$cur__bin' ${if final.os == "windows" then "" else "2>/dev/null || true"}"
+          bash -c "cp ${(final.getDrv "esy-skia@github:revery-ui/esy-skia#91c98f6@d41d8cd9")}/bin/skia.dll '$cur__bin' ${if final.os == "windows" then "" else "2>/dev/null || true"}"
+          bash -c "cp ${(final.getDrv "esy-angle-prebuilt@1.0.0@d41d8cd9")}/bin/*.dll '$cur__bin' ${if final.os == "windows" then "" else "2>/dev/null || true"}"
+        '';
+        mode = "esy";
+      };
     };
     "autoconf@github:esy-packages/esy-autoconf#fb93edf57b0adc4b27b34a57a562395b224002d3@d41d8cd9" = {
       pname = "autoconf";
@@ -2711,6 +2733,9 @@ in
         sha256 = "049n2ihsff5x9ibzgqvsdyc821j8z4nlmwjklahxnzmqm13m2rbq";
       };
       build = {
+        buildEnv = [
+          ("LT_INIT=${"2.4.6"}")
+        ];
         buildPhase = ''
           find ./ -exec touch -t 200905010101 {} +
           ./configure --prefix=$out --disable-dependency-tracking "${if final.os == "windows" then "--host=x86_64-w64-mingw32" else ""}" "${if final.os == "windows" then "--target=x86_64-w64-mingw32" else ""}"

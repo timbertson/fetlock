@@ -41,8 +41,7 @@ impl PackageJson {
     Ok(Value::List(cmds))
   }
   
-  pub fn build<'c, C: NixCtx>(self, ctx: &C) -> Result<NixBuild> {
-    let mut nix_build = NixBuild::empty(PkgType::Esy);
+  fn evaluate_env<'c, C: NixCtx>(ctx: &C, key: String, value: &str) -> Result<Option<Expr>> {
     lazy_static! {
       static ref IGNORE_ENV: Vec<&'static str> = vec!(
         // ignore env vars that typical nix hooks take care of, since
@@ -57,7 +56,22 @@ impl PackageJson {
       );
     }
 
-    if let Some(EsySpec { build, install, exported_env }) = self.esy {
+    if IGNORE_ENV.iter().any(|ignored| *ignored == key.as_str()) {
+      Ok(None)
+    } else {
+      let eval = Self::parse_str(value)?;
+      let value_expr = Eval::evaluate(eval, ctx)?.into_nix(ctx)?.canonicalize();
+      let assignment = Expr::Str(vec!(
+        StringComponent::Literal(key),
+        StringComponent::Literal("=".to_owned()),
+        StringComponent::Expr(value_expr)));
+      Ok(Some(assignment))
+    }
+  }
+  
+  pub fn build<'c, C: NixCtx>(self, ctx: &C) -> Result<NixBuild> {
+    let mut nix_build = NixBuild::empty(PkgType::Esy);
+    if let Some(EsySpec { build, install, build_env, exported_env }) = self.esy {
       let parsed = Self::parse(&build.0)?;
       nix_build.build = Some(NixBuild::script(PkgType::Esy, ctx, parsed)?);
       if let Some(install) = install {
@@ -65,20 +79,19 @@ impl PackageJson {
         nix_build.install = Some(NixBuild::script(PkgType::Esy, ctx, parsed)?);
       }
 
-      let env_list = exported_env.into_iter()
-        .filter(|(k,export)| export.scope == "global"
-         && !IGNORE_ENV.iter().any(|ignored| ignored == k))
-        .map(|(k,export)| (|| {
-          let eval = Self::parse_str(&export.val)?;
-          let expr = Eval::evaluate(eval, ctx)?.into_nix(ctx)?.canonicalize();
-          Ok(Expr::Str(vec!(
-            StringComponent::Literal(k),
-            StringComponent::Literal("=".to_owned()),
-            StringComponent::Expr(expr))))
-        })())
+      let exported_env_list = exported_env.into_iter()
+        .filter(|(k,export)| export.scope == "global")
+        .filter_map(|(k,export)| Self::evaluate_env(ctx, k, &export.val).transpose())
         .collect::<Result<Vec<Expr>>>()?;
-      if !env_list.is_empty() {
-        nix_build.extra.insert("exportedEnv".to_owned(), Expr::List(env_list));
+      if !exported_env_list.is_empty() {
+        nix_build.extra.insert("exportedEnv".to_owned(), Expr::List(exported_env_list));
+      }
+
+      let build_env_list = build_env.into_iter()
+        .filter_map(|(k,v)| Self::evaluate_env(ctx, k, &v).transpose())
+        .collect::<Result<Vec<Expr>>>()?;
+      if !build_env_list.is_empty() {
+        nix_build.extra.insert("buildEnv".to_owned(), Expr::List(build_env_list));
       }
     }
     Ok(nix_build)
@@ -108,6 +121,10 @@ pub struct EsySpec {
   #[serde(rename = "exportedEnv")]
   #[serde(default)]
   pub exported_env: BTreeMap<String, ExportedEnv>,
+
+  #[serde(rename = "buildEnv")]
+  #[serde(default)]
+  pub build_env: BTreeMap<String, String>,
 }
 
 impl<'de> Deserialize<'de> for EsyScript {

@@ -8,7 +8,7 @@ let
 
   # surround an (optional) `*Phase` attribute with
   # pre / post hooks
-  populateBuildPhases = obj:
+  populateBuildPhases = build:
     let
       buildPhase = { attr = "buildPhase"; suffix = "Build"; };
       installPhase = { attr = "installPhase"; suffix = "Install"; };
@@ -16,14 +16,14 @@ let
         name = phase.attr;
         value = ''
           runHook pre${phase.suffix}
-          ${if hasAttr phase.attr obj
-            then getAttr phase.attr obj
+          ${if hasAttr phase.attr build
+            then getAttr phase.attr build
             else ""}
           runHook post${phase.suffix}
         '';
       };
     in
-    obj // listToAttrs [(attr buildPhase) (attr installPhase)];
+    build // listToAttrs [(attr buildPhase) (attr installPhase)];
     
   copyFilesHook = prev.makeHook "copy-files" ''
     function copyOpamFiles {
@@ -32,6 +32,9 @@ let
     }
     preBuildHooks+=(copyOpamFiles)
   '';
+  
+  exportVars = vars:
+    concatStringsSep "\n" (map (line: "echo \"+ ${line}\"\nexport \"${line}\"") vars);
 
   # does nix already have something for this?
   exportEnvHook = { pname, exportedEnv }:
@@ -50,9 +53,7 @@ let
           fi
           export esyEnv_already_${fname}=1
           echo "+ esyEnvFrom_${fname}"
-      ${
-        concatStringsSep "\n" (map (line: "echo \"+ ${line}\"\nexport \"${line}\"") exportedEnv)
-      }
+      ${exportVars exportedEnv}
         }
         addEnvHooks "$targetOffset" esyEnvFrom_${fname}
     EOF
@@ -74,7 +75,13 @@ in
   let finalBuild = populateBuildPhases build; in addHooks build.mode ({
     inherit pname version depKeys src;
     configurePhase = "true";
-    inherit (finalBuild) buildPhase installPhase;
+    inherit (finalBuild) installPhase;
+    
+    buildPhase =
+      (if build ? buildEnv
+        then (exportVars build.buildEnv) + "\n"
+        else ""
+      ) + finalBuild.buildPhase;
 
     # TODO don't need to include ocaml as dependency if it's a node package
     # TODO which deps can we get away with not propagating?

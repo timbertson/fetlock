@@ -73,33 +73,6 @@ let
             # installPhase = "set -x;" + o.spec.build.installPhase;
           };
         }));
-        # esy-skia = o:
-        # let attrs = self.specToAttrs (o.spec // {
-        #   build = {
-        #     inherit (o.spec.build) mode;
-        #     # strange path, but it's what aseprite produces :shrug:
-        #     exportedEnv = o.spec.build.exportedEnv ++ [ "SKIA_LIB_PATH=$out/out/Release" ];
-        #       # Cflags: -I$cur__install -I\${includedir}/android -I\${includedir}/atlastext -I\${includedir}/c -I\${includedir}/codec -I\${includedir}/config -I\${includedir}/core -I\${includedir}/docs -I\${includedir}/effects -I\${includedir}/encode -I\${includedir}/gpu -I\${includedir}/pathops -I\${includedir}/ports -I\${includedir}/private -I\${includedir}/svg -I\${includedir}/third_party -I\${includedir}/utils $extraCFlags
-        #     installPhase = ''
-        #       mkdir -p $out
-        #       cp -r ${pkgs.aseprite.skia}/. $out/
-        #       cp -r include/c $out/include/c
-        #     '';
-        #      #
-        #      # cat >$cur__lib/pkg-config/skia.pc << EOF
-        #      # includedir=$cur__install/include
-        #      # Name: skia
-        #      # Description: 2D graphics library
-        #      # Version: $cur__version
-        #      # Libs: -lskia -lstdc++
-        #      # EOF
-        #   };
-        #   # src = self.emptyDrv;
-        # }); in
-        # stdenv.mkDerivation (attrs // {
-        #   # propagatedBuildInputs = (attrs.propagatedBuildInputs or []) ++ [ libcxx ];
-        # });
-        
         # TODO raise PRs upstream
         # all these packages make the mistake of exporting "${self.lib}" as an
         # env var, despite not actually respecting that during build
@@ -109,8 +82,9 @@ let
         esy-harfbuzz = fixupLibPath "HARFBUZZ";
         revery-esy-harfbuzz = fixupLibPath "HARFBUZZ";
         esy-libjpeg-turbo = fixupLibPath "JPEG";
-        esy-tree-sitter = fixupLibPath "TREESITTER";
+        # esy-tree-sitter = fixupLibPath "TREESITTER";
         libvim = fixupLibPath "LIBVIM";
+        esy-oniguruma = fixupLibPath "ONIGURUMA";
         revery-esy-libvterm = fixupLibPath "LIBVTERM";
 
         revery-esy-cmake = _: stdenv.mkDerivation rec {
@@ -184,6 +158,72 @@ let
             make install LIBRARY=libvterm.a PREFIX=$out
           '';
         });
+        Oni2 = o:
+          let
+            yarn2nix = pkgs.yarn2nix-moretea;
+            depDrv = yarn2nix.mkYarnModules {
+              name = "oni2-yarn-deps";
+              pname = "oni2-node";
+              version = "1.0.0";
+
+              # TODO hacky...
+              packageJSON = /Users/tcuthbertson/Code/scratch/oni2/node/package.json;
+              yarnLock = /Users/tcuthbertson/Code/scratch/oni2/node/yarn.lock;
+
+              # TODO this was manually generated, and I had to hack the above files for yarn2nix
+              # to accept it :grimace:
+              yarnNix = ./oni2-yarn.nix;
+            };
+          in
+        {
+          # sed 1: we have libintl via gettext dependency, don't use your silly hardcoded homebrew path!
+          # buildinfo: requires git, and has all the wrong node_modules paths...
+          # setup.json: default `node scripts/bootstrap.js is flush with references to the build dir and vendored stuff...
+          # {
+          #   "node": "/private/var/folders/8h/9qtq_hhn6lg69q27h5d17lw80000gp/T/nix-build-Oni2-0.5.9-nightly.drv-0/source/vendor/node-v12.17.0/osx/node",
+          #   "nodeScript": "/private/var/folders/8h/9qtq_hhn6lg69q27h5d17lw80000gp/T/nix-build-Oni2-0.5.9-nightly.drv-0/source/node",
+          #   "bundledExtensions": "/private/var/folders/8h/9qtq_hhn6lg69q27h5d17lw80000gp/T/nix-build-Oni2-0.5.9-nightly.drv-0/source/extensions",
+          #   "developmentExtensions": "/private/var/folders/8h/9qtq_hhn6lg69q27h5d17lw80000gp/T/nix-build-Oni2-0.5.9-nightly.drv-0/source/development_extensions",
+          #   "rg": "/private/var/folders/8h/9qtq_hhn6lg69q27h5d17lw80000gp/T/nix-build-Oni2-0.5.9-nightly.drv-0/source/vendor/ripgrep-v0.10.0/mac/rg",
+          #   "rls": "/private/var/folders/8h/9qtq_hhn6lg69q27h5d17lw80000gp/T/nix-build-Oni2-0.5.9-nightly.drv-0/source/vendor/reason-language-server/bin.native"
+          # }
+          buildPhase =
+          ''
+            sed -E -i -e 's|getLibIntlPath\(\)|"-lintl"|' src/reason-libvim/config/discover.re
+            ln -s ${depDrv}/node_modules ./node/node_modules
+
+            cat > src/gen_buildinfo/generator.re <<"EOF"
+              let oc = open_out("BuildInfo.re");
+              Printf.fprintf(
+                oc,
+                {|
+              let commitId = "XXXXXXXX";
+              let version = "1.0.0";
+              let defaultUpdateChannel = "unstable";
+              let extensionHostVersion = "1.0.0";
+              |}
+              );
+              close_out(oc);
+            EOF
+            
+            # node scripts/bootstrap.js
+            cat > assets/configuration/setup.json <<EOF
+            {
+              "node": "${o.src}/vendor/node-v12.17.0/osx/node",
+              "nodeScript": "$out/node",
+              "bundledExtensions": "${o.src}/extensions",
+              "developmentExtensions": "${o.src}/development_extensions",
+              "rg": "${o.src}/vendor/ripgrep-v0.10.0/mac/rg",
+              "rls": "${o.src}/vendor/reason-language-server/bin.native"
+            }
+            EOF
+          '' + o.buildPhase;
+
+          installPhase = o.installPhase + ''
+            cp -a node $out/node
+          '';
+          passthru = o.passthru // { inherit depDrv; };
+        };
       })
       (self.addBuildInputs {
         autoconf = [m4 perl];
@@ -193,6 +233,7 @@ let
         revery-esy-libvterm = [ perl ];
         texinfo = [ perl ];
         yarn-pkg-config = [ libiconv ];
+        Oni2 = [ gettext nodejs ];
       })
       (self.addPropagatedBuildInputs {
         esy-cmake = [ pkgs.cmake cmakeHook ];

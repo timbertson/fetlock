@@ -989,6 +989,10 @@
       "name": "Oni2",
       "version": "link-dev:./package.json",
       "source": {
+        "type": "install",
+        "source": [ "github:onivim/oni2#40b0ffc7d935c12bce94a6aeea9603cae964c67c" ]
+      },
+      "//source": {
         "type": "link-dev",
         "path": ".",
         "manifest": "package.json"

@@ -32,6 +32,7 @@ async fn run() -> Result<()> {
 
 	let mut opts = Options::new();
 	opts.optflag("h", "help", "print this help menu");
+
 	let matches = opts.parse(&argv[1..])?;
 	if matches.opt_present("h") {
 		return Ok(print_usage(&program, opts));

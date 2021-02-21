@@ -136,6 +136,11 @@ impl Ctx {
       VarScope::SelfScope => match ident {
         "name" => Ok(Eval::Str(ctx.name().0.to_owned())),
         "version" => Err(anyhow!("TODO: version")),
+
+        // used in esy to refer to build root, don't think there's a nix
+        // equivalent but hopefully we haven't CD'd
+        "root" => Ok(Eval::Str("$PWD".to_owned())),
+
         ident => Self::resolve_bool(true, ident).map(Ok)
           .unwrap_or_else(|| Self::resolve_path(PkgImpl {
             path: Expr::str("$out".to_owned()),

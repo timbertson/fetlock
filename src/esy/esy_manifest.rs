@@ -57,9 +57,13 @@ impl PackageJson {
       );
     }
 
-    if let Some(EsySpec { build, exported_env }) = self.esy {
+    if let Some(EsySpec { build, install, exported_env }) = self.esy {
       let parsed = Self::parse(&build.0)?;
       nix_build.build = Some(NixBuild::script(PkgType::Esy, ctx, parsed)?);
+      if let Some(install) = install {
+        let parsed = Self::parse(&install.0)?;
+        nix_build.install = Some(NixBuild::script(PkgType::Esy, ctx, parsed)?);
+      }
 
       let env_list = exported_env.into_iter()
         .filter(|(k,export)| export.scope == "global"
@@ -99,6 +103,7 @@ pub struct ExportedEnv {
 #[derive(Debug, Clone, Deserialize)]
 pub struct EsySpec {
   pub build: EsyScript,
+  pub install: Option<EsyScript>,
   
   #[serde(rename = "exportedEnv")]
   #[serde(default)]

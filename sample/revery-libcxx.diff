@@ -1,0 +1,41 @@
+diff --git packages/reason-harfbuzz/src/config/discover.re packages/reason-harfbuzz/src/config/discover.re
+index e94b95bc..f337612f 100644
+--- a/packages/reason-harfbuzz/src/config/discover.re
++++ a/packages/reason-harfbuzz/src/config/discover.re
+@@ -41,7 +41,7 @@ let lib_path_flags =
+ 
+ let flags = [] @ cclib("-lharfbuzz") @ extraFlags @ lib_path_flags;
+ 
+-let cxx_flags =
++let cxx_flags = ["-x", "c++"] @
+   switch (get_os) {
+   | Windows => c_flags @ ["-fno-exceptions", "-fno-rtti", "-lstdc++"]
+   | _ => c_flags
+diff --git packages/reason-sdl2/src/config/discover.re packages/reason-sdl2/src/config/discover.re
+index 717c9b94..5105ef91 100644
+--- a/packages/reason-sdl2/src/config/discover.re
++++ a/packages/reason-sdl2/src/config/discover.re
+@@ -155,7 +155,7 @@ let c_library_flags = os =>
+   | Windows => ["-L" ++ libFolderPath, "-lSDL2"]
+   };
+ 
+-let cxx_flags = os =>
++let cxx_flags = os => ["-x", "c++"] @
+   switch (os) {
+   | Android
+   | Linux => c_flags(os) @ ["-std=c++11"]
+diff --git packages/reason-sdl2/src/sdl2_wrapper.cpp packages/reason-sdl2/src/sdl2_wrapper.cpp
+index 213fd606..98c6cbd6 100644
+--- a/packages/reason-sdl2/src/sdl2_wrapper.cpp
++++ a/packages/reason-sdl2/src/sdl2_wrapper.cpp
+@@ -19,6 +19,10 @@
+ #include <SDL2/SDL_config.h>
+ #include <SDL2/SDL_syswm.h>
+ 
++#ifdef __APPLE__
++#import <Foundation/Foundation.h>
++#endif
++
+ #ifdef SDL_VIDEO_DRIVER_COCOA
+ #import <Cocoa/Cocoa.h>
+ #endif

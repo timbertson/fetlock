@@ -99,6 +99,15 @@ let
     }
     preInstallHooks+=(ocamlInstall)
   '';
+          ## TODO upgrade hooks to install every .install file in the root?
+          ## (and hope we don't have arbitrary other install files in the src)
+          #installPhase = ''
+          #  for f in *.install; do
+          #    dune install "$(basename $f .install)" \
+          #      --prefix="$out" \
+          #      --libdir="${self.siteLib "$out"}"
+          #  done
+          #'';
 
   esyHooks = [
     # Note: use of `$PWD` means we need to run this
@@ -122,8 +131,24 @@ let
       }
       preBuildHooks+=(esySetupEnvVars)
     '')
+
+    (pkgs.stdenv.mkDerivation {
+      name = "esy-installer-shim";
+      buildCommand = ''
+        mkdir -p $out/bin
+        cat > $out/bin/esy-installer <<"EOF"
+          #!${pkgs.bash}/bin/bash
+          exec ${opam-installer}/bin/opam-installer \
+            --prefix="$out" \
+            --libdir="${final.siteLib "$out"}" \
+            "$@"
+        EOF
+        chmod +x $out/bin/esy-installer
+      '';
+    })
   ];
   opamHooks = [
+    installFile
   ];
 in
 
@@ -131,10 +156,12 @@ mode:
 { pname , ... }@ attrs:
 let
   modeHooks =
-    if mode == "esy" then esyHooks
+    if mode == "esy" then (esyHooks ++
+      (if (attrs.build or {}) ? installPhase then [] else [ installFile ])
+    )
     else if mode == "opam" then opamHooks
     else [];
-  hooks = [ path outputDirs installFile ] ++ modeHooks;
+  hooks = [ path outputDirs ] ++ modeHooks;
 in
 attrs // {
   buildInputs = hooks ++ (attrs.buildInputs or []);

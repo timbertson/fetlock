@@ -31,8 +31,11 @@ let
 							overrideOnly = attrs: fn:
 								overrideAll (drv:
 									if hasAttr drv.pname attrs
-									then lib.trace "Applying override for ${drv.pname}" (
-										fn (getAttr drv.pname attrs) drv)
+									then
+									# lib.trace "Applying override for ${drv.pname}"
+									(
+										fn (getAttr drv.pname attrs) drv
+									)
 									else drv
 								);
 						in (fallback self) // {

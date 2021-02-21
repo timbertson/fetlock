@@ -90,4 +90,7 @@ in
   }
     // (if opamName != null then { inherit opamName; } else {})
     // (if files != null then { inherit files; } else {})
+
+    # https://github.com/NixOS/nixpkgs/issues/39687
+    // (if stdenv.isDarwin != null then { hardeningDisable = ["strictoverflow"]; } else {})
   )

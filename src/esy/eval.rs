@@ -139,7 +139,15 @@ impl Ctx {
         ident => Self::resolve_bool(true, ident).map(Ok)
           .unwrap_or_else(|| Self::resolve_path(PkgImpl {
             path: Expr::str("$out".to_owned()),
-            name: Some(ctx.name()),
+            // TODO this feels extremely hacky. Opam package paths include
+            // their name (e.g. $lib/lwt) when looked up via `self` / `_`, and not
+            // as a global. Esy appears to always resolve to the plain `lib/`
+            // directory in both cases. So we just pretend all esy path lookups
+            // are for a global / implicit scope, even when they're explicitly `self`
+            name: match ctx.pkg_type() {
+              PkgType::Esy => None,
+              PkgType::Opam => Some(ctx.name()),
+            },
           }, ident)),
       },
       // TODO pseudo-package for `ocaml`?

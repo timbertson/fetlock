@@ -44,44 +44,74 @@ let
         #  pname = "esy-skia";
         #});
 
-        # we could almost use upstream, except the esy-skia implementation
-        # exports some variables in its setuphook
-        esy-skia = o:
-        let attrs = self.specToAttrs (o.spec // {
-          build = {
-            inherit (o.spec.build) mode;
-            # strange path, but it's what aseprite produces :shrug:
-            exportedEnv = o.spec.build.exportedEnv ++ [ "SKIA_LIB_PATH=$out/out/Release" ];
-              # Cflags: -I$cur__install -I\${includedir}/android -I\${includedir}/atlastext -I\${includedir}/c -I\${includedir}/codec -I\${includedir}/config -I\${includedir}/core -I\${includedir}/docs -I\${includedir}/effects -I\${includedir}/encode -I\${includedir}/gpu -I\${includedir}/pathops -I\${includedir}/ports -I\${includedir}/private -I\${includedir}/svg -I\${includedir}/third_party -I\${includedir}/utils $extraCFlags
-            installPhase = ''
-              mkdir -p $out
-              cp -r ${pkgs.aseprite.skia}/. $out/
-              cp -r include/c $out/include/c
+        # the esy package downloads deps at runtime, so we
+        # have to prefetch them and symlink them,
+        # then replicate the rest of the build process
+        esy-skia = o: stdenv.mkDerivation (self.specToAttrs (o.spec // {
+          buildInputs = (o.spec.buildInputs or []) ++ [ gn python2 ];
+          build = o.spec.build // {
+            # deps file thanks to https://github.com/NixOS/nixpkgs/blob/master/pkgs/applications/editors/aseprite/skia-make-deps.sh
+            buildPhase =
+              let deps = import ./skia-deps.nix { inherit fetchgit; }; in
+            ''
+              mkdir -p third_party/externals
+              ${
+                with lib;
+                concatStringsSep "\n" (
+                  mapAttrsToList (name: impl:
+                    "echo \"+ ln -s ${impl} third_party/externals/${name}\"\n" +
+                    "ln -s ${impl} third_party/externals/${name}"
+                  ) deps
+                )
+              }
+              mkdir -p $cur__target_dir/out/Static
+              echo '#!/usr/bin/env sh' > gn/xamarin_inject_compat.py
+              chmod +x gn/xamarin_inject_compat.py
+              gn gen $cur__target_dir/out/Static --script-executable="$PYTHON_BINARY" "--args=cc=\"$CC\" cxx=\"$CXX\" skia_use_system_libjpeg_turbo=true is_debug=false extra_cflags=[\"-I''${ESY_LIBJPEG_TURBO_PREFIX}/include\", \"-Wno-poison-system-directories\"] extra_ldflags=[\"-L''${ESY_LIBJPEG_TURBO_PREFIX}/lib\", \"-ljpeg\" ]" || exit -1
+              ninja.exe -C $cur__target_dir/out/Static
             '';
-             #
-             # cat >$cur__lib/pkg-config/skia.pc << EOF
-             # includedir=$cur__install/include
-             # Name: skia
-             # Description: 2D graphics library
-             # Version: $cur__version
-             # Libs: -lskia -lstdc++
-             # EOF
+            # installPhase = "set -x;" + o.spec.build.installPhase;
           };
-          # src = self.emptyDrv;
-        }); in
-        stdenv.mkDerivation (attrs // {
-          # propagatedBuildInputs = (attrs.propagatedBuildInputs or []) ++ [ libcxx ];
-        });
+        }));
+        # esy-skia = o:
+        # let attrs = self.specToAttrs (o.spec // {
+        #   build = {
+        #     inherit (o.spec.build) mode;
+        #     # strange path, but it's what aseprite produces :shrug:
+        #     exportedEnv = o.spec.build.exportedEnv ++ [ "SKIA_LIB_PATH=$out/out/Release" ];
+        #       # Cflags: -I$cur__install -I\${includedir}/android -I\${includedir}/atlastext -I\${includedir}/c -I\${includedir}/codec -I\${includedir}/config -I\${includedir}/core -I\${includedir}/docs -I\${includedir}/effects -I\${includedir}/encode -I\${includedir}/gpu -I\${includedir}/pathops -I\${includedir}/ports -I\${includedir}/private -I\${includedir}/svg -I\${includedir}/third_party -I\${includedir}/utils $extraCFlags
+        #     installPhase = ''
+        #       mkdir -p $out
+        #       cp -r ${pkgs.aseprite.skia}/. $out/
+        #       cp -r include/c $out/include/c
+        #     '';
+        #      #
+        #      # cat >$cur__lib/pkg-config/skia.pc << EOF
+        #      # includedir=$cur__install/include
+        #      # Name: skia
+        #      # Description: 2D graphics library
+        #      # Version: $cur__version
+        #      # Libs: -lskia -lstdc++
+        #      # EOF
+        #   };
+        #   # src = self.emptyDrv;
+        # }); in
+        # stdenv.mkDerivation (attrs // {
+        #   # propagatedBuildInputs = (attrs.propagatedBuildInputs or []) ++ [ libcxx ];
+        # });
         
         # TODO raise PRs upstream
         # all these packages make the mistake of exporting "${self.lib}" as an
         # env var, despite not actually respecting that during build
         # - they actually install into a hardcoded $out/lib
         esy-sdl2 = fixupLibPath "SDL2";
+        esy-freetype2 = fixupLibPath "FREETYPE2";
         esy-harfbuzz = fixupLibPath "HARFBUZZ";
+        revery-esy-harfbuzz = fixupLibPath "HARFBUZZ";
         esy-libjpeg-turbo = fixupLibPath "JPEG";
-        esy-tree-sitter = fixupLibPath "TREESITTER_LIB_PATH";
+        esy-tree-sitter = fixupLibPath "TREESITTER";
         libvim = fixupLibPath "LIBVIM";
+        revery-esy-libvterm = fixupLibPath "LIBVTERM";
 
         revery-esy-cmake = _: stdenv.mkDerivation rec {
           pname = "revery-esy-cmake";
@@ -136,11 +166,7 @@ let
           propagatedBuildInputs = (o.propagatedBuildInputs or []) ++ [glibtool];
         });
         revery = (o: {
-          # TODO promote this more broadly, and maybe only on darwin?
-          # https://github.com/NixOS/nixpkgs/issues/39687
-          hardeningDisable = ["strictoverflow"];
-
-          buildInputs = (o.buildInputs or [])
+          propagatedBuildInputs = (o.propagatedBuildInputs or [])
             ++ [ libiconv ]
             ++ (ifDarwin [ osx.Cocoa osx.ForceFeedback ]);
           patches = [
@@ -151,24 +177,33 @@ let
             ./revery-libcxx.diff # note: only works on darwin
           ];
         });
+        revery-esy-libvterm = (o: {
+          # something (maybe stdenv?) is causing a .dylib and .la to be built,
+          # but revery expects an .a file?
+          installPhase = o.installPhase + ''
+            make install LIBRARY=libvterm.a PREFIX=$out
+          '';
+        });
       })
       (self.addBuildInputs {
         autoconf = [m4 perl];
         automake = [perl];
         esy-help2man = [perl];
-        esy-sdl2 = [libGL.dev] ++ (ifDarwin [
-          osx.IOKit osx.CoreAudio
-          osx.Foundation osx.AudioToolbox
-          osx.AudioUnit osx.ForceFeedback
-        ]);
         esy-tree-sitter = [gcc];
-        libvim = [ncurses.dev] ++ (ifDarwin [ osx.AppKit ]);
         revery-esy-libvterm = [ perl ];
         texinfo = [ perl ];
         yarn-pkg-config = [ libiconv ];
       })
       (self.addPropagatedBuildInputs {
         esy-cmake = [ pkgs.cmake cmakeHook ];
+        esy-sdl2 = [libGL.dev] ++ (ifDarwin [
+          osx.IOKit osx.CoreAudio osx.Cocoa
+          osx.Foundation osx.AudioToolbox
+          osx.AudioUnit osx.ForceFeedback
+        ]);
+        libvim = [ncurses.dev] ++ (ifDarwin [ osx.AppKit ]);
+        esy-skia = ifDarwin [ osx.ApplicationServices ];
+        revery-terminal = ifDarwin [ osx.AppKit osx.Cocoa ];
       })
     ];
   };

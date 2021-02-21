@@ -38,11 +38,8 @@ let
 
       in [
       (self.override {
-        # skip esy builds entirely for things that are already packaged in nix
+        # we already have one in nix, just use that:
         esy-nasm = _: pkgs.nasm;
-        #esy-skia = _: pkgs.aseprite.skia.overrideAttrs (_: {
-        #  pname = "esy-skia";
-        #});
 
         # the esy package downloads deps at runtime, so we
         # have to prefetch them and symlink them,
@@ -70,7 +67,6 @@ let
               gn gen $cur__target_dir/out/Static --script-executable="$PYTHON_BINARY" "--args=cc=\"$CC\" cxx=\"$CXX\" skia_use_system_libjpeg_turbo=true is_debug=false extra_cflags=[\"-I''${ESY_LIBJPEG_TURBO_PREFIX}/include\", \"-Wno-poison-system-directories\"] extra_ldflags=[\"-L''${ESY_LIBJPEG_TURBO_PREFIX}/lib\", \"-ljpeg\" ]" || exit -1
               ninja.exe -C $cur__target_dir/out/Static
             '';
-            # installPhase = "set -x;" + o.spec.build.installPhase;
           };
         }));
         # TODO raise PRs upstream
@@ -82,7 +78,6 @@ let
         esy-harfbuzz = fixupLibPath "HARFBUZZ";
         revery-esy-harfbuzz = fixupLibPath "HARFBUZZ";
         esy-libjpeg-turbo = fixupLibPath "JPEG";
-        # esy-tree-sitter = fixupLibPath "TREESITTER";
         libvim = fixupLibPath "LIBVIM";
         esy-oniguruma = fixupLibPath "ONIGURUMA";
         revery-esy-libvterm = fixupLibPath "LIBVTERM";
@@ -161,18 +156,27 @@ let
         Oni2 = o:
           let
             yarn2nix = pkgs.yarn2nix-moretea;
+            # TODO hacky...
+            # lock file seems to be missing some versions, prioritising
+            # less duplication over version constraints. Is there a flag
+            # we can pass to allow it?
+            yarnFiles = stdenv.mkDerivation {
+              name = "oni2-yarn-files";
+              buildCommand = ''
+                mkdir -p $out
+                cp ${o.src}/node/package.json $out/
+                cp ${o.src}/node/yarn.lock $out/
+                cd $out
+                patch -p1 < ${./oni2-yarn.diff}
+              '';
+            };
             depDrv = yarn2nix.mkYarnModules {
               name = "oni2-yarn-deps";
               pname = "oni2-node";
               version = "1.0.0";
-
-              # TODO hacky...
-              packageJSON = /Users/tcuthbertson/Code/scratch/oni2/node/package.json;
-              yarnLock = /Users/tcuthbertson/Code/scratch/oni2/node/yarn.lock;
-
-              # TODO this was manually generated, and I had to hack the above files for yarn2nix
-              # to accept it :grimace:
-              yarnNix = ./oni2-yarn.nix;
+              packageJSON = "${yarnFiles}/package.json";
+              yarnLock = "${yarnFiles}/yarn.lock";
+              yarnNix = ./oni2-yarn.nix; # manually generated with yarn2nix
             };
           in
         {

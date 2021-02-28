@@ -46,6 +46,7 @@ async fn run() -> Result<()> {
 	fetch::populate_source_digests(esy_lock.lock_mut()).await?;
 	let lock = esy_lock.finalize().await?;
 	let out_path = "sample/esy.nix";
+	info!("Writing {}", out_path);
 	fetlock::fs::write_atomically(out_path, |mut out_file| {
 		let mut out = WriteContext::initial(&mut out_file);
 		lock.write_to(&mut out)?;

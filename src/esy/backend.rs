@@ -60,15 +60,14 @@ impl EsyLock {
 
 	async fn finalize_spec(
 		opam_repo: Rc<PathBuf>,
+		realised_src: Option<&PathBuf>,
 		esy_spec: &mut EsySpec,
 		installed: &InstalledPkgs,
 	) -> Result<()> {
 		info!("[esy]: {}", esy_spec.spec.id.name);
 		let name = Name(esy_spec.spec.id.name.to_owned());
 
-		let path = fetch::realise_source(&esy_spec.spec).await?;
-		let path_ref = path.as_ref();
-		let extract = if let Some(path_ref) = path_ref {
+		let extract = if let Some(path_ref) = realised_src {
 			let extract = fetch::ExtractSource::from(path_ref).await?;
 			// TODO this upgrade should happen somewhere centrally,
 			// but it's wasteful to extract multiple times
@@ -179,12 +178,7 @@ impl Backend for EsyLock {
 	}
 
 	async fn finalize(mut self) -> Result<Lock<Self::Spec>> {
-		match self
-			.lock
-			.specs
-			.iter()
-			.find(|(key, esy_spec)| esy_spec.spec.id.name == "ocaml")
-		{
+		match self.lock.specs.iter().find(|(key, esy_spec)| esy_spec.spec.id.name == "ocaml") {
 			Some((key, esy_spec)) => {
 				self.lock
 					.context
@@ -202,6 +196,10 @@ impl Backend for EsyLock {
 			repo: "opam-repository".to_owned(),
 		};
 		let opam_repo = Rc::new(crate::cache::cached_repo(&opam_repo_git).await?);
+		
+		let realised_sources = fetch::realise_sources(
+			self.lock.specs.iter().map(|(key, spec)| (key, &spec.spec))
+		).await?;
 
 		let installed = self.partition_specs()?;
 		let installed_ref = &installed;
@@ -211,13 +209,14 @@ impl Backend for EsyLock {
 		// let parallelism = 1;
 		// specs.sort_by(|a,b| a.id().cmp(&b.id()));
 
-		let specs = self.lock.specs.values_mut(); // .collect::<Vec<EsySpec>>();
+		let specs = self.lock.specs.iter_mut(); // .collect::<Vec<EsySpec>>();
 		let mut stream = futures::stream::iter(specs)
-			.map(|esy_spec| {
+			.map(|(key, esy_spec)| {
 				let opam_repo_ref = opam_repo.clone();
+				let realised_src = realised_sources.get(key);
 				async move {
 					// let id = esy_spec.spec.id.clone();
-					Self::finalize_spec(opam_repo_ref, esy_spec, installed_ref)
+					Self::finalize_spec(opam_repo_ref, realised_src, esy_spec, installed_ref)
 						.await
 						.with_context(|| format!("Finalizing spec: {:?}", esy_spec))
 				}

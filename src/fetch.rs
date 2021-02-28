@@ -3,16 +3,21 @@ use crate::lock::*;
 use crate::nix_serialize::*;
 use anyhow::*;
 use futures::StreamExt;
+use futures::future;
+use futures::FutureExt;
+use futures::join;
 use lazy_static::lazy_static;
 use log::*;
 use regex::Regex;
 use std::borrow::BorrowMut;
 use std::fmt;
+use std::collections::HashMap;
 use std::io::{ErrorKind, Write};
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::str;
 use tokio::fs;
+use tokio::io::{AsyncReadExt, AsyncRead, AsyncWriteExt};
 use tokio::process::Command;
 
 pub async fn populate_source_digests<S: BorrowMut<Spec> + Writeable>(
@@ -70,29 +75,105 @@ async fn calculate_digest(src: &Src) -> Result<Sha256> {
 	}
 }
 
-fn fetch_command(src_digest: &SrcDigest) -> Result<Command> {
-	debug!("realising {:?}", src_digest);
-	let mut expr = Vec::new();
-	write!(expr, "{}", "let pkgs = import <nixpkgs> {}; in ")?;
-	let mut out = WriteContext::initial(&mut expr);
-	src_digest.write_to(&mut out)?;
-	let expr = str::from_utf8(&expr)?;
-
-	let mut command = Command::new("nix-build");
-	command
-		.arg("--no-out-link")
-		.arg("--show-trace")
-		.arg("--expr")
-		.arg(expr)
-		.kill_on_drop(true);
-	debug!("{:?}", command);
-	Ok(command)
+struct FetchMany {
+	expr: String,
 }
 
-fn warn_output(desc: &'static str, output: &Vec<u8>) {
-	let output = str::from_utf8(output);
+impl FetchMany {
+	fn digests<'a, Digests: Iterator<Item=&'a SrcDigest<'a>>>(src_digests: Digests) -> Result<FetchMany> {
+		let mut expr = Vec::new();
+		let mut out = WriteContext::initial(&mut expr);
+		out.write_str("let pkgs = import <nixpkgs> {}; in ")?;
+		out.write_str("rec { drvs = ")?;
+		write_iter(src_digests, &mut out)?;
+		out.write_str("; paths = pkgs.lib.map (d: d.outPath) drvs; }")?;
+		Ok(FetchMany { expr: String::from_utf8(expr)? })
+	}
+	
+	fn singleton(src_digest: &SrcDigest) -> Result<FetchMany> {
+		let digests = Some(src_digest);
+		Self::digests(digests.into_iter())
+	}
+
+	fn build_command(&self) -> Command {
+		let mut command = Command::new("nix-build");
+		command
+			.arg("--no-out-link")
+			.arg("--show-trace")
+			.arg("--expr")
+			.arg("-")
+			.arg("--attr")
+			.arg("drvs")
+			.kill_on_drop(true);
+		command
+	}
+
+	async fn realise(&self) -> Result<Vec<String>> {
+		self.run_command("nix-build", self.build_command(), Stdio::null()).await?;
+	
+		let mut expr_command = Command::new("nix-instantiate");
+		expr_command
+			.arg("--show-trace")
+			.arg("--expr")
+			.arg("-")
+			.arg("--attr")
+			.arg("paths")
+			.arg("--eval")
+			.arg("--strict")
+			.arg("--json")
+			.kill_on_drop(true);
+		let json = self.check_stdout("nix-instantiate", expr_command).await?;
+		let errmsg = format!("parsing JSON: {}", &json);
+		Ok(serde_json::from_str::<Vec<String>>(&json).with_context(||errmsg)?)
+	}
+
+	async fn check_stdout(&self, desc: &'static str, command: Command) -> Result<String> {
+		self.run_command(desc, command, Stdio::piped()).await.map(|stdout| stdout.expect("stdout is none"))
+	}
+
+	async fn run_command(&self, desc: &'static str, mut command: Command, stdout: Stdio) -> Result<Option<String>> {
+		debug!("{:?}", command);
+		command.stdout(stdout);
+		command.stderr(Stdio::piped());
+		command.stdin(Stdio::piped());
+		let mut child = command.spawn()?;
+		let mut stdin_pipe = child.stdin.take().expect("stdin is not a pipe");
+		let (wrote_stdin, stdout, stderr) = join!(
+			stdin_pipe.write(self.expr.as_bytes()),
+					// .map(|res| res.map(|_:usize| ()),
+				// (None, None) => future::ready(Ok(())).right_future(),
+				// (Some(_), None) | (None, Some(_)) => future::ready(Err(anyhow!("inconsistent stdin"))).right_future(),
+			// },
+			read_io_opt(&mut child.stderr),
+			read_io_opt(&mut child.stdout)
+		);
+		if command.status().await?.success() {
+			wrote_stdin?;
+			stdout
+		} else {
+			warn_output(desc, &stderr);
+			Err(anyhow!("Process failed: {:?}", command))
+		}
+	}
+
+}
+
+
+async fn read_io_opt<Pipe: AsyncRead + Unpin>(pipe: &mut Option<Pipe>) -> Result<Option<String>> {
+	if let Some(mut stderr) = pipe.take() {
+		let mut buf = Vec::new();
+		let contents = stderr.read_to_end(&mut buf).await?;
+		Ok(Some(String::from_utf8(buf)?))
+	} else {
+		Ok(None)
+	}
+
+}
+
+fn warn_output(desc: &'static str, output: &Result<Option<String>>) {
 	match output {
-		Ok(output) => {
+		Ok(None) => (),
+		Ok(Some(output)) => {
 			if !output.is_empty() {
 				for line in output.lines() {
 					warn!("[{}]: {}", desc, line);
@@ -100,10 +181,11 @@ fn warn_output(desc: &'static str, output: &Vec<u8>) {
 			}
 		}
 		Err(e) => {
-			warn!("[{}]: non-utf8 bytes: {:?}", desc, output);
+			warn!("[{}]: can't read stderr: {:?}", desc, e);
 		}
 	}
 }
+
 
 async fn do_prefetch(src: &Src) -> Result<Sha256> {
 	lazy_static! {
@@ -112,9 +194,10 @@ async fn do_prefetch(src: &Src) -> Result<Sha256> {
 	}
 
 	let dummy = SrcDigest::new(src, Sha256::dummy());
-	let mut command = fetch_command(&dummy)?;
+	let mut command = FetchMany::singleton(&dummy)?.build_command();
 	let output = command.output().await?;
-	warn_output("nix stdout", &output.stdout);
+	let stdout = String::from_utf8(output.stdout).map(Some).map_err(Error::from);
+	warn_output("nix stdout", &stdout);
 
 	let stderr = str::from_utf8(&output.stderr).unwrap_or("(non-utf8 output)");
 	let mut it = EXPECTED_SHA.captures_iter(stderr);
@@ -133,19 +216,24 @@ async fn do_prefetch(src: &Src) -> Result<Sha256> {
 	Ok(Sha256::new(capture))
 }
 
+pub async fn realise_sources<'a, It: Iterator<Item=(&'a Key, &'a Spec)>>(specs: It) -> Result<HashMap<Key, PathBuf>> {
+	let pairs = specs.filter_map(|(k, spec)| {
+		spec.src_digest().map(|digest| (k, digest))
+	}).collect::<Vec<(&Key, SrcDigest)>>();
+	info!("realising: {} sources...", pairs.len());
+	let paths = FetchMany::digests(pairs.iter().map(|(_key, digest)| digest))?.realise().await?;
+	Ok(pairs.into_iter().zip(paths)
+		.map(|((key, _), path)| (key.to_owned(), PathBuf::from(path)))
+		.collect::<HashMap<Key, PathBuf>>())
+}
+
+// TODO drop this?
 pub async fn realise_source(spec: &Spec) -> Result<Option<PathBuf>> {
 	if let Some(src_digest) = spec.src_digest() {
 		debug!("realise: {:?}", &spec.src);
-		let mut command = fetch_command(&src_digest)?;
-		let output: std::process::Output = command.output().await?;
-		if output.status.success() {
-			let stdout = String::from_utf8(output.stdout)?;
-			debug!("realised: {}", stdout.trim());
-			Ok(Some(PathBuf::from(stdout.trim())))
-		} else {
-			warn_output("nix stderr", &output.stderr);
-			Err(anyhow!("Process failed: {:?}", command))
-		}
+		let fetch_many = FetchMany::singleton(&src_digest)?;
+		let path = fetch_many.check_stdout("nix-build", fetch_many.build_command()).await?;
+		Ok(Some(PathBuf::from(path)))
 	} else {
 		Ok(None)
 	}

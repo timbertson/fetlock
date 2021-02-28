@@ -1,5 +1,6 @@
 use crate::cache::{cache_hash, cache_root};
 use crate::lock::*;
+use crate::cmd;
 use crate::nix_serialize::*;
 use anyhow::*;
 use futures::StreamExt;
@@ -8,9 +9,10 @@ use log::*;
 use regex::Regex;
 use std::borrow::BorrowMut;
 use std::fmt;
+use std::collections::HashMap;
 use std::io::{ErrorKind, Write};
 use std::path::PathBuf;
-use std::process::Stdio;
+use std::process::{ExitStatus, Stdio};
 use std::str;
 use tokio::fs;
 use tokio::process::Command;
@@ -70,38 +72,67 @@ async fn calculate_digest(src: &Src) -> Result<Sha256> {
 	}
 }
 
-fn fetch_command(src_digest: &SrcDigest) -> Result<Command> {
-	debug!("realising {:?}", src_digest);
-	let mut expr = Vec::new();
-	write!(expr, "{}", "let pkgs = import <nixpkgs> {}; in ")?;
-	let mut out = WriteContext::initial(&mut expr);
-	src_digest.write_to(&mut out)?;
-	let expr = str::from_utf8(&expr)?;
-
-	let mut command = Command::new("nix-build");
-	command
-		.arg("--no-out-link")
-		.arg("--show-trace")
-		.arg("--expr")
-		.arg(expr)
-		.kill_on_drop(true);
-	debug!("{:?}", command);
-	Ok(command)
+#[derive(Debug)]
+struct FetchMany {
+	expr: String,
 }
 
-fn warn_output(desc: &'static str, output: &Vec<u8>) {
-	let output = str::from_utf8(output);
-	match output {
-		Ok(output) => {
-			if !output.is_empty() {
-				for line in output.lines() {
-					warn!("[{}]: {}", desc, line);
-				}
-			}
-		}
-		Err(e) => {
-			warn!("[{}]: non-utf8 bytes: {:?}", desc, output);
-		}
+impl FetchMany {
+	fn digests<'a, Digests: Iterator<Item=&'a SrcDigest<'a>>>(src_digests: Digests) -> Result<FetchMany> {
+		let mut expr = Vec::new();
+		let mut out = WriteContext::initial(&mut expr);
+		out.write_str("let pkgs = import <nixpkgs> {}; in ")?;
+		out.write_str("rec { drvs = ")?;
+		write_iter(src_digests, &mut out)?;
+		out.write_str("; paths = builtins.map (d: d.outPath) drvs; }\n")?;
+		let expr = String::from_utf8(expr)?;
+		Ok(FetchMany { expr })
+	}
+	
+	fn singleton(src_digest: &SrcDigest) -> Result<FetchMany> {
+		let digests = Some(src_digest);
+		Self::digests(digests.into_iter())
+	}
+
+	fn build_command(&self) -> Command {
+		let mut command = Command::new("nix-build");
+		command
+			.arg("--no-out-link")
+			.arg("--show-trace")
+			.arg("-")
+			.arg("--attr")
+			.arg("drvs");
+		command
+	}
+
+	async fn realise(&self) -> Result<Vec<String>> {
+		self.run_command("nix-build", self.build_command(), Stdio::piped()).await?;
+	
+		let mut expr_command = Command::new("nix-instantiate");
+		expr_command
+			.arg("--show-trace")
+			.arg("-")
+			.arg("--attr")
+			.arg("paths")
+			.arg("--eval")
+			.arg("--strict")
+			.arg("--json");
+		let json = self.check_stdout("nix-instantiate", expr_command).await?;
+		let errmsg = format!("parsing JSON: {}", &json);
+		Ok(serde_json::from_str::<Vec<String>>(&json).with_context(||errmsg)?)
+	}
+
+	async fn check_stdout(&self, desc: &'static str, command: Command) -> Result<String> {
+		cmd::run_stdout(desc, command, Some(self.expr.as_str())).await
+	}
+
+	async fn run_command(&self, desc: &'static str, command: Command, stdout: Stdio) -> Result<Option<String>> {
+		cmd::run(desc, command, Some(self.expr.as_str()), stdout).await
+	}
+
+	async fn run_command_raw<'a>(&self, command: &'a mut Command, stdout: Stdio)
+		-> Result<(Option<String>, Option<String>, ExitStatus)> {
+		cmd::run_raw(command, Some(self.expr.as_str()), stdout).await
 	}
 }
 
@@ -112,16 +143,18 @@ async fn do_prefetch(src: &Src) -> Result<Sha256> {
 	}
 
 	let dummy = SrcDigest::new(src, Sha256::dummy());
-	let mut command = fetch_command(&dummy)?;
-	let output = command.output().await?;
-	warn_output("nix stdout", &output.stdout);
+	debug!("prefetching {:?}", &dummy);
+	let fetch = FetchMany::singleton(&dummy)?;
+	let (stdout, stderr, status) = fetch.run_command_raw(
+		&mut fetch.build_command(), Stdio::piped()).await?;
+	cmd::warn_output("nix stdout", &Ok(stdout));
 
-	let stderr = str::from_utf8(&output.stderr).unwrap_or("(non-utf8 output)");
-	let mut it = EXPECTED_SHA.captures_iter(stderr);
+	let stderr = stderr.ok_or_else(|| anyhow!("stderr not piped"))?;
+	let mut it = EXPECTED_SHA.captures_iter(&stderr);
 	let capture = it
 		.next()
 		.ok_or_else(|| anyhow!("Unable to extract expected sha from output:\n{}", stderr))
-		.with_context(|| format!("{:?}", &command))?[1]
+		.with_context(|| format!("{:?}", &fetch))?[1]
 		.to_owned();
 	debug!("first capture: {}", &capture);
 	if it.next().is_some() {
@@ -133,22 +166,15 @@ async fn do_prefetch(src: &Src) -> Result<Sha256> {
 	Ok(Sha256::new(capture))
 }
 
-pub async fn realise_source(spec: &Spec) -> Result<Option<PathBuf>> {
-	if let Some(src_digest) = spec.src_digest() {
-		debug!("realise: {:?}", &spec.src);
-		let mut command = fetch_command(&src_digest)?;
-		let output: std::process::Output = command.output().await?;
-		if output.status.success() {
-			let stdout = String::from_utf8(output.stdout)?;
-			debug!("realised: {}", stdout.trim());
-			Ok(Some(PathBuf::from(stdout.trim())))
-		} else {
-			warn_output("nix stderr", &output.stderr);
-			Err(anyhow!("Process failed: {:?}", command))
-		}
-	} else {
-		Ok(None)
-	}
+pub async fn realise_sources<'a, It: Iterator<Item=(&'a Key, &'a Spec)>>(specs: It) -> Result<HashMap<Key, PathBuf>> {
+	let pairs = specs.filter_map(|(k, spec)| {
+		spec.src_digest().map(|digest| (k, digest))
+	}).collect::<Vec<(&Key, SrcDigest)>>();
+	info!("realising: {} sources...", pairs.len());
+	let paths = FetchMany::digests(pairs.iter().map(|(_key, digest)| digest))?.realise().await?;
+	Ok(pairs.into_iter().zip(paths)
+		.map(|((key, _), path)| (key.to_owned(), PathBuf::from(path)))
+		.collect::<HashMap<Key, PathBuf>>())
 }
 
 #[derive(Debug, Clone)]
@@ -184,44 +210,38 @@ pub struct ExtractSource<'a> {
 
 impl ExtractSource<'_> {
 	pub async fn from(root: &PathBuf) -> Result<ExtractSource<'_>> {
+		debug!("ExtractSource::from({:?})", root);
 		let source_type = if fs::metadata(root).await?.is_dir() {
 			SourceType::Directory
 		} else {
 			(|| async {
 				let root_str = root.to_str().ok_or_else(|| anyhow!("non-utf8 root path"))?;
-				let (mut cmd, archive_type) = if root_str.ends_with(".zip") {
+				let (desc, cmd, archive_type) = if root_str.ends_with(".zip") {
 					let mut cmd = Command::new("unzip");
 					cmd.arg("-Z1").arg(root_str);
-					(cmd, ArchiveType::Zip)
+					("unzip", cmd, ArchiveType::Zip)
 				} else {
 					// assume it's some kind of tarball.
 					let mut cmd = Command::new("tar");
 					cmd.arg("tf").arg(root_str);
-					(cmd, ArchiveType::Tar)
+					("tar", cmd, ArchiveType::Tar)
 				};
-				debug!("{:?}", cmd);
-				cmd.stdout(Stdio::piped()).kill_on_drop(true);
-				let output = cmd.spawn()?.wait_with_output().await?;
-				if !output.status.success() {
-					Err(anyhow!("Process failed: {:?}", cmd))
-				} else {
-					let raw_listing = String::from_utf8(output.stdout)?;
-					// first grab the root directory
-					let first_line = raw_listing
-						.lines()
-						.next()
-						.ok_or_else(|| anyhow!("no output received from `tar`"))?;
-					let first_component = first_line
-						.split("/")
-						.next()
-						.expect("empty split")
-						.to_owned();
-					Ok(SourceType::Archive(ArchiveListing {
-						archive_type,
-						raw_listing,
-						first_component,
-					}))
-				}
+				let raw_listing = cmd::run_stdout(desc, cmd, None).await?;
+				// first grab the root directory
+				let first_line = raw_listing
+					.lines()
+					.next()
+					.ok_or_else(|| anyhow!("no output received from `tar`"))?;
+				let first_component = first_line
+					.split("/")
+					.next()
+					.expect("empty split")
+					.to_owned();
+				Ok::<SourceType, Error>(SourceType::Archive(ArchiveListing {
+					archive_type,
+					raw_listing,
+					first_component,
+				}))
 			})()
 			.await
 			.with_context(|| format!("getting archive root for {:?}", root))?
@@ -235,8 +255,9 @@ impl ExtractSource<'_> {
 		match &mut spec.src {
 			Src::Github(gh) => {
 				if (!gh.fetch_submodules) && self.exists(".gitmodules").await {
+					debug!("found .gitmodules file, upgrading fetch expression");
 					gh.fetch_submodules = true;
-					spec.digest = Some(do_prefetch(&spec.src).await?);
+					spec.digest = Some(calculate_digest(&spec.src).await?);
 				}
 			}
 			_ => (),
@@ -245,6 +266,7 @@ impl ExtractSource<'_> {
 	}
 
 	pub async fn exists(&self, file: &str) -> bool {
+		debug!("exists({:?}, {:?}", self, file);
 		match &self.source_type {
 			SourceType::Directory => fs::metadata(self.root.join(file)).await.is_ok(),
 			SourceType::Archive(listing) => {
@@ -255,38 +277,25 @@ impl ExtractSource<'_> {
 	}
 
 	pub async fn file_contents(&self, file: &str) -> Result<String> {
-		let bytes = (|| async move {
-			match &self.source_type {
-				SourceType::Directory => Ok(fs::read(self.root.join(file)).await?),
-				SourceType::Archive(listing) => {
-					let root_str = self
-						.root
-						.to_str()
-						.ok_or_else(|| anyhow!("non-utf8 root path"))?;
-					let archive_path = format!("{}/{}", listing.first_component, file);
-					let mut cmd = Command::new("tar");
-					cmd.arg("xf")
-						.arg(root_str)
-						.arg("--to-stdout")
-						.arg("--extract")
-						.arg(&archive_path)
-						.stdout(Stdio::piped())
-						.kill_on_drop(true);
-					debug!("{:?}", cmd);
-					let output = cmd.spawn()?.wait_with_output().await?;
-					if !output.status.success() {
-						Err(anyhow!(
-							"Process `tar` failed to extract {} from {:?}",
-							file,
-							self
-						))
-					} else {
-						Ok(output.stdout)
-					}
-				}
+		debug!("file_contents({:?}, {:?})", self, file);
+		match &self.source_type {
+			SourceType::Directory => Ok(
+				String::from_utf8(fs::read(self.root.join(file)).await?)?
+			),
+			SourceType::Archive(listing) => {
+				let root_str = self
+					.root
+					.to_str()
+					.ok_or_else(|| anyhow!("non-utf8 root path"))?;
+				let archive_path = format!("{}/{}", listing.first_component, file);
+				let mut cmd = Command::new("tar");
+				cmd.arg("xf")
+					.arg(root_str)
+					.arg("--to-stdout")
+					.arg("--extract")
+					.arg(&archive_path);
+				cmd::run_stdout("tar", cmd, None).await
 			}
-		})()
-		.await?;
-		Ok(String::from_utf8(bytes)?)
+		}
 	}
 }

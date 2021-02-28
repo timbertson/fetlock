@@ -1272,12 +1272,13 @@ in
           make opt
         '';
         installPhase = ''
+          ./configure -bindir ${"$out"}/bin -sitelib "${(final.siteLib "$out")}" -mandir ${"$out"}/man -config "${(final.siteLib "$out")}/findlib.conf" -no-custom -no-topfind
           make install
           install -m 0755 ocaml-stub $out/bin/ocaml
         '';
         mode = "opam";
       };
-      files = /Users/tcuthbertson/.cache/opam2nix/repos/opam-repository/packages/ocamlfind/ocamlfind.1.8.1/files;
+      files = /Users/tcuthbertson/.cache/fetlock/git/a0bc4b41ddb868605dc15000/repo/packages/ocamlfind/ocamlfind.1.8.1/files;
     };
     "@opam/ocamlformat@opam:0.15.0@8e036963" = {
       pname = "ocamlformat";
@@ -1934,7 +1935,7 @@ in
       build = {
         mode = "opam";
       };
-      files = /Users/tcuthbertson/.cache/opam2nix/repos/opam-repository/packages/seq/seq.base/files;
+      files = /Users/tcuthbertson/.cache/fetlock/git/a0bc4b41ddb868605dc15000/repo/packages/seq/seq.base/files;
     };
     "@opam/sexplib0@opam:v0.14.0@ddeb6438" = {
       pname = "sexplib0";

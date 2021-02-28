@@ -3,7 +3,6 @@ use anyhow::*;
 use log::*;
 use std::fs;
 use std::fs::*;
-use std::io::Write;
 use std::path::*;
 use std::time::SystemTime;
 use tokio::process::Command;
@@ -40,7 +39,6 @@ async fn exec_command(command: &mut Command) -> Result<()> {
 }
 
 pub async fn cached_repo<G: GitUrl>(src: &G) -> Result<PathBuf> {
-	// TODO this should probably be async
 	use fs2::FileExt;
 	let mut path = cache_root();
 	path.push("git");
@@ -49,7 +47,7 @@ pub async fn cached_repo<G: GitUrl>(src: &G) -> Result<PathBuf> {
 	debug!("cache for {} is: {:?}", &url, &path);
 	fs::create_dir_all(&path)?;
 	let lock_path = path.clone().join("lock");
-	let mut lock = OpenOptions::new()
+	let lock = OpenOptions::new()
 		.read(true)
 		.write(true)
 		.create(true)

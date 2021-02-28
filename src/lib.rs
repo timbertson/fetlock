@@ -6,6 +6,7 @@ mod lock;
 pub use lock::*;
 mod backend;
 mod cache;
+mod cmd;
 pub mod err;
 pub mod esy;
 pub mod fetch;

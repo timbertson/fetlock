@@ -64,7 +64,7 @@ impl<W: Write> WriteContext<'_, W> {
 		self.file.write_fmt(args)
 	}
 
-	fn write_str(&mut self, s: &str) -> Result<()> {
+	pub fn write_str(&mut self, s: &str) -> Result<()> {
 		self.write(format_args!("{}", s))
 	}
 
@@ -182,7 +182,7 @@ impl<W: Write> WriteContext<'_, W> {
 		indent: bool,
 		open: &str,
 		close: &str,
-		f: impl Fn(&mut WriteContext<W>) -> Result<()>,
+		f: impl FnOnce(&mut WriteContext<W>) -> Result<()>,
 	) -> Result<()> {
 		self.write_str(open)?;
 		if indent {
@@ -196,15 +196,15 @@ impl<W: Write> WriteContext<'_, W> {
 		self.write_str(close)
 	}
 
-	fn bracket(&mut self, f: impl Fn(&mut WriteContext<W>) -> Result<()>) -> Result<()> {
+	fn bracket(&mut self, f: impl FnOnce(&mut WriteContext<W>) -> Result<()>) -> Result<()> {
 		self.bracketed_with(false, "(", ")", f)
 	}
 
-	fn bracket_attrs(&mut self, f: impl Fn(&mut WriteContext<W>) -> Result<()>) -> Result<()> {
+	fn bracket_attrs(&mut self, f: impl FnOnce(&mut WriteContext<W>) -> Result<()>) -> Result<()> {
 		self.bracketed_with(true, "{", "}", f)
 	}
 
-	fn bracket_list(&mut self, f: impl Fn(&mut WriteContext<W>) -> Result<()>) -> Result<()> {
+	fn bracket_list(&mut self, f: impl FnOnce(&mut WriteContext<W>) -> Result<()>) -> Result<()> {
 		self.bracketed_with(true, "[", "]", f)
 	}
 
@@ -442,14 +442,18 @@ impl Writeable for DrvName<'_> {
 	}
 }
 
+pub fn write_iter<V: Writeable, I: Iterator<Item=V>, W: Write>(it: I, c: &mut WriteContext<W>) -> Result<()> {
+	c.bracket_list(move |c| {
+		for v in it {
+			c.list_item(&v)?;
+		}
+		Ok(())
+	})
+}
+
 impl<V: Writeable> Writeable for Vec<V> {
 	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
-		c.bracket_list(|c| {
-			for v in self.iter() {
-				c.list_item(v)?;
-			}
-			Ok(())
-		})
+		write_iter(self.iter(), c)
 	}
 }
 

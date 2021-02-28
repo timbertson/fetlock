@@ -3,8 +3,6 @@ use crate::lock::*;
 use crate::nix_serialize::*;
 use anyhow::*;
 use futures::StreamExt;
-use futures::future;
-use futures::FutureExt;
 use futures::join;
 use lazy_static::lazy_static;
 use log::*;
@@ -86,7 +84,7 @@ impl FetchMany {
 		out.write_str("let pkgs = import <nixpkgs> {}; in ")?;
 		out.write_str("rec { drvs = ")?;
 		write_iter(src_digests, &mut out)?;
-		out.write_str("; paths = pkgs.lib.map (d: d.outPath) drvs; }")?;
+		out.write_str("; paths = pkgs.lib.map (d: d.outPath) drvs; }")?; // TODO
 		Ok(FetchMany { expr: String::from_utf8(expr)? })
 	}
 	
@@ -100,8 +98,8 @@ impl FetchMany {
 		command
 			.arg("--no-out-link")
 			.arg("--show-trace")
-			.arg("--expr")
 			.arg("-")
+			// .arg("/tmp/foo")
 			.arg("--attr")
 			.arg("drvs")
 			.kill_on_drop(true);
@@ -109,12 +107,18 @@ impl FetchMany {
 	}
 
 	async fn realise(&self) -> Result<Vec<String>> {
-		self.run_command("nix-build", self.build_command(), Stdio::null()).await?;
+		let mut c = Command::new("bash");
+		// c.arg("-euc").arg("sleep 0.5; echo FALSEY >&2; echo TRUEY; exit 1");
+		// c.arg("-euc").arg("nix-build --no-out-link --show-trace --attr src --expr '(import <nixpkgs> {}).hello.drvAttrs'");
+		// c.arg("-euc").arg("nix-build --no-out-link --show-trace --attr drvs -");
+		c.arg("-euc").arg("nix-build --no-out-link --show-trace --attr drvs -");
+		self.run_command("nix-build", c, Stdio::piped()).await?;
+		todo!("ok yeah?");
+		self.run_command("nix-build", self.build_command(), Stdio::piped()).await?;
 	
 		let mut expr_command = Command::new("nix-instantiate");
 		expr_command
 			.arg("--show-trace")
-			.arg("--expr")
 			.arg("-")
 			.arg("--attr")
 			.arg("paths")
@@ -136,38 +140,67 @@ impl FetchMany {
 		command.stdout(stdout);
 		command.stderr(Stdio::piped());
 		command.stdin(Stdio::piped());
+		command.kill_on_drop(true);
 		let mut child = command.spawn()?;
 		let mut stdin_pipe = child.stdin.take().expect("stdin is not a pipe");
-		let (wrote_stdin, stdout, stderr) = join!(
-			stdin_pipe.write(self.expr.as_bytes()),
-					// .map(|res| res.map(|_:usize| ()),
-				// (None, None) => future::ready(Ok(())).right_future(),
-				// (Some(_), None) | (None, Some(_)) => future::ready(Err(anyhow!("inconsistent stdin"))).right_future(),
-			// },
-			read_io_opt(&mut child.stderr),
-			read_io_opt(&mut child.stdout)
+		let mut stdout_pipe = child.stdout.take();
+		let stderr_pipe = child.stderr.take().expect("stderr is not a pipe");
+		let (wrote_stdin, stdout, consumed_stderr) = join!(
+			// futures::future::ready(Ok::<(), Error>(())),
+			(|| async {
+				// debug!("Writing stdin: {}", self.expr);
+				// let result = stdin_pipe.write(self.expr.as_bytes()).await;
+				let result = stdin_pipe.write("{ drvs = [ (import <nixpkgs> {}).hello.drvAttrs.src ]; }".as_bytes()).await;
+				drop(stdin_pipe);
+				result
+			})(),
+			read_io_opt(&mut stdout_pipe),
+			(|| async {
+				use tokio::io::BufReader;
+				use tokio::io::AsyncBufReadExt;
+				let stderr_buf = BufReader::new(stderr_pipe);
+				let mut lines = stderr_buf.lines();
+
+				while let Some(line) = lines.next_line().await.transpose() {
+					warn_output_line(desc, line.map_err(Error::from));
+				}
+				Ok::<(), Error>(())
+			})(),
 		);
-		if command.status().await?.success() {
-			wrote_stdin?;
+		let status = command.status().await?;
+		if status.success() {
+			wrote_stdin.with_context(||"writing to stdin")?;
 			stdout
 		} else {
-			warn_output(desc, &stderr);
-			Err(anyhow!("Process failed: {:?}", command))
+			consumed_stderr?;
+			// warn_output(desc, &stderr);
+			Err(anyhow!("Process failed (code={:?}): {:?}", status.code(), command))
 		}
 	}
-
 }
 
-
 async fn read_io_opt<Pipe: AsyncRead + Unpin>(pipe: &mut Option<Pipe>) -> Result<Option<String>> {
-	if let Some(mut stderr) = pipe.take() {
-		let mut buf = Vec::new();
-		let contents = stderr.read_to_end(&mut buf).await?;
-		Ok(Some(String::from_utf8(buf)?))
+	if let Some(mut pipe) = pipe.take() {
+		let mut buf = String::new();
+		let _len: usize = pipe.read_to_string(&mut buf).await?;
+		info!("read pipe -> {:?}", &buf);
+		Ok(Some(buf))
 	} else {
 		Ok(None)
 	}
+}
 
+fn warn_output_line(desc: &'static str, line: Result<String>) {
+	match line {
+		Ok(line) => {
+			if !line.is_empty() {
+				warn!("[{}]: {}", desc, line);
+			}
+		}
+		Err(e) => {
+			warn!("[{}]: can't read stderr: {:?}", desc, e);
+		}
+	}
 }
 
 fn warn_output(desc: &'static str, output: &Result<Option<String>>) {
@@ -227,18 +260,6 @@ pub async fn realise_sources<'a, It: Iterator<Item=(&'a Key, &'a Spec)>>(specs: 
 		.collect::<HashMap<Key, PathBuf>>())
 }
 
-// TODO drop this?
-pub async fn realise_source(spec: &Spec) -> Result<Option<PathBuf>> {
-	if let Some(src_digest) = spec.src_digest() {
-		debug!("realise: {:?}", &spec.src);
-		let fetch_many = FetchMany::singleton(&src_digest)?;
-		let path = fetch_many.check_stdout("nix-build", fetch_many.build_command()).await?;
-		Ok(Some(PathBuf::from(path)))
-	} else {
-		Ok(None)
-	}
-}
-
 #[derive(Debug, Clone)]
 enum ArchiveType {
 	Tar,
@@ -288,6 +309,7 @@ impl ExtractSource<'_> {
 					(cmd, ArchiveType::Tar)
 				};
 				debug!("{:?}", cmd);
+				// TODO use check_output?
 				cmd.stdout(Stdio::piped()).kill_on_drop(true);
 				let output = cmd.spawn()?.wait_with_output().await?;
 				if !output.status.success() {

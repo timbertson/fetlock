@@ -3,6 +3,7 @@
 mod expr;
 pub use expr::*;
 mod lock;
+mod memoize;
 pub use lock::*;
 mod backend;
 mod cache;

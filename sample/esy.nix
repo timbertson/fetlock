@@ -1278,7 +1278,16 @@ in
         '';
         mode = "opam";
       };
-      files = /Users/tcuthbertson/.cache/fetlock/git/a0bc4b41ddb868605dc15000/repo/packages/ocamlfind/ocamlfind.1.8.1/files;
+      files = (final.subtree {
+        base = pkgs.fetchFromGitHub {
+  owner = "ocaml";
+  repo = "opam-repository";
+  rev = "883d88d2d037852985eb01067a09e64289388baf";
+  sha256 = "0vwryd46zwylj6z7807rl8qh5zclik8nkmbynknpbmxfiz6b3zjj";
+};
+        hash = "1mys1fls2adq4s851gnis9lq33gnjxisjxjkwzr5kar5j22rk71c";
+        path = "packages/ocamlfind/ocamlfind.1.8.1/files";
+      });
     };
     "@opam/ocamlformat@opam:0.15.0@8e036963" = {
       pname = "ocamlformat";
@@ -1935,7 +1944,16 @@ in
       build = {
         mode = "opam";
       };
-      files = /Users/tcuthbertson/.cache/fetlock/git/a0bc4b41ddb868605dc15000/repo/packages/seq/seq.base/files;
+      files = (final.subtree {
+        base = pkgs.fetchFromGitHub {
+  owner = "ocaml";
+  repo = "opam-repository";
+  rev = "883d88d2d037852985eb01067a09e64289388baf";
+  sha256 = "0vwryd46zwylj6z7807rl8qh5zclik8nkmbynknpbmxfiz6b3zjj";
+};
+        hash = "1pannj4qsgh1bm3qg4gza8sxshnz1albqvq0pdi5y9zckv1q3b6b";
+        path = "packages/seq/seq.base/files";
+      });
     };
     "@opam/sexplib0@opam:v0.14.0@ddeb6438" = {
       pname = "sexplib0";

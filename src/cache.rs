@@ -1,8 +1,13 @@
-use crate::GitUrl;
+use crate::{GitUrl, Src, Sha256};
+use crate::cmd;
+use crate::memoize::Memoize;
 use anyhow::*;
 use log::*;
 use std::fs;
 use std::fs::*;
+use std::rc::Rc;
+use tokio::sync::Mutex;
+use futures::future::FutureExt;
 use std::path::*;
 use std::time::SystemTime;
 use tokio::process::Command;
@@ -26,84 +31,134 @@ pub fn cache_hash(src: &str) -> String {
 	hex
 }
 
-async fn exec_command(command: &mut Command) -> Result<()> {
-	debug!("{:?}", command);
-	command.kill_on_drop(true);
-	let status = command.spawn()?.wait().await?;
-	debug!("Command {:?} status: {:?}", command, status);
-	if status.success() {
-		Ok(())
-	} else {
-		Err(anyhow!("Process failed: {:?}", command))
+pub struct CachedRepo {
+	pub path: PathBuf,
+	pub src: Src,
+	digest: Rc<Mutex<Memoize<Option<Sha256>>>>,
+}
+
+impl CachedRepo {
+	pub async fn cache<G: GitUrl>(src: &G) -> Result<CachedRepo> {
+		use fs2::FileExt;
+		let mut path = cache_root();
+		path.push("git");
+		let url = src.git_url();
+		path.push(cache_hash(&url));
+		debug!("cache for {} is: {:?}", &url, &path);
+		fs::create_dir_all(&path)?;
+		let lock_path = path.clone().join("lock");
+		let lock = OpenOptions::new()
+			.read(true)
+			.write(true)
+			.create(true)
+			.open(&lock_path)?;
+		lock.lock_exclusive()?;
+		let repo_path = path.clone().join("repo");
+		if !repo_path.exists() {
+			let repo_tmp = path.clone().join("repo.tmp");
+			if repo_tmp.exists() {
+				fs::remove_dir_all(&repo_tmp)?;
+			}
+			info!("cloning {:?}", &url);
+			cmd::exec(
+				Command::new("git")
+					.arg("clone")
+					.arg("--depth=1")
+					.arg(&url)
+					.arg(&repo_tmp),
+			)
+			.await?;
+			fs::rename(&repo_tmp, &repo_path)?;
+		} else {
+			debug!("checking staleness of {:?}", &repo_path);
+			let mtime = lock.metadata()?.modified()?;
+			let now = SystemTime::now();
+			let age = now
+				.duration_since(mtime)
+				.or_else(|_| now.duration_since(SystemTime::UNIX_EPOCH))?;
+			let fetch_ref = "fetlock-fetched";
+			let age_in_days = age.as_secs() / SECONDS_PER_DAY;
+			if age.as_secs() > TTL_SECONDS {
+				info!("updating {} (age={} days)", &url, age_in_days);
+				cmd::exec(
+					Command::new("git")
+						.arg("-C")
+						.arg(&repo_path)
+						.arg("fetch")
+						.arg("--force")
+						.arg(&url)
+						.arg(format!("HEAD:refs/heads/{}", fetch_ref)),
+				)
+				.await?;
+
+				cmd::exec(
+					Command::new("git")
+						.arg("-C")
+						.arg(&repo_path)
+						.arg("reset")
+						.arg("--hard")
+						.arg(fetch_ref),
+				)
+				.await?;
+				lock.set_len(0)?; // cause mtime to be updated
+			} else {
+				debug!("not updating {}, it's only {} days old", &url, age_in_days);
+			}
+		}
+		let head_rev = cmd::run_stdout("git", None, Command::new("git")
+			.arg("-C").arg(&repo_path)
+			.arg("rev-parse").arg("HEAD")
+		).await?;
+		let lazy_digest = {
+			let repo_path = repo_path.clone();
+			let rev = head_rev.clone();
+			nix_digest_of_git_repo(repo_path, rev).map(|result|
+				match result {
+					Ok(sha) => Some(sha),
+					Err(err) => {
+						// have to log this instead of returning because Anyhow::Result
+						// is not `Clone`.
+						error!("{:?}", err);
+						None
+					}
+				}
+			)
+		};
+		Ok(CachedRepo {
+			src: src.src_for_rev(head_rev),
+			path: repo_path,
+			digest: Rc::new(Mutex::new(Memoize::new(Box::pin(lazy_digest)))),
+		})
+	}
+	
+	pub async fn digest(&self) -> Result<Sha256> {
+		use std::ops::DerefMut;
+		debug!("acquiring mutex...");
+		let mut guard = self.digest.lock().await; //.unwrap();
+		guard.deref_mut().await.ok_or_else(||anyhow!("failed to extract digest"))
 	}
 }
 
-pub async fn cached_repo<G: GitUrl>(src: &G) -> Result<PathBuf> {
-	use fs2::FileExt;
-	let mut path = cache_root();
-	path.push("git");
-	let url = src.git_url();
-	path.push(cache_hash(&url));
-	debug!("cache for {} is: {:?}", &url, &path);
-	fs::create_dir_all(&path)?;
-	let lock_path = path.clone().join("lock");
-	let lock = OpenOptions::new()
-		.read(true)
-		.write(true)
-		.create(true)
-		.open(&lock_path)?;
-	lock.lock_exclusive()?;
-	let repo_path = path.clone().join("repo");
-	if !repo_path.exists() {
-		let repo_tmp = path.clone().join("repo.tmp");
-		if repo_tmp.exists() {
-			fs::remove_dir_all(&repo_tmp)?;
-		}
-		info!("cloning {:?}", &url);
-		exec_command(
-			Command::new("git")
-				.arg("clone")
-				.arg("--depth=1")
-				.arg(&url)
-				.arg(&repo_tmp),
-		)
-		.await?;
-		fs::rename(&repo_tmp, &repo_path)?;
-	} else {
-		debug!("checking staleness of {:?}", &repo_path);
-		let mtime = lock.metadata()?.modified()?;
-		let now = SystemTime::now();
-		let age = now
-			.duration_since(mtime)
-			.or_else(|_| now.duration_since(SystemTime::UNIX_EPOCH))?;
-		let fetch_ref = "fetlock-fetched";
-		let age_in_days = age.as_secs() / SECONDS_PER_DAY;
-		if age.as_secs() > TTL_SECONDS {
-			info!("updating {} (age={} days)", &url, age_in_days);
-			exec_command(
-				Command::new("git")
-					.arg("-C")
-					.arg(&repo_path)
-					.arg("fetch")
-					.arg("--force")
-					.arg(&url)
-					.arg(format!("HEAD:refs/heads/{}", fetch_ref)),
-			)
-			.await?;
+pub async fn nix_digest_of_path<P: AsRef<Path>>(path: P) -> Result<Sha256> {
+	let output = cmd::run_stdout(
+		"nix-hash", None,
+		Command::new("bash").arg("-euo").arg("pipefail").arg("-c")
+			.arg("nix-store --dump \"$DIR\" | nix-hash --type sha256 --flat --base32 /dev/stdin")
+			.env("DIR", path.as_ref())
+	).await?;
+	Ok(Sha256::new(output))
+}
 
-			exec_command(
-				Command::new("git")
-					.arg("-C")
-					.arg(&repo_path)
-					.arg("reset")
-					.arg("--hard")
-					.arg(fetch_ref),
-			)
-			.await?;
-			lock.set_len(0)?; // cause mtime to be updated
-		} else {
-			debug!("not updating {}, it's only {} days old", &url, age_in_days);
-		}
-	}
-	Ok(repo_path)
+// rev could be a reference, but it makes the actual usage awkward
+pub async fn nix_digest_of_git_repo<P: AsRef<Path>>(path: P, rev: String) -> Result<Sha256> {
+	info!("exporting {:?}#{}", path.as_ref(), rev);
+	let tmp_dir = tempdir::TempDir::new("fetlock-export")?;
+	cmd::exec(Command::new("bash")
+			.arg("-euc")
+			.arg("git -C \"$REPO\" archive \"$REV\" | tar x -C \"$EXTRACT\"")
+			.env("REPO", path.as_ref())
+			.env("REV", rev)
+			.env("EXTRACT", tmp_dir.path())
+	).await?;
+	nix_digest_of_path(tmp_dir.path()).await
 }

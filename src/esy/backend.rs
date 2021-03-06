@@ -5,6 +5,7 @@ use crate::esy::eval::Pkg;
 use crate::esy::opam_manifest::Opam;
 use crate::esy::{command, esy_manifest, eval};
 use crate::fetch;
+use crate::cache::{CachedRepo, nix_digest_of_path};
 use crate::nix_serialize::{WriteContext, Writeable};
 use crate::*;
 use anyhow::*;
@@ -59,7 +60,7 @@ impl EsyLock {
 	}
 
 	async fn finalize_spec(
-		opam_repo: Rc<PathBuf>,
+		opam_repo: Rc<CachedRepo>,
 		realised_src: Option<&PathBuf>,
 		esy_spec: &mut EsySpec,
 		installed: &InstalledPkgs,
@@ -90,13 +91,26 @@ impl EsyLock {
 						.file_contents(&manifest_path)
 						.await?
 				} else {
-					let repo = fetch::ExtractSource::from(&opam_repo).await?;
+					let repo_path = &opam_repo.path;
+					let repo = fetch::ExtractSource::from(repo_path).await?;
 					let version = &esy_spec.spec.id.version;
 					let prefix = format!("packages/{}/{}.{}", name.0, name.0, version);
-					// TODO as above...
-					let files_path = opam_repo.join(format!("{}/files", prefix));
+					let files_rel = format!("{}/files", prefix);
+					let files_path = repo_path.join(&files_rel);
 					if files_path.exists() {
-						files = Some(Expr::Literal(files_path.to_string_lossy().to_string()));
+						let repo_digest = opam_repo.digest().await?;
+						let base_expr = Expr::Literal(WriteContext::string(|c|
+							SrcDigest::new(&opam_repo.src, &repo_digest).write_to(c)
+						)?);
+						let files_digest = nix_digest_of_path(&files_path).await?;
+						let mut attrs = BTreeMap::new();
+						attrs.insert("base".to_owned(), base_expr);
+						attrs.insert("path".to_owned(), Expr::str(files_rel));
+						attrs.insert("hash".to_owned(), Expr::str(files_digest.into_string()));
+						files = Some(Expr::FunCall(Box::new(FunCall {
+							subject: Expr::Literal("final.subtree".to_owned()),
+							args: vec!(Expr::AttrSet(attrs))
+						})));
 					}
 					repo.file_contents(&format!("{}/opam", prefix)).await?
 				};
@@ -184,7 +198,12 @@ impl Backend for EsyLock {
 	}
 
 	async fn finalize(mut self) -> Result<Lock<Self::Spec>> {
-		match self.lock.specs.iter().find(|(key, esy_spec)| esy_spec.spec.id.name == "ocaml") {
+		match self
+			.lock
+			.specs
+			.iter()
+			.find(|(key, esy_spec)| esy_spec.spec.id.name == "ocaml")
+		{
 			Some((key, esy_spec)) => {
 				self.lock
 					.context
@@ -201,11 +220,11 @@ impl Backend for EsyLock {
 			owner: "ocaml".to_owned(),
 			repo: "opam-repository".to_owned(),
 		};
-		let opam_repo = Rc::new(crate::cache::cached_repo(&opam_repo_git).await?);
-		
-		let realised_sources = fetch::realise_sources(
-			self.lock.specs.iter().map(|(key, spec)| (key, &spec.spec))
-		).await?;
+		let opam_repo = Rc::new(CachedRepo::cache(&opam_repo_git).await?);
+
+		let realised_sources =
+			fetch::realise_sources(self.lock.specs.iter().map(|(key, spec)| (key, &spec.spec)))
+				.await?;
 
 		let installed = self.partition_specs()?;
 		let installed_ref = &installed;
@@ -215,7 +234,7 @@ impl Backend for EsyLock {
 		// let parallelism = 1;
 		// specs.sort_by(|a,b| a.id().cmp(&b.id()));
 
-		let specs = self.lock.specs.iter_mut(); // .collect::<Vec<EsySpec>>();
+		let specs = self.lock.specs.iter_mut();
 		let mut stream = futures::stream::iter(specs)
 			.map(|(key, esy_spec)| {
 				let opam_repo_ref = opam_repo.clone();

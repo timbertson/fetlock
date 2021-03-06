@@ -45,6 +45,15 @@ impl StringMode {
 	}
 }
 
+impl WriteContext<'_, Vec<u8>> {
+	pub fn string<F: FnOnce(&mut WriteContext<Vec<u8>>) -> Result<()>>(f: F) -> anyhow::Result<String> {
+		let mut expr = Vec::new();
+		let mut out = WriteContext::<Vec<u8>>::initial(&mut expr);
+		f(&mut out)?;
+		Ok(String::from_utf8(expr)?)
+	}
+}
+
 impl<W: Write> WriteContext<'_, W> {
 	pub fn initial<'a>(file: &'a mut W) -> WriteContext<'a, W> {
 		WriteContext {
@@ -442,7 +451,10 @@ impl Writeable for DrvName<'_> {
 	}
 }
 
-pub fn write_iter<V: Writeable, I: Iterator<Item=V>, W: Write>(it: I, c: &mut WriteContext<W>) -> Result<()> {
+pub fn write_iter<V: Writeable, I: Iterator<Item = V>, W: Write>(
+	it: I,
+	c: &mut WriteContext<W>,
+) -> Result<()> {
 	c.bracket_list(move |c| {
 		for v in it {
 			c.list_item(&v)?;

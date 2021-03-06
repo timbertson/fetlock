@@ -142,6 +142,7 @@ impl LockContext {
 
 pub trait GitUrl {
 	fn git_url(&self) -> String;
+	fn src_for_rev(&self, rev: String) -> Src;
 }
 
 #[derive(Debug, Clone)]
@@ -154,6 +155,14 @@ impl GitUrl for GithubRepo {
 	fn git_url(&self) -> String {
 		format!("https://github.com/{}/{}.git", &self.owner, &self.repo)
 	}
+
+	fn src_for_rev(&self, rev: String) -> Src {
+		Src::Github(Github {
+			repo: self.clone(),
+			git_ref: rev,
+			fetch_submodules: false,
+		})
+	}
 }
 
 #[derive(Debug, Clone)]
@@ -161,11 +170,8 @@ pub struct GitRepo {
 	url: String,
 }
 
-impl GitUrl for GitRepo {
-	fn git_url(&self) -> String {
-		self.url.to_owned()
-	}
-}
+// TODO when anyone needs it
+// impl GitUrl for GitRepo { ... }
 
 #[derive(Debug, Clone)]
 pub struct Github {
@@ -221,15 +227,19 @@ impl Sha256 {
 		Sha256(s)
 	}
 
-	pub fn len() -> usize {
+	pub fn default_len() -> usize {
 		52
+	}
+
+	pub fn into_string(self) -> String {
+		self.0
 	}
 
 	pub fn dummy() -> &'static Self {
 		lazy_static! {
 			static ref DUMMY: Sha256 = Sha256::new(
 				std::iter::repeat("0")
-					.take(Sha256::len())
+					.take(Sha256::default_len())
 					.collect::<String>()
 			);
 		}

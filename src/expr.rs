@@ -105,7 +105,7 @@ pub enum Expr {
 	Identifier(String),
 	FunCall(Box<FunCall>),
 	AttrPath(Box<AttrPath>),
-	AttrSet(BTreeMap<String, Box<Expr>>),
+	AttrSet(BTreeMap<String, Expr>),
 	List(Vec<Expr>),
 }
 

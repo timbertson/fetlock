@@ -47,6 +47,21 @@ let
 							};
 							makeHook = name: text:
 								pkgs.makeSetupHook { inherit name; } (pkgs.writeText "setupHook.sh" text);
+								
+							# Take a subtree of some derivation and promote it to
+							# a toplevel, fixed-output derivation. This lets us
+							# alter e.g. the repository where files come from, but
+							# not bust the cache if the files are unchanged.
+							subtree = { name ? "subtree", base, path, hash }:
+								stdenv.mkDerivation {
+									outputHash = hash;
+									outputHashMode = "recursive";
+									inherit name;
+									buildCommand = ''
+										cp -r "${base}/${path}" "$out";
+										chmod u+w "$out"
+									'';
+								};
 							
 							# apply frontend build function to all specs
 							drvs = mapAttrs

@@ -51,9 +51,7 @@ async fn run() -> Result<()> {
 		let mut out = WriteContext::initial(&mut out_file);
 		lock.write_to(&mut out)?;
 		Ok(())
-	})?;
-	info!("Wrote to {}", out_path);
-	Ok(())
+	})
 }
 
 #[tokio::main]

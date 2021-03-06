@@ -178,19 +178,19 @@ impl NixBuild {
 			// PkgType::Node => "node",
 		};
 
-		map.insert("mode".to_owned(), Box::new(Expr::str(mode_str.to_owned())));
+		map.insert("mode".to_owned(), Expr::str(mode_str.to_owned()));
 
 		if let Some(build) = build {
-			map.insert("buildPhase".to_owned(), Box::new(build));
+			map.insert("buildPhase".to_owned(), build);
 		}
 		if let Some(install) = install {
-			map.insert("installPhase".to_owned(), Box::new(install));
+			map.insert("installPhase".to_owned(), install);
 		}
 		if let Some(depexts) = depexts {
-			map.insert("depexts".to_owned(), Box::new(depexts));
+			map.insert("depexts".to_owned(), depexts);
 		}
 		for (k, v) in extra {
-			map.insert(k, Box::new(v));
+			map.insert(k, v);
 		}
 		Expr::AttrSet(map)
 	}

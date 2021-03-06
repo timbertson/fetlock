@@ -1,6 +1,6 @@
 use crate::cache::{cache_hash, cache_root};
-use crate::lock::*;
 use crate::cmd;
+use crate::lock::*;
 use crate::nix_serialize::*;
 use anyhow::*;
 use futures::StreamExt;
@@ -8,8 +8,8 @@ use lazy_static::lazy_static;
 use log::*;
 use regex::Regex;
 use std::borrow::BorrowMut;
-use std::fmt;
 use std::collections::HashMap;
+use std::fmt;
 use std::io::{ErrorKind, Write};
 use std::path::PathBuf;
 use std::process::{ExitStatus, Stdio};
@@ -78,7 +78,9 @@ struct FetchMany {
 }
 
 impl FetchMany {
-	fn digests<'a, Digests: Iterator<Item=&'a SrcDigest<'a>>>(src_digests: Digests) -> Result<FetchMany> {
+	fn digests<'a, Digests: Iterator<Item = &'a SrcDigest<'a>>>(
+		src_digests: Digests,
+	) -> Result<FetchMany> {
 		let mut expr = Vec::new();
 		let mut out = WriteContext::initial(&mut expr);
 		out.write_str("let pkgs = import <nixpkgs> {}; in ")?;
@@ -88,7 +90,7 @@ impl FetchMany {
 		let expr = String::from_utf8(expr)?;
 		Ok(FetchMany { expr })
 	}
-	
+
 	fn singleton(src_digest: &SrcDigest) -> Result<FetchMany> {
 		let digests = Some(src_digest);
 		Self::digests(digests.into_iter())
@@ -106,48 +108,57 @@ impl FetchMany {
 	}
 
 	async fn realise(&self) -> Result<Vec<String>> {
-		self.run_command("nix-build", self.build_command(), Stdio::piped()).await?;
-	
-		let mut expr_command = Command::new("nix-instantiate");
-		expr_command
-			.arg("--show-trace")
-			.arg("-")
-			.arg("--attr")
-			.arg("paths")
-			.arg("--eval")
-			.arg("--strict")
-			.arg("--json");
-		let json = self.check_stdout("nix-instantiate", expr_command).await?;
+		self.run_command("nix-build", &mut self.build_command(), Stdio::piped()).await?;
+
+		let json = self.check_stdout("nix-instantiate",
+			Command::new("nix-instantiate")
+				.arg("--show-trace")
+				.arg("-")
+				.arg("--attr")
+				.arg("paths")
+				.arg("--eval")
+				.arg("--strict")
+				.arg("--json")
+		).await?;
 		let errmsg = format!("parsing JSON: {}", &json);
-		Ok(serde_json::from_str::<Vec<String>>(&json).with_context(||errmsg)?)
+		Ok(serde_json::from_str::<Vec<String>>(&json).with_context(|| errmsg)?)
 	}
 
-	async fn check_stdout(&self, desc: &'static str, command: Command) -> Result<String> {
-		cmd::run_stdout(desc, command, Some(self.expr.as_str())).await
+	async fn check_stdout<'a, 'b>(&self, desc: &'a str, command: &'a mut Command) -> Result<String> {
+		cmd::run_stdout("desc", Some(self.expr.as_str()), command).await
 	}
 
-	async fn run_command(&self, desc: &'static str, command: Command, stdout: Stdio) -> Result<Option<String>> {
-		cmd::run(desc, command, Some(self.expr.as_str()), stdout).await
+	async fn run_command(
+		&self,
+		desc: &str,
+		command: &mut Command,
+		stdout: Stdio,
+	) -> Result<Option<String>> {
+		cmd::run(desc, Some(self.expr.as_str()), stdout, command).await
 	}
 
-	async fn run_command_raw<'a>(&self, command: &'a mut Command, stdout: Stdio)
-		-> Result<(Option<String>, Option<String>, ExitStatus)> {
-		cmd::run_raw(command, Some(self.expr.as_str()), stdout).await
+	async fn run_command_raw(
+		&self,
+		command: &mut Command,
+		stdout: Stdio,
+	) -> Result<(Option<String>, Option<String>, ExitStatus)> {
+		cmd::run_raw(Some(self.expr.as_str()), stdout, command).await
 	}
 }
 
 async fn do_prefetch(src: &Src) -> Result<Sha256> {
 	lazy_static! {
 	  // NOTE: this format works for nix 2.2+ only
-	  static ref EXPECTED_SHA: Regex = Regex::new(&format!(r"got: +sha256:([a-z0-9]{{{}}})", Sha256::len())).unwrap();
+	  static ref EXPECTED_SHA: Regex = Regex::new(&format!(r"got: +sha256:([a-z0-9]{{{}}})", Sha256::default_len())).unwrap();
 	}
 
 	let dummy = SrcDigest::new(src, Sha256::dummy());
 	debug!("prefetching {:?}", &dummy);
 	let fetch = FetchMany::singleton(&dummy)?;
-	let (stdout, stderr, status) = fetch.run_command_raw(
-		&mut fetch.build_command(), Stdio::piped()).await?;
-	cmd::warn_output("nix stdout", &Ok(stdout));
+	let (stdout, stderr, status) = fetch
+		.run_command_raw(&mut fetch.build_command(), Stdio::piped())
+		.await?;
+	cmd::warn_output("nix stdout", Ok(stdout));
 
 	let stderr = stderr.ok_or_else(|| anyhow!("stderr not piped"))?;
 	let mut it = EXPECTED_SHA.captures_iter(&stderr);
@@ -166,13 +177,19 @@ async fn do_prefetch(src: &Src) -> Result<Sha256> {
 	Ok(Sha256::new(capture))
 }
 
-pub async fn realise_sources<'a, It: Iterator<Item=(&'a Key, &'a Spec)>>(specs: It) -> Result<HashMap<Key, PathBuf>> {
-	let pairs = specs.filter_map(|(k, spec)| {
-		spec.src_digest().map(|digest| (k, digest))
-	}).collect::<Vec<(&Key, SrcDigest)>>();
+pub async fn realise_sources<'a, It: Iterator<Item = (&'a Key, &'a Spec)>>(
+	specs: It,
+) -> Result<HashMap<Key, PathBuf>> {
+	let pairs = specs
+		.filter_map(|(k, spec)| spec.src_digest().map(|digest| (k, digest)))
+		.collect::<Vec<(&Key, SrcDigest)>>();
 	info!("realising: {} sources...", pairs.len());
-	let paths = FetchMany::digests(pairs.iter().map(|(_key, digest)| digest))?.realise().await?;
-	Ok(pairs.into_iter().zip(paths)
+	let paths = FetchMany::digests(pairs.iter().map(|(_key, digest)| digest))?
+		.realise()
+		.await?;
+	Ok(pairs
+		.into_iter()
+		.zip(paths)
 		.map(|((key, _), path)| (key.to_owned(), PathBuf::from(path)))
 		.collect::<HashMap<Key, PathBuf>>())
 }
@@ -216,7 +233,7 @@ impl ExtractSource<'_> {
 		} else {
 			(|| async {
 				let root_str = root.to_str().ok_or_else(|| anyhow!("non-utf8 root path"))?;
-				let (desc, cmd, archive_type) = if root_str.ends_with(".zip") {
+				let (desc, mut cmd, archive_type) = if root_str.ends_with(".zip") {
 					let mut cmd = Command::new("unzip");
 					cmd.arg("-Z1").arg(root_str);
 					("unzip", cmd, ArchiveType::Zip)
@@ -226,7 +243,7 @@ impl ExtractSource<'_> {
 					cmd.arg("tf").arg(root_str);
 					("tar", cmd, ArchiveType::Tar)
 				};
-				let raw_listing = cmd::run_stdout(desc, cmd, None).await?;
+				let raw_listing = cmd::run_stdout(desc, None, &mut cmd).await?;
 				// first grab the root directory
 				let first_line = raw_listing
 					.lines()
@@ -279,22 +296,21 @@ impl ExtractSource<'_> {
 	pub async fn file_contents(&self, file: &str) -> Result<String> {
 		debug!("file_contents({:?}, {:?})", self, file);
 		match &self.source_type {
-			SourceType::Directory => Ok(
-				String::from_utf8(fs::read(self.root.join(file)).await?)?
-			),
+			SourceType::Directory => Ok(String::from_utf8(fs::read(self.root.join(file)).await?)?),
 			SourceType::Archive(listing) => {
 				let root_str = self
 					.root
 					.to_str()
 					.ok_or_else(|| anyhow!("non-utf8 root path"))?;
 				let archive_path = format!("{}/{}", listing.first_component, file);
-				let mut cmd = Command::new("tar");
-				cmd.arg("xf")
-					.arg(root_str)
-					.arg("--to-stdout")
-					.arg("--extract")
-					.arg(&archive_path);
-				cmd::run_stdout("tar", cmd, None).await
+				cmd::run_stdout("tar", None,
+					Command::new("tar")
+						.arg("xf")
+						.arg(root_str)
+						.arg("--to-stdout")
+						.arg("--extract")
+						.arg(&archive_path),
+				).await
 			}
 		}
 	}

@@ -9,7 +9,7 @@ use std::borrow::BorrowMut;
 // "one type is more general than the other" error:
 // https://github.com/rust-lang/rust/issues/64650
 #[async_trait(?Send)]
-pub trait Backend: Sized {
+pub trait Backend: Sized + std::fmt::Debug {
 	type Spec: BorrowMut<Spec> + Writeable;
 
 	fn load(path: &str) -> Result<Self>;

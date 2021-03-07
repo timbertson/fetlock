@@ -10,6 +10,7 @@ mod cache;
 mod cmd;
 pub mod err;
 pub mod esy;
+pub mod yarn;
 pub mod fetch;
 pub mod fs;
 pub mod nix_serialize;

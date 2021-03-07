@@ -52,6 +52,12 @@ impl WriteContext<'_, Vec<u8>> {
 		f(&mut out)?;
 		Ok(String::from_utf8(expr)?)
 	}
+
+	pub fn sink<W: Write, F: FnOnce(&mut WriteContext<W>) -> Result<()>>(mut w: W, f: F) -> anyhow::Result<()> {
+		let mut out = WriteContext::initial(&mut w);
+		f(&mut out)?;
+		Ok(())
+	}
 }
 
 impl<W: Write> WriteContext<'_, W> {

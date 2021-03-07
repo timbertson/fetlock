@@ -1282,8 +1282,8 @@ in
         base = pkgs.fetchFromGitHub {
   owner = "ocaml";
   repo = "opam-repository";
-  rev = "883d88d2d037852985eb01067a09e64289388baf";
-  sha256 = "0vwryd46zwylj6z7807rl8qh5zclik8nkmbynknpbmxfiz6b3zjj";
+  rev = "7c396b25fe7954503325bd8f183d080d226dc202";
+  sha256 = "04s7vywhbl1c0ifflrv38s50sj4h7vhs55vyx4iihd6mcywy6xk3";
 };
         hash = "1mys1fls2adq4s851gnis9lq33gnjxisjxjkwzr5kar5j22rk71c";
         path = "packages/ocamlfind/ocamlfind.1.8.1/files";
@@ -1948,8 +1948,8 @@ in
         base = pkgs.fetchFromGitHub {
   owner = "ocaml";
   repo = "opam-repository";
-  rev = "883d88d2d037852985eb01067a09e64289388baf";
-  sha256 = "0vwryd46zwylj6z7807rl8qh5zclik8nkmbynknpbmxfiz6b3zjj";
+  rev = "7c396b25fe7954503325bd8f183d080d226dc202";
+  sha256 = "04s7vywhbl1c0ifflrv38s50sj4h7vhs55vyx4iihd6mcywy6xk3";
 };
         hash = "1pannj4qsgh1bm3qg4gza8sxshnz1albqvq0pdi5y9zckv1q3b6b";
         path = "packages/seq/seq.base/files";

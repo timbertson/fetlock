@@ -1,25 +1,15 @@
 use anyhow::*;
-use getopts::Options;
 use log::*;
-use std::env;
 use std::fmt;
 use std::io::Write;
 use std::io::stdout;
 use std::writeln;
 
+use fetlock::CliOpts;
 use fetlock::fetch;
+use fetlock::lock;
 use fetlock::nix_serialize::{WriteContext, Writeable};
 use fetlock::Backend;
-
-fn print_usage(program: &str, opts: Options) {
-	let brief = format!(
-		"\
-Usage: {} LOCKFILE [options]
-",
-		program
-	);
-	print!("{}", opts.usage(&brief));
-}
 
 async fn run() -> Result<()> {
 	env_logger::from_env(env_logger::Env::default().default_filter_or("info"))
@@ -28,30 +18,13 @@ async fn run() -> Result<()> {
 			writeln!(buf, "{}: {}", level, record.args())
 		})
 		.init();
-	let argv: Vec<String> = env::args().collect();
-	let program = argv[0].clone();
+	let opts = CliOpts::from_argv()?;
 
-	let mut opts = Options::new();
-	opts.optflag("h", "help", "print this help menu");
-	opts.optopt("t", "type", "specify lock type (default: autodetected)", "TYPE");
-	opts.optopt("o", "out", "output file (default: stdout)", "PATH");
-
-	let matches = opts.parse(&argv[1..])?;
-	if matches.opt_present("h") {
-		return Ok(print_usage(&program, opts));
-	}
-
-	if matches.free.len() != 1 {
-		return Err(anyhow!("Expected exactly one argument, got: {:?}", matches.free))
-	}
-	let lockfile_path = matches.free.iter().map(|x| x.as_ref()).next().unwrap();
-	let out_path_owned = matches.opt_str("out");
-	let out_path = out_path_owned.as_ref().map(|s| s.as_str());
+	let out_path = opts.out_path.as_ref().map(|s| s.as_str());
 	
-	match matches.opt_str("type").unwrap_or_else(||"AUTODETECT_NOT_IMPLEMENTED".to_owned()).as_str() {
-		"esy" => process::<fetlock::esy::EsyLock>(lockfile_path, out_path).await,
-		"yarn" => process::<fetlock::yarn::YarnLock>(lockfile_path, out_path).await,
-		other => { return Err(anyhow!("Unknown type: {}", other)) },
+	match opts.lock_type {
+		lock::Type::Esy => process::<fetlock::esy::EsyLock>(&opts.lock_path, out_path).await,
+		lock::Type::Yarn => process::<fetlock::yarn::YarnLock>(&opts.lock_path, out_path).await,
 	}
 }
 

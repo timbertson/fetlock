@@ -2,12 +2,14 @@
 #![allow(unused_variables)]
 mod expr;
 pub use expr::*;
-mod lock;
+pub mod lock;
 mod memoize;
 pub use lock::*;
 mod backend;
 mod cache;
 mod cmd;
+mod opts;
+pub use opts::CliOpts;
 pub mod err;
 pub mod esy;
 pub mod yarn;

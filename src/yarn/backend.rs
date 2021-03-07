@@ -6,19 +6,21 @@ use std::io::Write;
 use std::borrow::{Borrow, BorrowMut};
 use async_trait::async_trait;
 use crate::nix_serialize::{WriteContext, Writeable};
+use crate::CliOpts;
 
 #[derive(Clone, Debug)]
 pub struct YarnLock {
 	lock: Lock<YarnSpec>,
+	opts: CliOpts,
 }
 
 #[async_trait(?Send)]
 impl Backend for YarnLock {
 	type Spec = YarnSpec;
 
-	fn load(path: &str) -> Result<Self> {
+	fn load(opts: CliOpts) -> Result<Self> {
 		let context = LockContext::new(lock::Type::Yarn);
-		info!("loading {}", path);
+		info!("loading {}", &opts.lock_path);
 		Err(anyhow!("TODO"))
 	}
 

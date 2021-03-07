@@ -23,6 +23,12 @@ use std::rc::Rc;
 
 #[derive(Clone, Debug)]
 pub struct EsyLock {
+	opts: CliOpts,
+	lockfile: EsyLockFile,
+}
+
+#[derive(Clone, Debug)]
+pub struct EsyLockFile {
 	lock: Lock<EsySpec>,
 }
 
@@ -41,7 +47,7 @@ impl EsyLock {
 			key: key.clone(),
 		};
 
-		for (key, spec) in self.lock.specs.iter_mut() {
+		for (key, spec) in self.lockfile.lock.specs.iter_mut() {
 			let name = Name(spec.spec.id.name.to_owned());
 			match spec
 				.meta
@@ -185,29 +191,27 @@ impl EsyLock {
 impl Backend for EsyLock {
 	type Spec = EsySpec;
 
-	fn load(path: &str) -> Result<Self> {
+	fn load(opts: CliOpts) -> Result<Self> {
 		let context = LockContext::new(lock::Type::Esy);
-		info!("loading {}", path);
-		let contents = std::fs::read_to_string(path)?;
-		let lock: EsyLock = serde_json::from_str(&contents)?;
-		Ok(lock)
+		let contents = std::fs::read_to_string(&opts.lock_path)?;
+		let lockfile: EsyLockFile = serde_json::from_str(&contents)?;
+		Ok(EsyLock { lockfile, opts })
 	}
 
 	fn lock_mut(&mut self) -> &mut Lock<Self::Spec> {
-		&mut self.lock
+		&mut self.lockfile.lock
 	}
 
 	async fn finalize(mut self) -> Result<Lock<Self::Spec>> {
 		match self
+			.lockfile
 			.lock
 			.specs
 			.iter()
 			.find(|(key, esy_spec)| esy_spec.spec.id.name == "ocaml")
 		{
 			Some((key, esy_spec)) => {
-				self.lock
-					.context
-					.extra
+				self.lockfile.lock.context.extra
 					.insert("ocaml".to_owned(), Expr::get_drv(key.to_string()));
 			}
 			None => {
@@ -220,10 +224,10 @@ impl Backend for EsyLock {
 			owner: "ocaml".to_owned(),
 			repo: "opam-repository".to_owned(),
 		};
-		let opam_repo = Rc::new(CachedRepo::cache(&opam_repo_git).await?);
+		let opam_repo = Rc::new(CachedRepo::cache(&self.opts, &opam_repo_git).await?);
 
 		let realised_sources =
-			fetch::realise_sources(self.lock.specs.iter().map(|(key, spec)| (key, &spec.spec)))
+			fetch::realise_sources(self.lockfile.lock.specs.iter().map(|(key, spec)| (key, &spec.spec)))
 				.await?;
 
 		let installed = self.partition_specs()?;
@@ -234,7 +238,7 @@ impl Backend for EsyLock {
 		// let parallelism = 1;
 		// specs.sort_by(|a,b| a.id().cmp(&b.id()));
 
-		let specs = self.lock.specs.iter_mut();
+		let specs = self.lockfile.lock.specs.iter_mut();
 		let mut stream = futures::stream::iter(specs)
 			.map(|(key, esy_spec)| {
 				let opam_repo_ref = opam_repo.clone();
@@ -254,7 +258,7 @@ impl Backend for EsyLock {
 		}
 		drop(stream);
 
-		Ok(self.lock)
+		Ok(self.lockfile.lock)
 	}
 }
 
@@ -277,7 +281,7 @@ impl EsyMeta {
 
 struct EsyVisitor;
 
-impl<'de> Deserialize<'de> for EsyLock {
+impl<'de> Deserialize<'de> for EsyLockFile {
 	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
 	where
 		D: Deserializer<'de>,
@@ -287,7 +291,7 @@ impl<'de> Deserialize<'de> for EsyLock {
 }
 
 impl<'de> Visitor<'de> for EsyVisitor {
-	type Value = EsyLock;
+	type Value = EsyLockFile;
 
 	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
 		formatter.write_str("esy.lock")
@@ -297,7 +301,7 @@ impl<'de> Visitor<'de> for EsyVisitor {
 	where
 		A: MapAccess<'de>,
 	{
-		let mut ret = EsyLock {
+		let mut ret = EsyLockFile {
 			lock: Lock::new(LockContext::new(lock::Type::Esy)),
 		};
 		while let Some(key) = map.next_key::<&str>()? {

@@ -19,22 +19,22 @@ async fn run() -> Result<()> {
 		})
 		.init();
 	let opts = CliOpts::from_argv()?;
+	debug!("parsed options: {:?}", opts);
 
-	let out_path = opts.out_path.as_ref().map(|s| s.as_str());
-	
 	match opts.lock_type {
-		lock::Type::Esy => process::<fetlock::esy::EsyLock>(&opts.lock_path, out_path).await,
-		lock::Type::Yarn => process::<fetlock::yarn::YarnLock>(&opts.lock_path, out_path).await,
+		lock::Type::Esy => process::<fetlock::esy::EsyLock>(opts).await,
+		lock::Type::Yarn => process::<fetlock::yarn::YarnLock>(opts).await,
 	}
 }
 
-async fn process<B: Backend + fmt::Debug>(path: &str, out_path: Option<&str>) -> Result<()> {
-	let mut lock = B::load(path)?;
+async fn process<B: Backend + fmt::Debug>(opts: CliOpts) -> Result<()> {
+	info!("loading {}", &opts.lock_path);
+	let mut lock = B::load(opts.clone())?;
 	debug!("{:?}", lock);
 	fetch::populate_source_digests(lock.lock_mut()).await?;
 	let lock = lock.finalize().await?;
 
-	match out_path {
+	match opts.out_path {
 		None => {
 			WriteContext::sink(stdout(), |mut c| lock.write_to(&mut c))
 		},

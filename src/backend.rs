@@ -1,6 +1,7 @@
 // common interface followed by all backends
 use crate::lock::{Lock, Spec};
 use crate::nix_serialize::Writeable;
+use crate::CliOpts;
 use anyhow::*;
 use async_trait::async_trait;
 use std::borrow::BorrowMut;
@@ -12,7 +13,7 @@ use std::borrow::BorrowMut;
 pub trait Backend: Sized + std::fmt::Debug {
 	type Spec: BorrowMut<Spec> + Writeable;
 
-	fn load(path: &str) -> Result<Self>;
+	fn load(opts: CliOpts) -> Result<Self>;
 
 	// access the underlying specs mutably (for populating sources)
 	fn lock_mut<'a>(&'a mut self) -> &mut Lock<Self::Spec>;

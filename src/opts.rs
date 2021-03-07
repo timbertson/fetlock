@@ -3,6 +3,7 @@ use getopts::{Options};
 use anyhow::*;
 use crate::lock;
 
+#[derive(Debug, Clone)]
 pub struct CliOpts {
 	pub out_path: Option<String>,
 	pub lock_type: lock::Type,

@@ -1,5 +1,6 @@
 use crate::{GitUrl, Src, Sha256};
 use crate::cmd;
+use crate::CliOpts;
 use crate::memoize::Memoize;
 use anyhow::*;
 use log::*;
@@ -14,7 +15,6 @@ use tokio::process::Command;
 
 // 1 day
 const SECONDS_PER_DAY: u64 = 60 * 60 * 24;
-const TTL_SECONDS: u64 = SECONDS_PER_DAY;
 
 pub fn cache_root() -> PathBuf {
 	let mut cache_dir = PathBuf::from(std::env::var("HOME").unwrap());
@@ -38,7 +38,7 @@ pub struct CachedRepo {
 }
 
 impl CachedRepo {
-	pub async fn cache<G: GitUrl>(src: &G) -> Result<CachedRepo> {
+	pub async fn cache<G: GitUrl>(opts: &CliOpts, src: &G) -> Result<CachedRepo> {
 		use fs2::FileExt;
 		let mut path = cache_root();
 		path.push("git");
@@ -78,7 +78,7 @@ impl CachedRepo {
 				.or_else(|_| now.duration_since(SystemTime::UNIX_EPOCH))?;
 			let fetch_ref = "fetlock-fetched";
 			let age_in_days = age.as_secs() / SECONDS_PER_DAY;
-			if age.as_secs() > TTL_SECONDS {
+			if age.as_secs() > (u64::from(opts.repo_freshness_days) * SECONDS_PER_DAY) {
 				info!("updating {} (age={} days)", &url, age_in_days);
 				cmd::exec(
 					Command::new("git")

@@ -39,11 +39,11 @@ And for _users_, there's a single tool with consistent behaviour and functionali
 
 **Consistency:** where possible, things should work the same way and support the same features across ecosystems.
 
-**Rich generation features:** the `fetlock` tool should eventually be highly configurable, perhaps with its own configuration file.
+**Rich generation-time features:** the `fetlock` tool should eventually be highly configurable, perhaps with its own configuration file.
 
-**Efficient generation:** Written in rust and sharing functionality means every backend gets to use common caching functionality and parallelism features.
+**Efficient generation:** written in rust and sharing functionality means every backend gets to use common caching functionality and parallelism features.
 
-**Clean, efficient derivations:** Where possible, we'll go to extra effort at _generation_ time to create efficient derivations. Where possible, derivations should _not_ include a build-time dependency on any package manager.
+**Clean, efficient derivations:** Where possible, we'll go to extra effort at _generation_ time to create efficient derivations. This means having minimal build-time dependencies to prevent heavy closures and unnecessary rebuilds.
 
 ## Non-goals:
 

@@ -7,11 +7,11 @@ use crate::esy::opam_manifest::Opam;
 use crate::esy::{command, esy_manifest, eval};
 use crate::fetch;
 use crate::nix_serialize::{WriteContext, Writeable};
+use crate::stream_util::*;
 use crate::string_util::*;
 use crate::*;
 use anyhow::*;
 use async_trait::async_trait;
-use futures::{future, StreamExt, TryFutureExt};
 use log::*;
 use serde::de::*;
 use serde::Deserialize;
@@ -248,20 +248,18 @@ impl Backend for EsyLock {
 		// specs.sort_by(|a,b| a.id().cmp(&b.id()));
 
 		let specs = self.lockfile.lock.specs.iter_mut();
-		let stream = futures::stream::iter(specs)
-			.map(|(key, esy_spec)| {
-				let opam_repo_ref = opam_repo.clone();
-				let realised_src = realised_sources.get(key);
-				async move {
-					debug!("starting... {:?}", &esy_spec.spec.id.name);
-					Self::finalize_spec(opam_repo_ref, realised_src, esy_spec, installed_ref)
-						.await
-						.with_context(|| format!("Finalizing spec: {:?}", esy_spec))
-				}
-			})
-			.buffer_unordered(parallelism)
-			.fold(Ok(()), |acc, item| future::ready(acc.and(item)));
-		TryFutureExt::into_future(stream).await?;
+		let stream = futures::stream::iter(specs);
+		foreach_unordered(parallelism, stream, |(key, esy_spec)| {
+			let opam_repo_ref = opam_repo.clone();
+			let realised_src = realised_sources.get(key);
+			async move {
+				debug!("starting... {:?}", &esy_spec.spec.id.name);
+				Self::finalize_spec(opam_repo_ref, realised_src, esy_spec, installed_ref)
+					.await
+					.with_context(|| format!("Finalizing spec: {:?}", esy_spec))
+			}
+		})
+		.await?;
 		Ok(self.lockfile.lock)
 	}
 }

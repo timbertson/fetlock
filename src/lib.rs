@@ -10,6 +10,7 @@ mod cache;
 mod cmd;
 mod nom_util;
 mod opts;
+mod stream_util;
 mod string_util;
 pub use opts::CliOpts;
 pub mod err;

@@ -2,8 +2,8 @@ use crate::cache::{cache_hash, cache_root};
 use crate::cmd;
 use crate::lock::*;
 use crate::nix_serialize::*;
+use crate::stream_util::*;
 use anyhow::*;
-use futures::{future, StreamExt, TryFutureExt};
 use lazy_static::lazy_static;
 use log::*;
 use regex::Regex;
@@ -21,11 +21,7 @@ pub async fn populate_source_digests<S: BorrowMut<Spec> + Writeable>(
 	lock: &mut Lock<S>,
 ) -> Result<()> {
 	let impls = lock.specs.values_mut().map(|x| x.borrow_mut());
-	let stream = futures::stream::iter(impls)
-		.map(|i| ensure_digest(i))
-		.buffer_unordered(8)
-		.fold(Ok(()), |acc, item| future::ready(acc.and(item)));
-	TryFutureExt::into_future(stream).await
+	foreach_unordered(8, futures::stream::iter(impls), |i| ensure_digest(i)).await
 }
 
 async fn ensure_digest(implementation: &mut Spec) -> Result<()> {

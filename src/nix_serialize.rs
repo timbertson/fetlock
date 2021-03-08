@@ -46,14 +46,19 @@ impl StringMode {
 }
 
 impl WriteContext<'_, Vec<u8>> {
-	pub fn string<F: FnOnce(&mut WriteContext<Vec<u8>>) -> Result<()>>(f: F) -> anyhow::Result<String> {
+	pub fn string<F: FnOnce(&mut WriteContext<Vec<u8>>) -> Result<()>>(
+		f: F,
+	) -> anyhow::Result<String> {
 		let mut expr = Vec::new();
 		let mut out = WriteContext::<Vec<u8>>::initial(&mut expr);
 		f(&mut out)?;
 		Ok(String::from_utf8(expr)?)
 	}
 
-	pub fn sink<W: Write, F: FnOnce(&mut WriteContext<W>) -> Result<()>>(mut w: W, f: F) -> anyhow::Result<()> {
+	pub fn sink<W: Write, F: FnOnce(&mut WriteContext<W>) -> Result<()>>(
+		mut w: W,
+		f: F,
+	) -> anyhow::Result<()> {
 		let mut out = WriteContext::initial(&mut w);
 		f(&mut out)?;
 		Ok(())

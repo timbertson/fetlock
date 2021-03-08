@@ -51,7 +51,7 @@ And for _users_, there's a single tool with consistent behaviour and functionali
 
 **Working on anything other than lock files**: Some tools work on a raw dependency specification, resolving dependencies for you. That's a complex, language-specific job, so `fetlock` requires that you already have a lock file.
 
-**Sharing nix expressions**: hackage2nix generates a nix expression for each package in the hackage universe, which can be composed together. `fetlock` is more like the nix version of a lock file.
+**Replacement for language-specific package managers**: since `fetlock` works on lock files, you still need the invidual package managers to create this lock file, and they likely provide a better development experience.
 
 ## Backends implemented:
 

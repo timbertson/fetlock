@@ -108,23 +108,31 @@ impl FetchMany {
 	}
 
 	async fn realise(&self) -> Result<Vec<String>> {
-		self.run_command("nix-build", &mut self.build_command(), Stdio::piped()).await?;
+		self.run_command("nix-build", &mut self.build_command(), Stdio::piped())
+			.await?;
 
-		let json = self.check_stdout("nix-instantiate",
-			Command::new("nix-instantiate")
-				.arg("--show-trace")
-				.arg("-")
-				.arg("--attr")
-				.arg("paths")
-				.arg("--eval")
-				.arg("--strict")
-				.arg("--json")
-		).await?;
+		let json = self
+			.check_stdout(
+				"nix-instantiate",
+				Command::new("nix-instantiate")
+					.arg("--show-trace")
+					.arg("-")
+					.arg("--attr")
+					.arg("paths")
+					.arg("--eval")
+					.arg("--strict")
+					.arg("--json"),
+			)
+			.await?;
 		let errmsg = format!("parsing JSON: {}", &json);
 		Ok(serde_json::from_str::<Vec<String>>(&json).with_context(|| errmsg)?)
 	}
 
-	async fn check_stdout<'a, 'b>(&self, desc: &'a str, command: &'a mut Command) -> Result<String> {
+	async fn check_stdout<'a, 'b>(
+		&self,
+		desc: &'a str,
+		command: &'a mut Command,
+	) -> Result<String> {
 		cmd::run_stdout("desc", Some(self.expr.as_str()), command).await
 	}
 
@@ -303,14 +311,17 @@ impl ExtractSource<'_> {
 					.to_str()
 					.ok_or_else(|| anyhow!("non-utf8 root path"))?;
 				let archive_path = format!("{}/{}", listing.first_component, file);
-				cmd::run_stdout("tar", None,
+				cmd::run_stdout(
+					"tar",
+					None,
 					Command::new("tar")
 						.arg("xf")
 						.arg(root_str)
 						.arg("--to-stdout")
 						.arg("--extract")
 						.arg(&archive_path),
-				).await
+				)
+				.await
 			}
 		}
 	}

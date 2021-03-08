@@ -66,11 +66,7 @@ pub async fn run(
 	}
 }
 
-pub async fn run_stdout(
-	desc: &str,
-	stdin: Option<&str>,
-	command: &mut Command,
-) -> Result<String> {
+pub async fn run_stdout(desc: &str, stdin: Option<&str>, command: &mut Command) -> Result<String> {
 	run(desc, stdin, Stdio::piped(), command)
 		.await
 		.map(|stdout| stdout.expect("stdout is none"))

@@ -1,17 +1,17 @@
-use crate::{GitUrl, Src, Sha256};
 use crate::cmd;
-use crate::CliOpts;
 use crate::memoize::Memoize;
+use crate::CliOpts;
+use crate::{GitUrl, Sha256, Src};
 use anyhow::*;
+use futures::future::FutureExt;
 use log::*;
 use std::fs;
 use std::fs::*;
-use std::rc::Rc;
-use tokio::sync::Mutex;
-use futures::future::FutureExt;
 use std::path::*;
+use std::rc::Rc;
 use std::time::SystemTime;
 use tokio::process::Command;
+use tokio::sync::Mutex;
 
 // 1 day
 const SECONDS_PER_DAY: u64 = 60 * 60 * 24;
@@ -105,24 +105,28 @@ impl CachedRepo {
 				debug!("not updating {}, it's only {} days old", &url, age_in_days);
 			}
 		}
-		let head_rev = cmd::run_stdout("git", None, Command::new("git")
-			.arg("-C").arg(&repo_path)
-			.arg("rev-parse").arg("HEAD")
-		).await?;
+		let head_rev = cmd::run_stdout(
+			"git",
+			None,
+			Command::new("git")
+				.arg("-C")
+				.arg(&repo_path)
+				.arg("rev-parse")
+				.arg("HEAD"),
+		)
+		.await?;
 		let lazy_digest = {
 			let repo_path = repo_path.clone();
 			let rev = head_rev.clone();
-			nix_digest_of_git_repo(repo_path, rev).map(|result|
-				match result {
-					Ok(sha) => Some(sha),
-					Err(err) => {
-						// have to log this instead of returning because Anyhow::Result
-						// is not `Clone`.
-						error!("{:?}", err);
-						None
-					}
+			nix_digest_of_git_repo(repo_path, rev).map(|result| match result {
+				Ok(sha) => Some(sha),
+				Err(err) => {
+					// have to log this instead of returning because Anyhow::Result
+					// is not `Clone`.
+					error!("{:?}", err);
+					None
 				}
-			)
+			})
 		};
 		Ok(CachedRepo {
 			src: src.src_for_rev(head_rev),
@@ -130,22 +134,30 @@ impl CachedRepo {
 			digest: Rc::new(Mutex::new(Memoize::new(Box::pin(lazy_digest)))),
 		})
 	}
-	
+
 	pub async fn digest(&self) -> Result<Sha256> {
 		use std::ops::DerefMut;
 		debug!("acquiring mutex...");
 		let mut guard = self.digest.lock().await; //.unwrap();
-		guard.deref_mut().await.ok_or_else(||anyhow!("failed to extract digest"))
+		guard
+			.deref_mut()
+			.await
+			.ok_or_else(|| anyhow!("failed to extract digest"))
 	}
 }
 
 pub async fn nix_digest_of_path<P: AsRef<Path>>(path: P) -> Result<Sha256> {
 	let output = cmd::run_stdout(
-		"nix-hash", None,
-		Command::new("bash").arg("-euo").arg("pipefail").arg("-c")
+		"nix-hash",
+		None,
+		Command::new("bash")
+			.arg("-euo")
+			.arg("pipefail")
+			.arg("-c")
 			.arg("nix-store --dump \"$DIR\" | nix-hash --type sha256 --flat --base32 /dev/stdin")
-			.env("DIR", path.as_ref())
-	).await?;
+			.env("DIR", path.as_ref()),
+	)
+	.await?;
 	Ok(Sha256::new(output))
 }
 
@@ -153,12 +165,14 @@ pub async fn nix_digest_of_path<P: AsRef<Path>>(path: P) -> Result<Sha256> {
 pub async fn nix_digest_of_git_repo<P: AsRef<Path>>(path: P, rev: String) -> Result<Sha256> {
 	info!("exporting {:?}#{}", path.as_ref(), rev);
 	let tmp_dir = tempdir::TempDir::new("fetlock-export")?;
-	cmd::exec(Command::new("bash")
+	cmd::exec(
+		Command::new("bash")
 			.arg("-euc")
 			.arg("git -C \"$REPO\" archive \"$REV\" | tar x -C \"$EXTRACT\"")
 			.env("REPO", path.as_ref())
 			.env("REV", rev)
-			.env("EXTRACT", tmp_dir.path())
-	).await?;
+			.env("EXTRACT", tmp_dir.path()),
+	)
+	.await?;
 	nix_digest_of_path(tmp_dir.path()).await
 }

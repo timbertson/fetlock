@@ -1,15 +1,15 @@
 use anyhow::*;
 use log::*;
 use std::fmt;
-use std::io::Write;
 use std::io::stdout;
+use std::io::Write;
 use std::writeln;
 
-use fetlock::CliOpts;
 use fetlock::fetch;
 use fetlock::lock;
 use fetlock::nix_serialize::{WriteContext, Writeable};
 use fetlock::Backend;
+use fetlock::CliOpts;
 
 async fn run() -> Result<()> {
 	env_logger::from_env(env_logger::Env::default().default_filter_or("info"))
@@ -35,15 +35,13 @@ async fn process<B: Backend + fmt::Debug>(opts: CliOpts) -> Result<()> {
 	let lock = lock.finalize().await?;
 
 	match opts.out_path {
-		None => {
-			WriteContext::sink(stdout(), |mut c| lock.write_to(&mut c))
-		},
+		None => WriteContext::sink(stdout(), |mut c| lock.write_to(&mut c)),
 		Some(path) => {
 			info!("Writing {}", path);
 			fetlock::fs::write_atomically(path, |out_file| {
 				WriteContext::sink(out_file, |mut c| lock.write_to(&mut c))
 			})
-		},
+		}
 	}
 }
 

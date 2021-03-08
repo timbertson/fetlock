@@ -338,6 +338,10 @@ impl PartialSpec {
 		}
 	}
 
+	pub fn add_dep(&mut self, dep_key: Key) {
+		self.dep_keys.push(dep_key);
+	}
+
 	pub fn add_deps(&mut self, dep_keys: &mut Vec<Key>) {
 		self.dep_keys.append(dep_keys);
 	}

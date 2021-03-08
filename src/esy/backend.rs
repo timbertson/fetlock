@@ -1,11 +1,11 @@
 // esy.lock backend
 
+use crate::cache::{nix_digest_of_path, CachedRepo};
 use crate::esy::build::PkgType;
 use crate::esy::eval::Pkg;
 use crate::esy::opam_manifest::Opam;
 use crate::esy::{command, esy_manifest, eval};
 use crate::fetch;
-use crate::cache::{CachedRepo, nix_digest_of_path};
 use crate::nix_serialize::{WriteContext, Writeable};
 use crate::*;
 use anyhow::*;
@@ -105,9 +105,9 @@ impl EsyLock {
 					let files_path = repo_path.join(&files_rel);
 					if files_path.exists() {
 						let repo_digest = opam_repo.digest().await?;
-						let base_expr = Expr::Literal(WriteContext::string(|c|
+						let base_expr = Expr::Literal(WriteContext::string(|c| {
 							SrcDigest::new(&opam_repo.src, &repo_digest).write_to(c)
-						)?);
+						})?);
 						let files_digest = nix_digest_of_path(&files_path).await?;
 						let mut attrs = BTreeMap::new();
 						attrs.insert("base".to_owned(), base_expr);
@@ -115,7 +115,7 @@ impl EsyLock {
 						attrs.insert("hash".to_owned(), Expr::str(files_digest.into_string()));
 						files = Some(Expr::FunCall(Box::new(FunCall {
 							subject: Expr::Literal("final.subtree".to_owned()),
-							args: vec!(Expr::AttrSet(attrs))
+							args: vec![Expr::AttrSet(attrs)],
 						})));
 					}
 					repo.file_contents(&format!("{}/opam", prefix)).await?
@@ -211,7 +211,10 @@ impl Backend for EsyLock {
 			.find(|(key, esy_spec)| esy_spec.spec.id.name == "ocaml")
 		{
 			Some((key, esy_spec)) => {
-				self.lockfile.lock.context.extra
+				self.lockfile
+					.lock
+					.context
+					.extra
 					.insert("ocaml".to_owned(), Expr::get_drv(key.to_string()));
 			}
 			None => {
@@ -226,9 +229,14 @@ impl Backend for EsyLock {
 		};
 		let opam_repo = Rc::new(CachedRepo::cache(&self.opts, &opam_repo_git).await?);
 
-		let realised_sources =
-			fetch::realise_sources(self.lockfile.lock.specs.iter().map(|(key, spec)| (key, &spec.spec)))
-				.await?;
+		let realised_sources = fetch::realise_sources(
+			self.lockfile
+				.lock
+				.specs
+				.iter()
+				.map(|(key, spec)| (key, &spec.spec)),
+		)
+		.await?;
 
 		let installed = self.partition_specs()?;
 		let installed_ref = &installed;

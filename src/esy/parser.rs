@@ -1,16 +1,7 @@
 use crate::esy::eval::{Eval, NixCtx};
 use crate::expr::{Expr, StringComponentOf};
+use crate::nom_util::*;
 use anyhow::*;
-use nom::{
-	branch::*, bytes::complete::*, character::complete::*, combinator::*, error::context,
-	error::convert_error, error::VerboseError, multi::*, sequence::*, *,
-};
-
-type Src<'a> = &'a str;
-type SrcError<'a> = VerboseError<Src<'a>>;
-type Res<'a, T> = IResult<Src<'a>, T, SrcError<'a>>;
-trait SrcParser<'a, T>: Parser<Src<'a>, T, SrcError<'a>> {}
-impl<'a, T, P> SrcParser<'a, T> for P where P: Parser<Src<'a>, T, SrcError<'a>> {}
 
 // <bool>          ::= true | false
 fn bool_(s: Src) -> Res<bool> {

@@ -5,9 +5,9 @@ use crate::esy::build::PkgType;
 use crate::esy::eval::Pkg;
 use crate::esy::opam_manifest::Opam;
 use crate::esy::{command, esy_manifest, eval};
-use crate::string_util::*;
 use crate::fetch;
 use crate::nix_serialize::{WriteContext, Writeable};
+use crate::string_util::*;
 use crate::*;
 use anyhow::*;
 use async_trait::async_trait;
@@ -464,7 +464,8 @@ impl EsySrcVisitor {
 		let src = src.ok_or_else(|| anyhow!("invalid spec"))?;
 		match typ {
 			"github" => {
-				let (owner_repo_manifest, git_ref) = split_one_or_else("#", src, || anyhow!("ref missing"))?;
+				let (owner_repo_manifest, git_ref) =
+					split_one_or_else("#", src, || anyhow!("ref missing"))?;
 				let (owner_repo, manifest) = split_one(":", owner_repo_manifest);
 				let (owner, repo) = split_one_or_else("/", owner_repo, || anyhow!("repo missing"))?;
 				let git_ref = git_ref.to_owned();

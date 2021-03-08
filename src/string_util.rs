@@ -7,8 +7,11 @@ pub fn split_one<'a>(sep: &'static str, s: &'a str) -> (&'a str, Option<&'a str>
 	(start, end)
 }
 
-pub fn split_one_or_else<'a, FnErr: FnOnce() -> Error>
-	(sep: &'static str, s: &'a str, err: FnErr) -> Result<(&'a str, &'a str)> {
+pub fn split_one_or_else<'a, FnErr: FnOnce() -> Error>(
+	sep: &'static str,
+	s: &'a str,
+	err: FnErr,
+) -> Result<(&'a str, &'a str)> {
 	let (start, end) = split_one(sep, s);
 	let end = end.ok_or_else(err)?;
 	Ok((start, end))

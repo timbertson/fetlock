@@ -1,14 +1,14 @@
 // yarn.lock backend
-use log::*;
 use crate::err::*;
 use crate::nix_serialize::{WriteContext, Writeable};
-use crate::*;
 use crate::string_util::*;
-use std::borrow::Cow;
+use crate::*;
 use anyhow::*;
 use async_trait::async_trait;
+use log::*;
 use serde::de::*;
 use serde::Deserialize;
+use std::borrow::Cow;
 use std::borrow::{Borrow, BorrowMut};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
@@ -100,27 +100,43 @@ impl YarnLockFile {
 
 		// then replace all dependency_keys with their resolved versions
 		for (k, v) in self.0.specs.iter_mut() {
-			v.spec.dep_keys = v.spec.dep_keys.iter().filter_map(|dep| {
-				let resolved = resolutions.get(dep);
-				if let Some(resolved) = resolved {
-					Some(Ok(resolved.clone()))
-				} else {
-					if v.optional_deps.contains(dep) {
-						None
+			v.spec.dep_keys = v
+				.spec
+				.dep_keys
+				.iter()
+				.filter_map(|dep| {
+					let resolved = resolutions.get(dep);
+					if let Some(resolved) = resolved {
+						Some(Ok(resolved.clone()))
 					} else {
-						// TODO why does yarn even write lockfiles with missing deps?
-						Some(name_of_key(dep).and_then(|name|
-							fallbacks.get(&name).map(|key| {
-								warn!("{:?}: fallback to {:?} (for {})",
-									dep, key, &v.spec.id.name);
-								key.clone()
-							})
-								.ok_or_else(||
-								anyhow!("canonical key not found for {:?}", dep))
-						).with_context(||format!("canonicalizing dependencies for {:?}", v.spec.id)))
+						if v.optional_deps.contains(dep) {
+							None
+						} else {
+							// TODO why does yarn even write lockfiles with missing deps?
+							Some(
+								name_of_key(dep)
+									.and_then(|name| {
+										fallbacks
+											.get(&name)
+											.map(|key| {
+												warn!(
+													"{:?}: fallback to {:?} (for {})",
+													dep, key, &v.spec.id.name
+												);
+												key.clone()
+											})
+											.ok_or_else(|| {
+												anyhow!("canonical key not found for {:?}", dep)
+											})
+									})
+									.with_context(|| {
+										format!("canonicalizing dependencies for {:?}", v.spec.id)
+									}),
+							)
+						}
 					}
-				}
-			}).collect::<Result<Vec<Key>>>()?;
+				})
+				.collect::<Result<Vec<Key>>>()?;
 		}
 		Ok(())
 	}
@@ -213,7 +229,7 @@ impl<'de> Visitor<'de> for YarnSpecVisitor {
 				}
 				"dependenciesMeta" => {
 					dependencies_meta = map.next_value::<BTreeMap<String, YarnDependencyMeta>>()?;
-				},
+				}
 				// TODO support checksum
 				_ => {
 					map.next_value::<IgnoredAny>()?;
@@ -224,7 +240,7 @@ impl<'de> Visitor<'de> for YarnSpecVisitor {
 		let resolution = into_serde(
 			resolution
 				.ok_or_else(|| anyhow!("resolution not found"))
-				.and_then(|res| DepResolution::parse(&res))
+				.and_then(|res| DepResolution::parse(&res)),
 		)?;
 		spec.id.set_name(resolution.name.clone());
 
@@ -257,7 +273,8 @@ struct DepResolution {
 impl DepResolution {
 	fn parse(s: &str) -> Result<DepResolution> {
 		let (name, rest) = split_name(s)?;
-		let (registry, version) = split_one_or_else(":", rest, || anyhow!("invalid spec: {:?}", s))?;
+		let (registry, version) =
+			split_one_or_else(":", rest, || anyhow!("invalid spec: {:?}", s))?;
 		Ok(DepResolution {
 			name: name.to_owned(),
 			key: Key::new(format!("{}@{}", name, version)),
@@ -278,9 +295,13 @@ fn name_of_key(key: &Key) -> Result<String> {
 
 fn split_name(s: &str) -> Result<(&str, &str)> {
 	let at_idx = if let Some(remainder) = s.strip_prefix("@") {
-		remainder.find('@').ok_or_else(||anyhow!("invalid spec: {:?}", s))? + 1
+		remainder
+			.find('@')
+			.ok_or_else(|| anyhow!("invalid spec: {:?}", s))?
+			+ 1
 	} else {
-		s.find('@').ok_or_else(||anyhow!("invalid spec: {:?}", s))?
+		s.find('@')
+			.ok_or_else(|| anyhow!("invalid spec: {:?}", s))?
 	};
 	Ok(s.split_at(at_idx))
 }

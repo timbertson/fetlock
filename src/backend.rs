@@ -13,7 +13,7 @@ use std::borrow::BorrowMut;
 pub trait Backend: Sized + std::fmt::Debug {
 	type Spec: BorrowMut<Spec> + Writeable;
 
-	fn load(opts: CliOpts) -> Result<Self>;
+	async fn load(opts: CliOpts) -> Result<Self>;
 
 	// access the underlying specs mutably (for populating sources)
 	fn lock_mut<'a>(&'a mut self) -> &mut Lock<Self::Spec>;

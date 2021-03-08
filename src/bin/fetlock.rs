@@ -29,7 +29,9 @@ async fn run() -> Result<()> {
 
 async fn process<B: Backend + fmt::Debug>(opts: CliOpts) -> Result<()> {
 	info!("loading {}", &opts.lock_path);
-	let mut lock = B::load(opts.clone()).with_context(|| format!("loading {}", &opts.lock_path))?;
+	let mut lock = B::load(opts.clone())
+		.await
+		.with_context(|| format!("loading {}", &opts.lock_path))?;
 	debug!("{:?}", lock);
 	fetch::populate_source_digests(lock.lock_mut()).await?;
 	let lock = lock.finalize().await?;

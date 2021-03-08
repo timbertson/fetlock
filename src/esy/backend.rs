@@ -11,7 +11,7 @@ use crate::string_util::*;
 use crate::*;
 use anyhow::*;
 use async_trait::async_trait;
-use futures::StreamExt;
+use futures::{future, StreamExt, TryFutureExt};
 use log::*;
 use serde::de::*;
 use serde::Deserialize;
@@ -192,7 +192,7 @@ impl EsyLock {
 impl Backend for EsyLock {
 	type Spec = EsySpec;
 
-	fn load(opts: CliOpts) -> Result<Self> {
+	async fn load(opts: CliOpts) -> Result<Self> {
 		let context = LockContext::new(lock::Type::Esy);
 		let contents = std::fs::read_to_string(&opts.lock_path)?;
 		let lockfile: EsyLockFile = serde_json::from_str(&contents)?;
@@ -248,7 +248,7 @@ impl Backend for EsyLock {
 		// specs.sort_by(|a,b| a.id().cmp(&b.id()));
 
 		let specs = self.lockfile.lock.specs.iter_mut();
-		let mut stream = futures::stream::iter(specs)
+		let stream = futures::stream::iter(specs)
 			.map(|(key, esy_spec)| {
 				let opam_repo_ref = opam_repo.clone();
 				let realised_src = realised_sources.get(key);
@@ -259,14 +259,9 @@ impl Backend for EsyLock {
 						.with_context(|| format!("Finalizing spec: {:?}", esy_spec))
 				}
 			})
-			.buffer_unordered(parallelism);
-
-		// TODO surely there's some `drain` method?
-		while let Some(response) = stream.next().await {
-			response?;
-		}
-		drop(stream);
-
+			.buffer_unordered(parallelism)
+			.fold(Ok(()), |acc, item| future::ready(acc.and(item)));
+		TryFutureExt::into_future(stream).await?;
 		Ok(self.lockfile.lock)
 	}
 }

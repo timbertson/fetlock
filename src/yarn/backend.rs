@@ -2,6 +2,7 @@
 use crate::err::*;
 use crate::nix_serialize::{WriteContext, Writeable};
 use crate::string_util::*;
+use crate::stream_util::*;
 use crate::*;
 use anyhow::*;
 use async_trait::async_trait;
@@ -29,6 +30,7 @@ impl Backend for YarnLock {
 		let contents = std::fs::read_to_string(&opts.lock_path)?;
 		let mut lockfile: YarnLockFile = serde_yaml::from_str(&contents)?;
 		lockfile.fixup_keys()?;
+		lockfile.populate_sources().await?;
 		Ok(YarnLock { lockfile, opts })
 	}
 
@@ -41,6 +43,17 @@ impl Backend for YarnLock {
 	}
 }
 
+#[derive(Debug, Clone, Deserialize)]
+struct PackageDist {
+	tarball: String,
+	// todo shaSum
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct PackageListing {
+	dist: PackageDist
+}
+
 #[derive(Debug, Clone)]
 pub struct YarnSpec {
 	resolution: DepResolution,
@@ -50,12 +63,32 @@ pub struct YarnSpec {
 }
 
 impl YarnSpec {
-	fn fetch_src(&mut self) -> Result<()> {
-		// TODO:
-		// https://registry.npmjs.org/
-		// https://github.com/npm/registry/blob/master/docs/REGISTRY-API.md#getpackageversion
-		// dist: an object containing a shasum and tarball url, usually in the form of https://registry.npmjs.org/<name>/-/<name>-<version>.tgz
-		Err(anyhow!("TODO..."))
+	async fn populate_src(&mut self) -> Result<()> {
+		let desc = format!("populating src for {:?}", &self.spec.id);
+		(|| async move {
+			// https://github.com/npm/registry/blob/master/docs/REGISTRY-API.md#getpackageversion
+			let root = match self.resolution.registry.as_str() {
+				"npm" => "https://registry.npmjs.org/",
+				"workspace" => {
+					// TODO accept src from context
+					return Ok(());
+				},
+				other => {
+					return Err(anyhow!("Unsupported repo: {}", other));
+				},
+			};
+
+			// TODO escaping with `url`?
+			let url = format!("{}/{}/{}", root, self.spec.id.name, self.spec.id.version);
+			let body = reqwest::get(&url)
+				.await
+				.with_context(|| format!("GET {}", &url))?
+				.text().await?;
+			let listing: PackageListing = serde_json::from_str(&body)?;
+			debug!("package listing for {:?}: {:?}", self.spec.id, listing);
+			self.spec.src = Src::Archive(Url::new(listing.dist.tarball));
+			Ok(())
+		})().await.with_context(|| desc)
 	}
 }
 
@@ -139,6 +172,12 @@ impl YarnLockFile {
 				.collect::<Result<Vec<Key>>>()?;
 		}
 		Ok(())
+	}
+	
+	async fn populate_sources(&mut self) -> Result<()> {
+		info!("resolving {} package sources from online repository...", self.0.specs.len());
+		let stream = futures::stream::iter(self.0.specs.values_mut());
+		foreach_unordered(10, stream, |spec| spec.populate_src()).await
 	}
 }
 
@@ -263,7 +302,7 @@ impl<'de> Visitor<'de> for YarnSpecVisitor {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct DepResolution {
 	name: String,
 	key: Key,
@@ -303,5 +342,26 @@ fn split_name(s: &str) -> Result<(&str, &str)> {
 		s.find('@')
 			.ok_or_else(|| anyhow!("invalid spec: {:?}", s))?
 	};
-	Ok(s.split_at(at_idx))
+	let (name, remainder) = s.split_at(at_idx);
+	let remainder = remainder.strip_prefix("@").ok_or_else(|| anyhow!("remainder doesn't start with `@`"))?;
+	Ok((name, remainder))
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	#[test]
+	fn test_resolution() {
+		assert_eq!(DepResolution::parse("foo@npm:1.2.3").unwrap(), DepResolution {
+			name: "foo".to_owned(),
+			key: Key::new("foo@1.2.3".to_owned()),
+			registry: "npm".to_owned(),
+		});
+
+		assert_eq!(DepResolution::parse("@org/pkg@npm:1.2.3").unwrap(), DepResolution {
+			name: "@org/pkg".to_owned(),
+			key: Key::new("@org/pkg@1.2.3".to_owned()),
+			registry: "npm".to_owned(),
+		});
+	}
 }

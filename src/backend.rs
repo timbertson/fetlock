@@ -13,12 +13,15 @@ use std::borrow::BorrowMut;
 pub trait Backend: Sized + std::fmt::Debug {
 	type Spec: BorrowMut<Spec> + Writeable;
 
+	// Parse file, populate a lock with sources
+	// async because some implementations will need
+	// to download metadata from a registry
 	async fn load(opts: CliOpts) -> Result<Self>;
 
 	// access the underlying specs mutably (for populating sources)
 	fn lock_mut<'a>(&'a mut self) -> &mut Lock<Self::Spec>;
 
-	// Async to allow additional post-processing
+	// Additional post-processing, after source digests are populated.
 	// (e.g. realising store paths and downloading
 	// additional metadata from the internet)
 	async fn finalize(self) -> Result<Lock<Self::Spec>>;

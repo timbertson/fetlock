@@ -169,7 +169,7 @@ impl GitUrl for GithubRepo {
 
 #[derive(Debug, Clone)]
 pub struct GitRepo {
-	url: String,
+	url: Url,
 }
 
 // TODO when anyone needs it

@@ -1,30 +1,12 @@
 final: prev:
 with prev.pkgs.lib;
 let
+  util = prev.pkgs.callPackage ../util.nix {};
   addHooks = import ./hooks.nix final prev;
   stdenv = prev.pkgs.stdenv;
   # too inconvenient to declare as a dependency, just include it always
   commonBuildDeps = [ prev.pkgs.which ];
 
-  # surround an (optional) `*Phase` attribute with
-  # pre / post hooks
-  populateBuildPhases = build:
-    let
-      buildPhase = { attr = "buildPhase"; suffix = "Build"; };
-      installPhase = { attr = "installPhase"; suffix = "Install"; };
-      attr = phase: {
-        name = phase.attr;
-        value = ''
-          runHook pre${phase.suffix}
-          ${if hasAttr phase.attr build
-            then getAttr phase.attr build
-            else ""}
-          runHook post${phase.suffix}
-        '';
-      };
-    in
-    build // listToAttrs [(attr buildPhase) (attr installPhase)];
-    
   copyFilesHook = prev.makeHook "copy-files" ''
     function copyOpamFiles {
       echo "+ copyOpamFiles"
@@ -72,7 +54,7 @@ in
   opamName ? null,
   files ? null,
 }@spec:
-  let finalBuild = populateBuildPhases build; in addHooks build.mode ({
+  let finalBuild = util.populateBuildPhases build; in addHooks build.mode ({
     inherit pname version depKeys src;
     configurePhase = "true";
     inherit (finalBuild) installPhase;

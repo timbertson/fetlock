@@ -4,6 +4,9 @@ let
   osx = darwin.apple_sdk.frameworks;
   ifDarwin = deps: if stdenv.isDarwin then deps else [];
   esy = (callPackage ../nix/esy {});
+  yarn = (callPackage ../nix/yarn {});
+  
+  yarnSelection = yarn.load ./yarn.nix {};
 
   glibtool = if stdenv.isDarwin
     then (stdenv.mkDerivation {
@@ -20,7 +23,7 @@ let
       '';
     })
     else libtool;
-  selection = esy.load ./esy.nix {
+  esySelection = esy.load ./esy.nix {
     pkgOverrides = self:
       let
         # TODO this will interfere with genuine configure phases, but we don't have any yet
@@ -253,6 +256,11 @@ let
     ];
   };
 in
-selection.toplevelPackage.overrideAttrs (o: {
-	passthru = selection.drvsByName;
-})
+{
+  esy = esySelection.toplevelPackage.overrideAttrs (o: {
+    passthru = esySelection.drvsByName;
+  });
+  yarn = yarnSelection.toplevelPackage.overrideAttrs (o: {
+    passthru = yarnSelection.drvsByName;
+  });
+}

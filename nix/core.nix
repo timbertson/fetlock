@@ -7,16 +7,18 @@ let
 			# args passed in by frontend (internal)
 			fallback ? self: {},
 			overlays,
+			userArgs ? args: args, # massage user API into core API
 			pkgOverrides ? noOverrides,
 		}:
 		let
 			# prevent shadowing later:
 			frontendOverlays = overlays;
 			frontendOverrides = pkgOverrides;
-			load = (
-				# args passed in by user (public API)
+			load = lock: args: _load lock (userArgs args);
+			_load = (
 				lock:
 				{
+					# args returned by userArgs (core API)
 					overlays ? [],
 					pkgOverrides ? noOverrides,
 				}:

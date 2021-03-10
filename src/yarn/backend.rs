@@ -282,6 +282,7 @@ impl<'de> Visitor<'de> for YarnSpecVisitor {
 				.and_then(|res| DepResolution::parse(&res)),
 		)?;
 		spec.id.set_name(resolution.name.clone());
+		spec.extra.insert("pkgname".to_owned(), Expr::str(resolution.name.clone()));
 
 		let mut optional_deps = HashSet::new();
 		for (k, v) in dependencies.unwrap_or_default().iter() {

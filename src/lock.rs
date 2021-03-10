@@ -237,6 +237,10 @@ impl Sha256 {
 		self.0
 	}
 
+	pub fn sri_string(&self) -> String {
+		format!("sha256:{}", self.0)
+	}
+
 	pub fn dummy() -> &'static Self {
 		lazy_static! {
 			static ref DUMMY: Sha256 = Sha256::new(

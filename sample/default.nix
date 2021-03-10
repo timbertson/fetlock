@@ -157,31 +157,6 @@ let
           '';
         });
         Oni2 = o:
-          let
-            yarn2nix = pkgs.yarn2nix-moretea;
-            # TODO hacky...
-            # lock file seems to be missing some versions, prioritising
-            # less duplication over version constraints. Is there a flag
-            # we can pass to allow it?
-            yarnFiles = stdenv.mkDerivation {
-              name = "oni2-yarn-files";
-              buildCommand = ''
-                mkdir -p $out
-                cp ${o.src}/node/package.json $out/
-                cp ${o.src}/node/yarn.lock $out/
-                cd $out
-                patch -p1 < ${./oni2-yarn.diff}
-              '';
-            };
-            depDrv = yarn2nix.mkYarnModules {
-              name = "oni2-yarn-deps";
-              pname = "oni2-node";
-              version = "1.0.0";
-              packageJSON = "${yarnFiles}/package.json";
-              yarnLock = "${yarnFiles}/yarn.lock";
-              yarnNix = ./oni2-yarn.nix; # manually generated with yarn2nix
-            };
-          in
         {
           # sed 1: we have libintl via gettext dependency, don't use your silly hardcoded homebrew path!
           # buildinfo: requires git, and has all the wrong node_modules paths...
@@ -197,7 +172,7 @@ let
           buildPhase =
           ''
             sed -E -i -e 's|getLibIntlPath\(\)|"-lintl"|' src/reason-libvim/config/discover.re
-            ln -s ${depDrv}/node_modules ./node/node_modules
+            ln -s ${yarnSelection.toplevelPackage}/node_modules ./node/node_modules
 
             cat > src/gen_buildinfo/generator.re <<"EOF"
               let oc = open_out("BuildInfo.re");
@@ -229,7 +204,7 @@ let
           installPhase = o.installPhase + ''
             cp -a node $out/node
           '';
-          passthru = o.passthru // { inherit depDrv; };
+          passthru = o.passthru;
         };
       })
       (self.addBuildInputs {

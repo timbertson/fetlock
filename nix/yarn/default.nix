@@ -4,7 +4,6 @@ let
   core = pkgs.callPackage ../core.nix {};
   base = final: prev: {
     specToAttrs = import ./specToAttrs.nix final prev;
-    nodejs = abort "huh? no node...";
   };
   injectNode = nodejs: final: prev: { inherit nodejs; };
 

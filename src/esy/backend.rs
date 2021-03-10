@@ -113,7 +113,7 @@ impl EsyLock {
 						let mut attrs = BTreeMap::new();
 						attrs.insert("base".to_owned(), base_expr);
 						attrs.insert("path".to_owned(), Expr::str(files_rel));
-						attrs.insert("hash".to_owned(), Expr::str(files_digest.into_string()));
+						attrs.insert("hash".to_owned(), Expr::str(files_digest.sri_string()));
 						files = Some(Expr::FunCall(Box::new(FunCall {
 							subject: Expr::Literal("final.subtree".to_owned()),
 							args: vec![Expr::AttrSet(attrs)],

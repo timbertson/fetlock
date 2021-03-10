@@ -1,30 +1,44 @@
 final: prev:
 with prev.pkgs.lib;
 let
-  util = prev.pkgs.callPackage ../util.nix {};
-  # addHooks = import ./hooks.nix final prev;
-  addHooks = x: x; # todo
-  defaultBuild = {
-    buildPhase = ''
-      if [ -e node_modules ]; then
-        echo "Removing existing node_modules"
-        rm -rf node_modules
-      fi
-    '';
-    installPhase = ''
-      mkdir $out
-      cp -r --no-preserve=mode ./. $out/
-    '';
-  };
+  nodeSuffix = "node_modules";
+  linkModules = keys:
+    let
+      linkModule = key:
+        let
+          impl = final.getDrv key;
+          pkg = impl.pkgname;
+          # note pkg may contain `/`, thus the `mkdir -p`
+        in ''
+          mkdir -p "$(dirname "${pkg}")"
+          ln -s "${impl}/${nodeSuffix}/${pkg}" "${pkg}"
+        '';
+    in
+    concatStringsSep "\n" (map linkModule keys);
 in
 {
   key, pname, version,
   depKeys,
   src ? prev.emptyDrv,
-}@spec:
-  let finalBuild = util.populateBuildPhases {}; in addHooks ({
-    inherit pname version depKeys src;
-    configurePhase = "true";
-    inherit (finalBuild) installPhase buildPhase;
-    buildInputs = [ final.nodejs ] ++ (map final.getDrv depKeys);
-  })
+  pkgname,
+}@spec: {
+  inherit pname version depKeys src;
+  configurePhase = "true";
+  passthru = { inherit pkgname; };
+  buildPhase = ''
+    if [ -e node_modules ]; then
+      echo "Removing existing node_modules"
+      rm -rf node_modules
+    fi
+    mkdir node_modules
+    cd node_modules
+    ${linkModules depKeys}
+    cd ..
+  '';
+  installPhase = ''
+    mkdir -p $out/${nodeSuffix}/${pkgname}
+    cp -r --no-preserve=mode ./. $out/${nodeSuffix}/${pkgname}
+  '';
+
+  buildInputs = [ final.nodejs ]; # ++ (map final.getDrv depKeys);
+}

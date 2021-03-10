@@ -2,6 +2,17 @@
 
 ... is _extremely_ alpha. Have a poke around, but don't expect it to work for you, because it's still basically a toy and **I do not recommend or support its use** (yet).
 
+Fetlock is a _unified tool_ for converting various lockfiles into `nix` expressions, plus a common `nix` API for building and tweaking the generated expressions.
+
+## Currently supported backends:
+
+ - [esy][]: supported, lots of overrides needed currently
+ - [yarn][] (nodejs): rudimentary support for v2 lockfiles
+   - no `bin` wrappers
+   - no `install` script / native compilation support
+
+---
+
 ## The problem
 
 There's a well-established pattern in the [nix][] community, for adopting language-specific packages into generic nix ones. That is, each ecosystem has one (or a handful of competing) `ecosystemToNix` tools.
@@ -20,7 +31,7 @@ Unfortunately, there's a huge amount of diversity in these tools. Some of that i
 
 ## The plan:
 
-Fetlock aims to be a single tool to turn _arbitrary lockfiles_ into nix expressions. In practice, that means there will need to be one backend module to support all the language-specific requirements.
+Fetlock aims to be a single tool to turn _arbitrary lockfiles_ into nix expressions. In practice, that means there will need to be one backend module to support each language-specific ecosystem.
 
 But, being a single tool, they can lean on common functionality:
 
@@ -43,7 +54,7 @@ And for _users_, there's a single tool with consistent behaviour and functionali
 
 **Efficient generation:** written in rust and sharing functionality means every backend gets to use common caching functionality and parallelism features.
 
-**Clean, efficient derivations:** Where possible, we'll go to extra effort at _generation_ time to create efficient derivations. This means having minimal build-time dependencies to prevent heavy closures and unnecessary rebuilds.
+**Clean, efficient derivations:** Where possible, we'll go to extra effort at _generation_ time to create efficient, straightforward derivations. This means having minimal build-time dependencies to prevent heavy closures and unnecessary rebuilds. It also means putting logic at the nix level (e.g. setup hooks) so that overrides work as expected.
 
 ## Non-goals:
 
@@ -52,12 +63,6 @@ And for _users_, there's a single tool with consistent behaviour and functionali
 **Working on anything other than lock files**: Some tools work on a raw dependency specification, resolving dependencies for you. That's a complex, language-specific job, so `fetlock` requires that you already have a lock file.
 
 **Replacement for language-specific package managers**: since `fetlock` works on lock files, you still need the invidual package managers to create this lock file, and they likely provide a better development experience.
-
-## Backends implemented:
-
- - [esy][]
-
-(you can see why most of the text on this page is aspirational at this point ;))
 
 ## Why the name?
 
@@ -85,3 +90,4 @@ I don't think I'll know until I implement a few very different backends, so stay
 [opam2nix]: https://github.com/timbertson/opam2nix
 [opam]: https://opam.ocaml.org/
 [esy]: https://esy.sh/
+[yarn]: https://yarnpkg.com/

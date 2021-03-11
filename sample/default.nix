@@ -8,37 +8,14 @@ let
   
   yarnSelection = yarn.load ./yarn.nix {};
 
-  glibtool = if stdenv.isDarwin
-    then (stdenv.mkDerivation {
-      # https://stackoverflow.com/questions/54078839/mac-osx-where-can-i-download-glibtool
-      name = "glibtool";
-      buildInputs = [makeWrapper];
-      buildCommand = ''
-        mkdir -p $out/bin
-        for f in ${libtool}/bin/*; do
-          gname="g$(basename $f)"
-          echo "Wrapping $f as $gname"
-          makeWrapper $f $out/bin/$gname
-        done
-      '';
-    })
-    else libtool;
   esySelection = esy.load ./esy.nix {
     pkgOverrides = self:
       let
-        # TODO this will interfere with genuine configure phases, but we don't have any yet
-        cmakeHook = self.makeHook "esy-cmake" ''
-          function esyCmake {
-            export configurePhase=true
-          }
-          postUnpackHooks+=(esyCmake)
-        '';
         fixupLibPath = name: o: stdenv.mkDerivation (self.specToAttrs (o.spec // {
           build = o.spec.build // {
             exportedEnv = (o.spec.build.exportedEnv or []) ++ ["${name}_LIB_PATH=$out/lib"];
           };
         }));
-
       in [
       (self.override {
         # we already have one in nix, just use that:
@@ -47,7 +24,7 @@ let
         # the esy package downloads deps at runtime, so we
         # have to prefetch them and symlink them,
         # then replicate the rest of the build process
-        esy-skia = o: stdenv.mkDerivation (self.specToAttrs (o.spec // {
+        esy-skia = o: (stdenv.mkDerivation (self.specToAttrs (o.spec // {
           buildInputs = (o.spec.buildInputs or []) ++ [ gn python2 ];
           build = o.spec.build // {
             # deps file thanks to https://github.com/NixOS/nixpkgs/blob/master/pkgs/applications/editors/aseprite/skia-make-deps.sh
@@ -71,7 +48,9 @@ let
               ninja.exe -C $cur__target_dir/out/Static
             '';
           };
-        }));
+        }))).overrideAttrs (_: {
+          inherit (o) propagatedBuildInputs;
+        });
         # TODO raise PRs upstream
         # all these packages make the mistake of exporting "${self.lib}" as an
         # env var, despite not actually respecting that during build
@@ -90,53 +69,10 @@ let
           name = pname;
           src = self.emptyDrv;
           installPhase = "true";
-          propagatedBuildInputs = [ cmake cmakeHook ];
+          propagatedBuildInputs = [ cmake self.disableConfigureHook ];
         };
       })
       (self.overrideAttrs {
-        ocaml = (o: {
-          # upstream puts stuff in $out/lib, not the site-packages dir
-          buildPhase = ''
-            ./esy-configure --disable-cfi --prefix $out --libdir $OCAMLFIND_DESTDIR
-            ./esy-build
-          '';
-        });
-        ocamlfind = (o: {
-          buildInputs = (o.buildInputs or []) ++ [ m4 ];
-          # default build lacks topfind, we need to hack its destination so it doesn't
-          # try to install to ocaml's store path
-          buildPhase = ''
-            sed -i -e '/INSTALL_TOPFIND/ s/OCAML_CORE_STDLIB/OCAML_SITELIB/' src/findlib/Makefile
-            ./configure \
-              -bindir "$out"/bin \
-              -sitelib "${self.siteLib "$out"}/ocamlfind" \
-              -mandir "$out"/man \
-              -config "${self.siteLib "$out"}/ocamlfind/findlib.conf" \
-              -no-custom
-            make all
-            make opt
-          '';
-          # default install tries to add ocaml-stub which assumes an opam FS layout
-          installPhase = ''
-            make install
-            mkdir -p $out/nix-support
-            cat <<EOF > $out/nix-support/setup-hook
-              findlibSetup () {
-                local base="$out"
-            EOF
-            cat <<"EOF" >> $out/nix-support/setup-hook
-                if [[ "''${OCAMLTOP_INCLUDE_PATH:-}" != *$base* ]]; then
-                  export OCAMLTOP_INCLUDE_PATH="''${OCAMLTOP_INCLUDE_PATH:+$OCAMLTOP_INCLUDE_PATH:}${self.siteLib "$base"}/ocamlfind"
-                fi
-              }
-              addEnvHooks "$targetOffset" findlibSetup
-            EOF
-          '';
-        });
-        esy-libtools = (o: {
-          buildInputs = (o.buildInputs or []) ++ [m4 perl];
-          propagatedBuildInputs = (o.propagatedBuildInputs or []) ++ [glibtool];
-        });
         revery = (o: {
           propagatedBuildInputs = (o.propagatedBuildInputs or [])
             ++ [ libiconv ]
@@ -179,7 +115,7 @@ let
               Printf.fprintf(
                 oc,
                 {|
-              let commitId = "XXXXXXXX";
+              let commitId = "[built-with-nix]";
               let version = "1.0.0";
               let defaultUpdateChannel = "unstable";
               let extensionHostVersion = "1.0.0";
@@ -207,26 +143,23 @@ let
           passthru = o.passthru;
         };
       })
+      
+      # NOTE: overrides below here could be hoisted into default overrides,
+      # but they need to be applied _after_ the above overrides
+      # which regenerate from specToAttrs
       (self.addBuildInputs {
-        autoconf = [m4 perl];
-        automake = [perl];
-        esy-help2man = [perl];
-        esy-tree-sitter = [gcc];
-        revery-esy-libvterm = [ perl ];
-        texinfo = [ perl ];
-        yarn-pkg-config = [ libiconv ];
         Oni2 = [ gettext nodejs ];
+        revery-esy-libvterm = [ perl ];
       })
+
       (self.addPropagatedBuildInputs {
-        esy-cmake = [ pkgs.cmake cmakeHook ];
         esy-sdl2 = [libGL.dev] ++ (ifDarwin [
           osx.IOKit osx.CoreAudio osx.Cocoa
           osx.Foundation osx.AudioToolbox
           osx.AudioUnit osx.ForceFeedback
         ]);
-        libvim = [ncurses.dev] ++ (ifDarwin [ osx.AppKit ]);
         esy-skia = ifDarwin [ osx.ApplicationServices ];
-        revery-terminal = ifDarwin [ osx.AppKit osx.Cocoa ];
+        libvim = [ncurses.dev] ++ (ifDarwin [ osx.AppKit ]);
       })
     ];
   };

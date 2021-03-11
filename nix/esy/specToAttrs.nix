@@ -15,34 +15,6 @@ let
     preBuildHooks+=(copyOpamFiles)
   '';
   
-  exportVars = vars:
-    concatStringsSep "\n" (map (line: "echo \"+ ${line}\"\nexport \"${line}\"") vars);
-
-  # does nix already have something for this?
-  exportEnvHook = { pname, exportedEnv }:
-    let fname = replaceStrings ["-"] ["_"] pname; in
-    prev.makeHook "export-env" ''
-    function writeEnvSetupHook {
-      echo "+ writeEnvSetupHook"
-      mkdir -p $out/nix-support
-    cat <<EOF > $out/nix-support/setup-hook
-        esyEnvFrom_${fname} () {
-          local out="$out"
-    EOF
-    cat <<"EOF" >> $out/nix-support/setup-hook
-          if [ "''${esyEnv_already_${fname}:-}" = 1 ]; then
-            return
-          fi
-          export esyEnv_already_${fname}=1
-          echo "+ esyEnvFrom_${fname}"
-      ${exportVars exportedEnv}
-        }
-        addEnvHooks "$targetOffset" esyEnvFrom_${fname}
-    EOF
-    }
-    preInstallHooks+=(writeEnvSetupHook)
-  '';
-  
   getDepext = p: getAttrFromPath (splitString "." p) final.pkgs;
 in
 {
@@ -61,7 +33,7 @@ in
     
     buildPhase =
       (if build ? buildEnv
-        then (exportVars build.buildEnv) + "\n"
+        then (final.exportVars build.buildEnv) + "\n"
         else ""
       ) + finalBuild.buildPhase;
 
@@ -74,7 +46,7 @@ in
     buildInputs = buildInputs ++ commonBuildDeps
       ++ (if files != null then [ copyFilesHook ] else [])
       ++ (if build ? exportedEnv
-        then [ (exportEnvHook { inherit pname; inherit (build) exportedEnv; }) ]
+        then [ (final.exportEnvHook { inherit pname; inherit (build) exportedEnv; }) ]
         else []);
   }
     // (if opamName != null then { inherit opamName; } else {})

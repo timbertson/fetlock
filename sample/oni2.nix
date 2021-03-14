@@ -12,20 +12,20 @@ in
     ocaml = (final.getDrv "ocaml@4.10.0@d41d8cd9");
   };
   specs = {
-    "@brisk/brisk-reconciler@github:briskml/brisk-reconciler#10cab2d@d41d8cd9" = {
+    "@brisk/brisk-reconciler@github:briskml/brisk-reconciler#c9d5c4c@d41d8cd9" = {
       pname = "brisk-brisk-reconciler";
       version = "1.0.0-alpha.0";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/ppxlib@opam:0.15.0@6a9d8126")
+        ("@opam/reason@opam:3.6.2@1a34f8a4")
+        ("@opam/ppxlib@opam:0.15.0@071fae58")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@esy-ocaml/reason@3.6.2@d41d8cd9")
       ];
       src = pkgs.fetchFromGitHub {
         owner = "briskml";
         repo = "brisk-reconciler";
-        rev = "10cab2d";
-        sha256 = "0qhfa23hyhh8i955m2wfg2790rr6xpp350yy8nkigcl203ia5gwk";
+        rev = "c9d5c4c";
+        sha256 = "1p0kiriljynz686lc5zlbqxada2g13xmyap0bh2zrhb761kph000";
       };
       build = {
         buildPhase = "dune build -p brisk-reconciler";
@@ -49,22 +49,22 @@ in
       };
       opamName = "ninja-build";
     };
-    "@esy-ocaml/reason@3.6.2@d41d8cd9" = {
+    "@esy-ocaml/reason@3.7.0@d41d8cd9" = {
       pname = "esy-ocaml-reason";
-      version = "3.6.2";
+      version = "3.7.0";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/result@opam:1.5@6b753c82")
         ("@opam/ppx_derivers@opam:1.2.1@ecf0aa45")
-        ("@opam/ocamlfind@opam:1.8.1@ff07b0f9")
+        ("@opam/ocamlfind@opam:1.8.1@b7dc3072")
         ("@opam/merlin-extend@opam:0.6@404f814c")
         ("@opam/menhir@opam:20201216@1a09d886")
         ("@opam/fix@opam:20201120@5c318621")
         ("@opam/dune@opam:2.5.0@e0bac278")
       ];
       src = pkgs.fetchurl {
-        url = "https://registry.npmjs.org/@esy-ocaml/reason/-/reason-3.6.2.tgz";
-        sha256 = "1yn19rasy89qg5c34xz6l1fzfysix48jvh5jqlg747jq4l2l9py4";
+        url = "https://registry.npmjs.org/@esy-ocaml/reason/-/reason-3.7.0.tgz";
+        sha256 = "0spqbsphxnpp3jdy4amfgw58w6mam5gb4vn9gxm5nh9rkcz0iaqg";
       };
       build = {
         buildPhase = "dune build -p reason";
@@ -87,17 +87,17 @@ in
       };
       opamName = "substs";
     };
-    "@onivim/reason-native-crash-utils@1.0.1@d41d8cd9" = {
+    "@onivim/reason-native-crash-utils@1.0.2@d41d8cd9" = {
       pname = "onivim-reason-native-crash-utils";
-      version = "1.0.1";
+      version = "1.0.2";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/dune-configurator@opam:2.5.1@aeb9d8d5")
         ("@opam/dune@opam:2.5.0@e0bac278")
       ];
       src = pkgs.fetchurl {
-        url = "https://registry.npmjs.org/@onivim/reason-native-crash-utils/-/reason-native-crash-utils-1.0.1.tgz";
-        sha256 = "1rmzrj7nfhz0frkds0jl0vzix2c70jnp6albbl5379cwhj3bxya5";
+        url = "https://registry.npmjs.org/@onivim/reason-native-crash-utils/-/reason-native-crash-utils-1.0.2.tgz";
+        sha256 = "0vsc3bmv7asyipsls6wg069w1l58klx843vhnnkg0zyi3nga0lqj";
       };
       build = {
         buildPhase = "dune build -p reason-native-crash-utils";
@@ -131,7 +131,7 @@ in
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/topkg@opam:1.0.3@e4e10f1c")
-        ("@opam/ocamlfind@opam:1.8.1@ff07b0f9")
+        ("@opam/ocamlfind@opam:1.8.1@b7dc3072")
         ("@opam/ocamlbuild@opam:0.14.0@6ac75d03")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
@@ -220,7 +220,7 @@ in
       version = "base";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/ocamlfind@opam:1.8.1@ff07b0f9")
+        ("@opam/ocamlfind@opam:1.8.1@b7dc3072")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       build = {
@@ -247,9 +247,9 @@ in
         mode = "opam";
       };
     };
-    "@opam/base@opam:v0.14.0@8bc55fce" = {
+    "@opam/base@opam:v0.14.1@d14008e2" = {
       pname = "base";
-      version = "v0.14.0";
+      version = "v0.14.1";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/sexplib0@opam:v0.14.0@ddeb6438")
@@ -258,8 +258,8 @@ in
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchurl {
-        url = "https://ocaml.janestreet.com/ocaml-core/v0.14/files/base-v0.14.0.tar.gz";
-        sha256 = "1rkdhsgbcv0a8p29mwvpd2ldz8cjk97pixl43izm54wyin4lp778";
+        url = "https://github.com/janestreet/base/archive/v0.14.1.tar.gz";
+        sha256 = "13b0xc62ka8i2ry2r62gc194wzfdq1vqf2qygwrrk26pvqn8a9l9";
       };
       build = {
         buildPhase = "dune build -p base -j $NIX_BUILD_CORES";
@@ -326,7 +326,7 @@ in
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/topkg@opam:1.0.3@e4e10f1c")
         ("@opam/rresult@opam:0.6.0@4b185e72")
-        ("@opam/ocamlfind@opam:1.8.1@ff07b0f9")
+        ("@opam/ocamlfind@opam:1.8.1@b7dc3072")
         ("@opam/ocamlbuild@opam:0.14.0@6ac75d03")
         ("@opam/logs@opam:0.7.0@1d03143e")
         ("@opam/fpath@opam:0.7.3@674d8125")
@@ -452,9 +452,9 @@ in
         mode = "opam";
       };
     };
-    "@opam/csexp@opam:1.3.2@5cea14af" = {
+    "@opam/csexp@opam:1.4.0@bd1cb034" = {
       pname = "csexp";
-      version = "1.3.2";
+      version = "1.4.0";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/result@opam:1.5@6b753c82")
@@ -462,8 +462,8 @@ in
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchurl {
-        url = "https://github.com/ocaml-dune/csexp/releases/download/1.3.2/csexp-1.3.2.tbz";
-        sha256 = "0jhwrxfjb0x31xj4g4b89fzw34sq19j0rq2hs2zyh1vz4xxl47zj";
+        url = "https://github.com/ocaml-dune/csexp/releases/download/1.4.0/csexp-1.4.0.tbz";
+        sha256 = "0kinvwzbylcx2ky8s8a7ki1i0vql1lm2mdz8vqka20pihz56ygcf";
       };
       build = {
         buildPhase = "dune build -p csexp -j $NIX_BUILD_CORES @install";
@@ -475,7 +475,7 @@ in
       version = "0.15.1";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/ocamlfind@opam:1.8.1@ff07b0f9")
+        ("@opam/ocamlfind@opam:1.8.1@b7dc3072")
         ("@opam/integers@opam:0.4.0@f7acfaeb")
         ("@opam/conf-pkg-config@opam:1.2@d86c8f53")
         ("@opam/base-bytes@opam:base@19d0c2ff")
@@ -530,21 +530,21 @@ in
         mode = "opam";
       };
     };
-    "@opam/dir@github:bryphe/reason-native:dir.opam#5a7a756@d41d8cd9" = {
+    "@opam/dir@github:bryphe/reason-native:dir.opam#e16590c@d41d8cd9" = {
       pname = "dir";
-      version = "github-bryphe-reason-native-dir.opam-5a7a756";
+      version = "github-bryphe-reason-native-dir.opam-e16590c";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/reason@opam:3.6.0@58adb39a")
-        ("@opam/fp@github:bryphe/reason-native:fp.opam#5a7a756@d41d8cd9")
+        ("@opam/reason@opam:3.6.2@1a34f8a4")
+        ("@opam/fp@github:bryphe/reason-native:fp.opam#e16590c@d41d8cd9")
         ("@opam/dune@opam:2.5.0@e0bac278")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchFromGitHub {
         owner = "bryphe";
         repo = "reason-native";
-        rev = "5a7a756";
-        sha256 = "1cqv3ngiklsdypyz00wyjqzmfwnsksawwwz35cbbplzci62pppbv";
+        rev = "e16590c";
+        sha256 = "0x85lnflkpcgvgrbg65ay4vnhb4n1lgkjk6kl5whwl2zkwryj78l";
       };
       build = {
         buildPhase = "dune build -p dir";
@@ -558,9 +558,9 @@ in
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/yojson@github:onivim/yojson:yojson.opam#f480aef@d41d8cd9")
         ("@opam/result@opam:1.5@6b753c82")
-        ("@opam/ocamlfind@opam:1.8.1@ff07b0f9")
+        ("@opam/ocamlfind@opam:1.8.1@b7dc3072")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@opam/csexp@opam:1.3.2@5cea14af")
+        ("@opam/csexp@opam:1.4.0@bd1cb034")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchurl {
@@ -683,9 +683,9 @@ in
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/topkg@opam:1.0.3@e4e10f1c")
-        ("@opam/stdlib-shims@opam:0.1.0@148f22ac")
+        ("@opam/stdlib-shims@opam:0.3.0@0d088929")
         ("@opam/seq@opam:base@d8d7de1d")
-        ("@opam/ocamlfind@opam:1.8.1@ff07b0f9")
+        ("@opam/ocamlfind@opam:1.8.1@b7dc3072")
         ("@opam/ocamlbuild@opam:0.14.0@6ac75d03")
         ("@opam/cmdliner@opam:1.0.4@93208aac")
         ("@opam/base-unix@opam:base@87d0b2eb")
@@ -700,20 +700,20 @@ in
         mode = "opam";
       };
     };
-    "@opam/fp@github:bryphe/reason-native:fp.opam#5a7a756@d41d8cd9" = {
+    "@opam/fp@github:bryphe/reason-native:fp.opam#e16590c@d41d8cd9" = {
       pname = "fp";
-      version = "github-bryphe-reason-native-fp.opam-5a7a756";
+      version = "github-bryphe-reason-native-fp.opam-e16590c";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/reason@opam:3.6.0@58adb39a")
+        ("@opam/reason@opam:3.6.2@1a34f8a4")
         ("@opam/dune@opam:2.5.0@e0bac278")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchFromGitHub {
         owner = "bryphe";
         repo = "reason-native";
-        rev = "5a7a756";
-        sha256 = "1cqv3ngiklsdypyz00wyjqzmfwnsksawwwz35cbbplzci62pppbv";
+        rev = "e16590c";
+        sha256 = "0x85lnflkpcgvgrbg65ay4vnhb4n1lgkjk6kl5whwl2zkwryj78l";
       };
       build = {
         buildPhase = "dune build -p fp";
@@ -726,7 +726,7 @@ in
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/topkg@opam:1.0.3@e4e10f1c")
-        ("@opam/ocamlfind@opam:1.8.1@ff07b0f9")
+        ("@opam/ocamlfind@opam:1.8.1@b7dc3072")
         ("@opam/ocamlbuild@opam:0.14.0@6ac75d03")
         ("@opam/astring@opam:0.8.5@1300cee8")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
@@ -740,21 +740,21 @@ in
         mode = "opam";
       };
     };
-    "@opam/fs@github:bryphe/reason-native:fs.opam#5a7a756@d41d8cd9" = {
+    "@opam/fs@github:bryphe/reason-native:fs.opam#e16590c@d41d8cd9" = {
       pname = "fs";
-      version = "github-bryphe-reason-native-fs.opam-5a7a756";
+      version = "github-bryphe-reason-native-fs.opam-e16590c";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/reason@opam:3.6.0@58adb39a")
-        ("@opam/fp@github:bryphe/reason-native:fp.opam#5a7a756@d41d8cd9")
+        ("@opam/reason@opam:3.6.2@1a34f8a4")
+        ("@opam/fp@github:bryphe/reason-native:fp.opam#e16590c@d41d8cd9")
         ("@opam/dune@opam:2.5.0@e0bac278")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchFromGitHub {
         owner = "bryphe";
         repo = "reason-native";
-        rev = "5a7a756";
-        sha256 = "1cqv3ngiklsdypyz00wyjqzmfwnsksawwwz35cbbplzci62pppbv";
+        rev = "e16590c";
+        sha256 = "0x85lnflkpcgvgrbg65ay4vnhb4n1lgkjk6kl5whwl2zkwryj78l";
       };
       build = {
         buildPhase = "dune build -p fs";
@@ -804,7 +804,7 @@ in
         ("@opam/ppx_assert@opam:v0.14.0@877b5900")
         ("@opam/dune-configurator@opam:2.5.1@aeb9d8d5")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@opam/base@opam:v0.14.0@8bc55fce")
+        ("@opam/base@opam:v0.14.1@d14008e2")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchurl {
@@ -834,37 +834,13 @@ in
         mode = "opam";
       };
     };
-    "@opam/lambda-term@opam:3.1.0@8adc2660" = {
-      pname = "lambda-term";
-      version = "3.1.0";
-      depKeys = [
-        ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/zed@opam:3.1.0@86c55416")
-        ("@opam/react@opam:1.2.1@0e11855f")
-        ("@opam/mew_vi@opam:0.5.0@cf66c299")
-        ("@opam/lwt_react@opam:1.1.4@7d2054d1")
-        ("@opam/lwt_log@opam:1.1.1@2d7a797f")
-        ("@opam/lwt@opam:4.5.0@542100aa")
-        ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@opam/camomile@opam:1.0.2@40411a6b")
-        ("@esy-ocaml/substs@0.0.1@d41d8cd9")
-      ];
-      src = pkgs.fetchurl {
-        url = "https://github.com/ocaml-community/lambda-term/archive/3.1.0.tar.gz";
-        sha256 = "1462j2c2nnzv6ng8b6907bw0zy3mhhnnjdm8k6as0sgm9ls0r77r";
-      };
-      build = {
-        buildPhase = "dune build -p lambda-term -j $NIX_BUILD_CORES";
-        mode = "opam";
-      };
-    };
     "@opam/logs@opam:0.7.0@1d03143e" = {
       pname = "logs";
       version = "0.7.0";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/topkg@opam:1.0.3@e4e10f1c")
-        ("@opam/ocamlfind@opam:1.8.1@ff07b0f9")
+        ("@opam/ocamlfind@opam:1.8.1@b7dc3072")
         ("@opam/ocamlbuild@opam:0.14.0@6ac75d03")
         ("@opam/lwt@opam:4.5.0@542100aa")
         ("@opam/fmt@opam:0.8.9@e0843a5b")
@@ -949,30 +925,13 @@ in
         mode = "opam";
       };
     };
-    "@opam/lwt_log@opam:1.1.1@2d7a797f" = {
-      pname = "lwt_log";
-      version = "1.1.1";
-      depKeys = [
-        ("@opam/lwt@opam:4.5.0@542100aa")
-        ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@esy-ocaml/substs@0.0.1@d41d8cd9")
-      ];
-      src = pkgs.fetchurl {
-        url = "https://github.com/aantron/lwt_log/archive/1.1.1.tar.gz";
-        sha256 = "0gszc8nvk2hpfq47plb36qahlnyfq28sa9mhicnf6mg5c7n1kyql";
-      };
-      build = {
-        buildPhase = "dune build -p lwt_log -j $NIX_BUILD_CORES";
-        mode = "opam";
-      };
-    };
     "@opam/lwt_ppx@opam:2.0.1@e6a764a0" = {
       pname = "lwt_ppx";
       version = "2.0.1";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/ppx_tools_versioned@opam:5.4.0@32d1a414")
-        ("@opam/ocaml-migrate-parsetree@opam:1.8.0@305b6173")
+        ("@opam/ocaml-migrate-parsetree@opam:1.8.0@caf9847c")
         ("@opam/lwt@opam:4.5.0@542100aa")
         ("@opam/dune@opam:2.5.0@e0bac278")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
@@ -983,28 +942,6 @@ in
       };
       build = {
         buildPhase = "dune build -p lwt_ppx -j $NIX_BUILD_CORES";
-        mode = "opam";
-      };
-    };
-    "@opam/lwt_react@opam:1.1.4@7d2054d1" = {
-      pname = "lwt_react";
-      version = "1.1.4";
-      depKeys = [
-        ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/react@opam:1.2.1@0e11855f")
-        ("@opam/lwt@opam:4.5.0@542100aa")
-        ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@esy-ocaml/substs@0.0.1@d41d8cd9")
-      ];
-      buildInputs = [
-        (pkgs.unzip)
-      ];
-      src = pkgs.fetchurl {
-        url = "https://github.com/ocsigen/lwt/archive/5.4.0.zip";
-        sha256 = "1lv5i3znmiqx6fiq2q1lapsq1bk20bgw7h57wmk9czx9x050a5n5";
-      };
-      build = {
-        buildPhase = "dune build -p lwt_react -j $NIX_BUILD_CORES";
         mode = "opam";
       };
     };
@@ -1098,44 +1035,6 @@ in
         mode = "opam";
       };
     };
-    "@opam/mew@opam:0.1.0@a74f69d6" = {
-      pname = "mew";
-      version = "0.1.0";
-      depKeys = [
-        ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/trie@opam:1.0.0@d2efc587")
-        ("@opam/result@opam:1.5@6b753c82")
-        ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@esy-ocaml/substs@0.0.1@d41d8cd9")
-      ];
-      src = pkgs.fetchurl {
-        url = "https://github.com/kandu/mew/archive/0.1.0.tar.gz";
-        sha256 = "1rjri9mgfb9gn9fmjn0ax21y9jd9wkvr7mmx2jrlqmzgabmqrlv4";
-      };
-      build = {
-        buildPhase = "dune build -p mew -j $NIX_BUILD_CORES";
-        mode = "opam";
-      };
-    };
-    "@opam/mew_vi@opam:0.5.0@cf66c299" = {
-      pname = "mew_vi";
-      version = "0.5.0";
-      depKeys = [
-        ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/react@opam:1.2.1@0e11855f")
-        ("@opam/mew@opam:0.1.0@a74f69d6")
-        ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@esy-ocaml/substs@0.0.1@d41d8cd9")
-      ];
-      src = pkgs.fetchurl {
-        url = "https://github.com/kandu/mew_vi/archive/0.5.0.tar.gz";
-        sha256 = "1nmg3cysglgw4115n5zpz4azrfbnfxkn2kvw73chzs69viygm4m6";
-      };
-      build = {
-        buildPhase = "dune build -p mew_vi -j $NIX_BUILD_CORES";
-        mode = "opam";
-      };
-    };
     "@opam/mmap@opam:1.1.0@b85334ff" = {
       pname = "mmap";
       version = "1.1.0";
@@ -1176,14 +1075,14 @@ in
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/yojson@github:onivim/yojson:yojson.opam#f480aef@d41d8cd9")
-        ("@opam/stdlib-shims@opam:0.1.0@148f22ac")
+        ("@opam/stdlib-shims@opam:0.3.0@0d088929")
         ("@opam/result@opam:1.5@6b753c82")
         ("@opam/ppx_yojson_conv_lib@opam:v0.14.0@116b53d6")
-        ("@opam/ocamlfind@opam:1.8.1@ff07b0f9")
+        ("@opam/ocamlfind@opam:1.8.1@b7dc3072")
         ("@opam/dune-build-info@opam:2.6.2@03ffe168")
         ("@opam/dune@opam:2.5.0@e0bac278")
         ("@opam/dot-merlin-reader@opam:3.4.2@55baebb0")
-        ("@opam/csexp@opam:1.3.2@5cea14af")
+        ("@opam/csexp@opam:1.4.0@bd1cb034")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchFromGitHub {
@@ -1198,7 +1097,7 @@ in
         mode = "opam";
       };
     };
-    "@opam/ocaml-migrate-parsetree@opam:1.8.0@305b6173" = {
+    "@opam/ocaml-migrate-parsetree@opam:1.8.0@caf9847c" = {
       pname = "ocaml-migrate-parsetree";
       version = "1.8.0";
       depKeys = [
@@ -1253,7 +1152,7 @@ in
         mode = "opam";
       };
     };
-    "@opam/ocamlfind@opam:1.8.1@ff07b0f9" = {
+    "@opam/ocamlfind@opam:1.8.1@b7dc3072" = {
       pname = "ocamlfind";
       version = "1.8.1";
       depKeys = [
@@ -1282,8 +1181,8 @@ in
         base = pkgs.fetchFromGitHub {
   owner = "ocaml";
   repo = "opam-repository";
-  rev = "69dd4307f635e06b76cbe45fc44c784dbe50ef3e";
-  sha256 = "17lah99fs0nyxaj4nmb38hv51vp2qq43sw18zq1jmr9vj1l47i0a";
+  rev = "10da502aafba2600b047aae15af03e3f48b0229e";
+  sha256 = "1hivjgi54s3nhs7zvv9gw1pb5nfwwlsjf49d6c2p5wa4rg09sw0i";
 };
         hash = "sha256:1mys1fls2adq4s851gnis9lq33gnjxisjxjkwzr5kar5j22rk71c";
         path = "packages/ocamlfind/ocamlfind.1.8.1/files";
@@ -1298,15 +1197,15 @@ in
         ("@opam/uuseg@opam:13.0.0@f60712a7")
         ("@opam/stdio@opam:v0.14.0@a624e254")
         ("@opam/re@opam:1.9.0@d4d5e13d")
-        ("@opam/odoc@opam:1.5.2@236518eb")
-        ("@opam/ocaml-migrate-parsetree@opam:1.8.0@305b6173")
+        ("@opam/odoc@opam:1.5.2@94f47c8b")
+        ("@opam/ocaml-migrate-parsetree@opam:1.8.0@caf9847c")
         ("@opam/menhir@opam:20201216@1a09d886")
         ("@opam/fpath@opam:0.7.3@674d8125")
         ("@opam/fix@opam:20201120@5c318621")
         ("@opam/dune@opam:2.5.0@e0bac278")
         ("@opam/cmdliner@opam:1.0.4@93208aac")
         ("@opam/base-unix@opam:base@87d0b2eb")
-        ("@opam/base@opam:v0.14.0@8bc55fce")
+        ("@opam/base@opam:v0.14.1@d14008e2")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchurl {
@@ -1354,7 +1253,7 @@ in
         mode = "opam";
       };
     };
-    "@opam/odoc@opam:1.5.2@236518eb" = {
+    "@opam/odoc@opam:1.5.2@94f47c8b" = {
       pname = "odoc";
       version = "1.5.2";
       depKeys = [
@@ -1403,13 +1302,13 @@ in
       version = "v0.14.0";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/ppxlib@opam:0.15.0@6a9d8126")
+        ("@opam/ppxlib@opam:0.15.0@071fae58")
         ("@opam/ppx_sexp_conv@opam:v0.14.1@5fc4da3c")
         ("@opam/ppx_here@opam:v0.14.0@5ccc1c01")
         ("@opam/ppx_compare@opam:v0.14.0@615de7a6")
         ("@opam/ppx_cold@opam:v0.14.0@345dec7c")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@opam/base@opam:v0.14.0@8bc55fce")
+        ("@opam/base@opam:v0.14.1@d14008e2")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchurl {
@@ -1426,7 +1325,7 @@ in
       version = "v0.14.0";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/ppxlib@opam:0.15.0@6a9d8126")
+        ("@opam/ppxlib@opam:0.15.0@071fae58")
         ("@opam/ppx_sexp_conv@opam:v0.14.1@5fc4da3c")
         ("@opam/ppx_js_style@opam:v0.14.0@10b020a8")
         ("@opam/ppx_hash@opam:v0.14.0@8e9618e4")
@@ -1450,9 +1349,9 @@ in
       version = "v0.14.0";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/ppxlib@opam:0.15.0@6a9d8126")
+        ("@opam/ppxlib@opam:0.15.0@071fae58")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@opam/base@opam:v0.14.0@8bc55fce")
+        ("@opam/base@opam:v0.14.1@d14008e2")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchurl {
@@ -1469,9 +1368,9 @@ in
       version = "v0.14.0";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/ppxlib@opam:0.15.0@6a9d8126")
+        ("@opam/ppxlib@opam:0.15.0@071fae58")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@opam/base@opam:v0.14.0@8bc55fce")
+        ("@opam/base@opam:v0.14.1@d14008e2")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchurl {
@@ -1500,16 +1399,16 @@ in
         mode = "opam";
       };
     };
-    "@opam/ppx_deriving@opam:5.1@3037236f" = {
+    "@opam/ppx_deriving@opam:5.1@089b343d" = {
       pname = "ppx_deriving";
       version = "5.1";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/result@opam:1.5@6b753c82")
-        ("@opam/ppxlib@opam:0.15.0@6a9d8126")
+        ("@opam/ppxlib@opam:0.15.0@071fae58")
         ("@opam/ppx_derivers@opam:1.2.1@ecf0aa45")
-        ("@opam/ocamlfind@opam:1.8.1@ff07b0f9")
-        ("@opam/ocaml-migrate-parsetree@opam:1.8.0@305b6173")
+        ("@opam/ocamlfind@opam:1.8.1@b7dc3072")
+        ("@opam/ocaml-migrate-parsetree@opam:1.8.0@caf9847c")
         ("@opam/dune@opam:2.5.0@e0bac278")
         ("@opam/cppo@opam:1.6.7@c28ac3ae")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
@@ -1530,8 +1429,8 @@ in
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/yojson@github:onivim/yojson:yojson.opam#f480aef@d41d8cd9")
         ("@opam/result@opam:1.5@6b753c82")
-        ("@opam/ppxlib@opam:0.15.0@6a9d8126")
-        ("@opam/ppx_deriving@opam:5.1@3037236f")
+        ("@opam/ppxlib@opam:0.15.0@071fae58")
+        ("@opam/ppx_deriving@opam:5.1@089b343d")
         ("@opam/dune@opam:2.5.0@e0bac278")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
@@ -1549,9 +1448,9 @@ in
       version = "v0.14.0";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/ppxlib@opam:0.15.0@6a9d8126")
+        ("@opam/ppxlib@opam:0.15.0@071fae58")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@opam/base@opam:v0.14.0@8bc55fce")
+        ("@opam/base@opam:v0.14.1@d14008e2")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchurl {
@@ -1568,11 +1467,11 @@ in
       version = "v0.14.0";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/ppxlib@opam:0.15.0@6a9d8126")
+        ("@opam/ppxlib@opam:0.15.0@071fae58")
         ("@opam/ppx_sexp_conv@opam:v0.14.1@5fc4da3c")
         ("@opam/ppx_compare@opam:v0.14.0@615de7a6")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@opam/base@opam:v0.14.0@8bc55fce")
+        ("@opam/base@opam:v0.14.1@d14008e2")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchurl {
@@ -1589,9 +1488,9 @@ in
       version = "v0.14.0";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/ppxlib@opam:0.15.0@6a9d8126")
+        ("@opam/ppxlib@opam:0.15.0@071fae58")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@opam/base@opam:v0.14.0@8bc55fce")
+        ("@opam/base@opam:v0.14.1@d14008e2")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchurl {
@@ -1609,9 +1508,9 @@ in
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/time_now@opam:v0.14.0@5e4046b3")
-        ("@opam/ppxlib@opam:0.15.0@6a9d8126")
+        ("@opam/ppxlib@opam:0.15.0@071fae58")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@opam/base@opam:v0.14.0@8bc55fce")
+        ("@opam/base@opam:v0.14.1@d14008e2")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchurl {
@@ -1628,10 +1527,10 @@ in
       version = "v0.14.0";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/ppxlib@opam:0.15.0@6a9d8126")
+        ("@opam/ppxlib@opam:0.15.0@071fae58")
         ("@opam/octavius@opam:1.2.2@b328d1f1")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@opam/base@opam:v0.14.0@8bc55fce")
+        ("@opam/base@opam:v0.14.1@d14008e2")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchurl {
@@ -1648,9 +1547,9 @@ in
       version = "v0.14.0";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/ppxlib@opam:0.15.0@6a9d8126")
+        ("@opam/ppxlib@opam:0.15.0@071fae58")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@opam/base@opam:v0.14.0@8bc55fce")
+        ("@opam/base@opam:v0.14.1@d14008e2")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchurl {
@@ -1668,9 +1567,9 @@ in
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/stdio@opam:v0.14.0@a624e254")
-        ("@opam/ppxlib@opam:0.15.0@6a9d8126")
+        ("@opam/ppxlib@opam:0.15.0@071fae58")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@opam/base@opam:v0.14.0@8bc55fce")
+        ("@opam/base@opam:v0.14.1@d14008e2")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchurl {
@@ -1688,9 +1587,9 @@ in
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/sexplib0@opam:v0.14.0@ddeb6438")
-        ("@opam/ppxlib@opam:0.15.0@6a9d8126")
+        ("@opam/ppxlib@opam:0.15.0@071fae58")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@opam/base@opam:v0.14.0@8bc55fce")
+        ("@opam/base@opam:v0.14.1@d14008e2")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchurl {
@@ -1707,7 +1606,7 @@ in
       version = "5.4.0";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/ocaml-migrate-parsetree@opam:1.8.0@305b6173")
+        ("@opam/ocaml-migrate-parsetree@opam:1.8.0@caf9847c")
         ("@opam/dune@opam:2.5.0@e0bac278")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
@@ -1738,15 +1637,15 @@ in
         mode = "opam";
       };
     };
-    "@opam/ppxlib@opam:0.15.0@6a9d8126" = {
+    "@opam/ppxlib@opam:0.15.0@071fae58" = {
       pname = "ppxlib";
       version = "0.15.0";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/stdlib-shims@opam:0.1.0@148f22ac")
+        ("@opam/stdlib-shims@opam:0.3.0@0d088929")
         ("@opam/sexplib0@opam:v0.14.0@ddeb6438")
         ("@opam/ppx_derivers@opam:1.2.1@ecf0aa45")
-        ("@opam/ocaml-migrate-parsetree@opam:1.8.0@305b6173")
+        ("@opam/ocaml-migrate-parsetree@opam:1.8.0@caf9847c")
         ("@opam/ocaml-compiler-libs@opam:v0.12.3@f0f069bd")
         ("@opam/dune@opam:2.5.0@e0bac278")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
@@ -1806,7 +1705,7 @@ in
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/topkg@opam:1.0.3@e4e10f1c")
         ("@opam/result@opam:1.5@6b753c82")
-        ("@opam/ocamlfind@opam:1.8.1@ff07b0f9")
+        ("@opam/ocamlfind@opam:1.8.1@b7dc3072")
         ("@opam/ocamlbuild@opam:0.14.0@6ac75d03")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
@@ -1837,33 +1736,14 @@ in
         mode = "opam";
       };
     };
-    "@opam/react@opam:1.2.1@0e11855f" = {
-      pname = "react";
-      version = "1.2.1";
-      depKeys = [
-        ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/topkg@opam:1.0.3@e4e10f1c")
-        ("@opam/ocamlfind@opam:1.8.1@ff07b0f9")
-        ("@opam/ocamlbuild@opam:0.14.0@6ac75d03")
-        ("@esy-ocaml/substs@0.0.1@d41d8cd9")
-      ];
-      src = pkgs.fetchurl {
-        url = "http://erratique.ch/software/react/releases/react-1.2.1.tbz";
-        sha256 = "1aj8w79gdd9xnrbz7s5p8glcb4pmimi8jp9f439dqnf6ih3mqb3v";
-      };
-      build = {
-        buildPhase = "ocaml pkg/pkg.ml build --dev-pkg false";
-        mode = "opam";
-      };
-    };
-    "@opam/reason@opam:3.6.0@58adb39a" = {
+    "@opam/reason@opam:3.6.2@1a34f8a4" = {
       pname = "reason";
-      version = "3.6.0";
+      version = "3.6.2";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/result@opam:1.5@6b753c82")
-        ("@opam/ocamlfind@opam:1.8.1@ff07b0f9")
-        ("@opam/ocaml-migrate-parsetree@opam:1.8.0@305b6173")
+        ("@opam/ppx_derivers@opam:1.2.1@ecf0aa45")
+        ("@opam/ocamlfind@opam:1.8.1@b7dc3072")
         ("@opam/merlin-extend@opam:0.6@404f814c")
         ("@opam/menhir@opam:20201216@1a09d886")
         ("@opam/fix@opam:20201120@5c318621")
@@ -1871,8 +1751,8 @@ in
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchurl {
-        url = "https://registry.npmjs.org/@esy-ocaml/reason/-/reason-3.6.0.tgz";
-        sha256 = "16mz4f4nzzafl4yihzxkra50i63aqa9yp6cdh3lm0g583dhj6617";
+        url = "https://registry.npmjs.org/@esy-ocaml/reason/-/reason-3.6.2.tgz";
+        sha256 = "1yn19rasy89qg5c34xz6l1fzfysix48jvh5jqlg747jq4l2l9py4";
       };
       build = {
         buildPhase = "dune build -p reason -j $NIX_BUILD_CORES";
@@ -1903,7 +1783,7 @@ in
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/topkg@opam:1.0.3@e4e10f1c")
         ("@opam/result@opam:1.5@6b753c82")
-        ("@opam/ocamlfind@opam:1.8.1@ff07b0f9")
+        ("@opam/ocamlfind@opam:1.8.1@b7dc3072")
         ("@opam/ocamlbuild@opam:0.14.0@6ac75d03")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
@@ -1948,8 +1828,8 @@ in
         base = pkgs.fetchFromGitHub {
   owner = "ocaml";
   repo = "opam-repository";
-  rev = "69dd4307f635e06b76cbe45fc44c784dbe50ef3e";
-  sha256 = "17lah99fs0nyxaj4nmb38hv51vp2qq43sw18zq1jmr9vj1l47i0a";
+  rev = "10da502aafba2600b047aae15af03e3f48b0229e";
+  sha256 = "1hivjgi54s3nhs7zvv9gw1pb5nfwwlsjf49d6c2p5wa4rg09sw0i";
 };
         hash = "sha256:1pannj4qsgh1bm3qg4gza8sxshnz1albqvq0pdi5y9zckv1q3b6b";
         path = "packages/seq/seq.base/files";
@@ -1978,7 +1858,7 @@ in
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@opam/base@opam:v0.14.0@8bc55fce")
+        ("@opam/base@opam:v0.14.1@d14008e2")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchurl {
@@ -1990,17 +1870,17 @@ in
         mode = "opam";
       };
     };
-    "@opam/stdlib-shims@opam:0.1.0@148f22ac" = {
+    "@opam/stdlib-shims@opam:0.3.0@0d088929" = {
       pname = "stdlib-shims";
-      version = "0.1.0";
+      version = "0.3.0";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/dune@opam:2.5.0@e0bac278")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchurl {
-        url = "https://github.com/ocaml/stdlib-shims/releases/download/0.1.0/stdlib-shims-0.1.0.tbz";
-        sha256 = "1jv6yb47f66239m7hsz7zzw3i48mjpbvfgpszws48apqx63wjwsk";
+        url = "https://github.com/ocaml/stdlib-shims/releases/download/0.3.0/stdlib-shims-0.3.0.tbz";
+        sha256 = "0jnqsv6pqp5b5g7lcjwgd75zqqvcwcl5a32zi03zg1kvj79p5gxs";
       };
       build = {
         buildPhase = "dune build -p stdlib-shims -j $NIX_BUILD_CORES";
@@ -2017,7 +1897,7 @@ in
         ("@opam/jst-config@opam:v0.14.0@d0d7469e")
         ("@opam/jane-street-headers@opam:v0.14.0@59432b6a")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@opam/base@opam:v0.14.0@8bc55fce")
+        ("@opam/base@opam:v0.14.1@d14008e2")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = pkgs.fetchurl {
@@ -2034,7 +1914,7 @@ in
       version = "1.0.3";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/ocamlfind@opam:1.8.1@ff07b0f9")
+        ("@opam/ocamlfind@opam:1.8.1@b7dc3072")
         ("@opam/ocamlbuild@opam:0.14.0@6ac75d03")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
@@ -2044,23 +1924,6 @@ in
       };
       build = {
         buildPhase = "ocaml pkg/pkg.ml build --pkg-name topkg --dev-pkg false";
-        mode = "opam";
-      };
-    };
-    "@opam/trie@opam:1.0.0@d2efc587" = {
-      pname = "trie";
-      version = "1.0.0";
-      depKeys = [
-        ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@esy-ocaml/substs@0.0.1@d41d8cd9")
-      ];
-      src = pkgs.fetchurl {
-        url = "https://github.com/kandu/trie/archive/1.0.0.tar.gz";
-        sha256 = "1slq4kiwnc723dsaw15ms7xxpqz061v8zck1m6iyc5j2li70by62";
-      };
-      build = {
-        buildPhase = "dune build -p trie -j $NIX_BUILD_CORES";
         mode = "opam";
       };
     };
@@ -2111,7 +1974,7 @@ in
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/uutf@opam:1.0.2@4440868f")
         ("@opam/topkg@opam:1.0.3@e4e10f1c")
-        ("@opam/ocamlfind@opam:1.8.1@ff07b0f9")
+        ("@opam/ocamlfind@opam:1.8.1@b7dc3072")
         ("@opam/ocamlbuild@opam:0.14.0@6ac75d03")
         ("@opam/cmdliner@opam:1.0.4@93208aac")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
@@ -2133,7 +1996,7 @@ in
         ("@opam/uutf@opam:1.0.2@4440868f")
         ("@opam/uucp@opam:13.0.0@e9b515e0")
         ("@opam/topkg@opam:1.0.3@e4e10f1c")
-        ("@opam/ocamlfind@opam:1.8.1@ff07b0f9")
+        ("@opam/ocamlfind@opam:1.8.1@b7dc3072")
         ("@opam/ocamlbuild@opam:0.14.0@6ac75d03")
         ("@opam/cmdliner@opam:1.0.4@93208aac")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
@@ -2154,7 +2017,7 @@ in
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/uchar@opam:0.0.2@c8218eea")
         ("@opam/topkg@opam:1.0.3@e4e10f1c")
-        ("@opam/ocamlfind@opam:1.8.1@ff07b0f9")
+        ("@opam/ocamlfind@opam:1.8.1@b7dc3072")
         ("@opam/ocamlbuild@opam:0.14.0@6ac75d03")
         ("@opam/cmdliner@opam:1.0.4@93208aac")
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
@@ -2190,36 +2053,15 @@ in
         mode = "opam";
       };
     };
-    "@opam/zed@opam:3.1.0@86c55416" = {
-      pname = "zed";
-      version = "3.1.0";
-      depKeys = [
-        ("ocaml@4.10.0@d41d8cd9")
-        ("@opam/react@opam:1.2.1@0e11855f")
-        ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@opam/charInfo_width@opam:1.1.0@4296bdfe")
-        ("@opam/camomile@opam:1.0.2@40411a6b")
-        ("@opam/base-bytes@opam:base@19d0c2ff")
-        ("@esy-ocaml/substs@0.0.1@d41d8cd9")
-      ];
-      src = pkgs.fetchurl {
-        url = "https://github.com/ocaml-community/zed/archive/3.1.0.tar.gz";
-        sha256 = "1z95fs49hi00xy078a83m0vfdqwjb5953rwr15lfpirldi4v11y3";
-      };
-      build = {
-        buildPhase = "dune build -p zed -j $NIX_BUILD_CORES";
-        mode = "opam";
-      };
-    };
     "@reason-native/cli@0.0.1-alpha@d41d8cd9" = {
       pname = "reason-native-cli";
       version = "0.0.1-alpha";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
-        ("@reason-native/pastel@0.1.0@d41d8cd9")
+        ("@reason-native/pastel@0.3.0@d41d8cd9")
         ("@opam/re@opam:1.9.0@d4d5e13d")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@esy-ocaml/reason@3.6.2@d41d8cd9")
+        ("@esy-ocaml/reason@3.7.0@d41d8cd9")
       ];
       src = pkgs.fetchurl {
         url = "https://registry.npmjs.org/@reason-native/cli/-/cli-0.0.1-alpha.tgz";
@@ -2237,7 +2079,7 @@ in
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@esy-ocaml/reason@3.6.2@d41d8cd9")
+        ("@esy-ocaml/reason@3.7.0@d41d8cd9")
       ];
       src = pkgs.fetchurl {
         url = "https://registry.npmjs.org/@reason-native/console/-/console-0.1.0.tgz";
@@ -2255,10 +2097,10 @@ in
       version = "0.0.3";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
-        ("@reason-native/pastel@0.1.0@d41d8cd9")
+        ("@reason-native/pastel@0.3.0@d41d8cd9")
         ("@opam/re@opam:1.9.0@d4d5e13d")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@esy-ocaml/reason@3.6.2@d41d8cd9")
+        ("@esy-ocaml/reason@3.7.0@d41d8cd9")
       ];
       src = pkgs.fetchurl {
         url = "https://registry.npmjs.org/@reason-native/file-context-printer/-/file-context-printer-0.0.3.tgz";
@@ -2271,21 +2113,21 @@ in
       };
       opamName = "file-context-printer";
     };
-    "@reason-native/pastel@0.1.0@d41d8cd9" = {
+    "@reason-native/pastel@0.3.0@d41d8cd9" = {
       pname = "reason-native-pastel";
-      version = "0.1.0";
+      version = "0.3.0";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
+        ("@opam/re@opam:1.9.0@d4d5e13d")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@esy-ocaml/reason@3.6.2@d41d8cd9")
+        ("@esy-ocaml/reason@3.7.0@d41d8cd9")
       ];
       src = pkgs.fetchurl {
-        url = "https://registry.npmjs.org/@reason-native/pastel/-/pastel-0.1.0.tgz";
-        sha256 = "05hzip98vjp87p7wqbyz3vj420zm2iwcfa2rmzjdf424vywwzqb2";
+        url = "https://registry.npmjs.org/@reason-native/pastel/-/pastel-0.3.0.tgz";
+        sha256 = "072bj6f22mmw9zaw06aaybh0bd1sh1r508fp0bq9vslk1fs6xhyv";
       };
       build = {
         buildPhase = "dune build -p pastel";
-        installPhase = "esy-installer pastel.install";
         mode = "esy";
       };
       opamName = "pastel";
@@ -2295,13 +2137,13 @@ in
       version = "3.2.1";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
-        ("@reason-native/pastel@0.1.0@d41d8cd9")
+        ("@reason-native/pastel@0.3.0@d41d8cd9")
         ("@reason-native/file-context-printer@0.0.3@d41d8cd9")
         ("@reason-native/cli@0.0.1-alpha@d41d8cd9")
         ("@opam/re@opam:1.9.0@d4d5e13d")
         ("@opam/junit@opam:2.0.2@0b7bd730")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@esy-ocaml/reason@3.6.2@d41d8cd9")
+        ("@esy-ocaml/reason@3.7.0@d41d8cd9")
       ];
       src = pkgs.fetchurl {
         url = "https://registry.npmjs.org/@reason-native/rely/-/rely-3.2.1.tgz";
@@ -2332,22 +2174,22 @@ in
       };
       opamName = "esy-cmake";
     };
-    "@revery/esy-harfbuzz@2.6.8001@d41d8cd9" = {
+    "@revery/esy-harfbuzz@2.6.8002@d41d8cd9" = {
       pname = "revery-esy-harfbuzz";
-      version = "2.6.8001";
+      version = "2.6.8002";
       depKeys = [
       ];
       src = pkgs.fetchurl {
-        url = "https://registry.npmjs.org/@revery/esy-harfbuzz/-/esy-harfbuzz-2.6.8001.tgz";
-        sha256 = "0zd0nwmz466przdxnxgm5q6k47dxgzx7i5lr97x04cmr8p3gcp21";
+        url = "https://registry.npmjs.org/@revery/esy-harfbuzz/-/esy-harfbuzz-2.6.8002.tgz";
+        sha256 = "0g48n1bvd85cnqpxd6jg5cl298ispl527x4dbfzamf751nrxjndi";
       };
       build = {
         buildPhase = ''
-          ./esy/prep.sh
+          bash -c ./esy/prep.sh
           bash -c "${if final.os == "windows" then "./esy/configure-windows.sh" else "echo"}"
           bash -c "${if final.os == "darwin" then "./esy/configure-osx.sh" else "echo"}"
           bash -c "${if final.os == "linux" then "./esy/configure-linux.sh" else "echo"}"
-          ./esy/build.sh
+          bash -c ./esy/build.sh
         '';
         exportedEnv = [
           ("HARFBUZZ_BIN_PATH=${"$out/bin"}")
@@ -2388,7 +2230,7 @@ in
         ("@opam/logs@opam:0.7.0@1d03143e")
         ("@opam/fmt@opam:0.8.9@e0843a5b")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@esy-ocaml/reason@3.6.2@d41d8cd9")
+        ("@esy-ocaml/reason@3.7.0@d41d8cd9")
       ];
       src = pkgs.fetchurl {
         url = "https://registry.npmjs.org/@revery/timber/-/timber-2.0.0.tgz";
@@ -2405,13 +2247,13 @@ in
       version = "0.5.9-nightly";
       depKeys = [
         ("revery-terminal@github:revery-ui/revery-terminal#a9cb168@d41d8cd9")
-        ("revery@github:revery-ui/revery#931f3d0@d41d8cd9")
-        ("rench@github:bryphe/rench#a976fe5@d41d8cd9")
+        ("revery@github:revery-ui/revery#26e8b73@d41d8cd9")
+        ("rench@1.10.0@d41d8cd9")
         ("refmterr@3.3.2@d41d8cd9")
         ("reason-native-crash-utils@github:onivim/reason-native-crash-utils#38c8f00@d41d8cd9")
-        ("reason-fzy@github:bryphe/reason-fzy#ab172e1@d41d8cd9")
+        ("reason-fzy@github:CrossR/reason-fzy#485cae1@d41d8cd9")
         ("ocaml@4.10.0@d41d8cd9")
-        ("libvim@8.10869.83@d41d8cd9")
+        ("libvim@8.10869.87@d41d8cd9")
         ("isolinear@github:revery-ui/isolinear#53fc4eb@d41d8cd9")
         ("esy-tree-sitter@1.4.1@d41d8cd9")
         ("esy-skia@github:revery-ui/esy-skia#91c98f6@d41d8cd9")
@@ -2425,14 +2267,14 @@ in
         ("@opam/uutf@opam:1.0.2@4440868f")
         ("@opam/uucp@opam:13.0.0@e9b515e0")
         ("@opam/semver2@opam:1.1.0@ec4fbaf4")
-        ("@opam/reason@opam:3.6.0@58adb39a")
+        ("@opam/reason@opam:3.6.2@1a34f8a4")
         ("@opam/re@opam:1.9.0@d4d5e13d")
-        ("@opam/ppxlib@opam:0.15.0@6a9d8126")
+        ("@opam/ppxlib@opam:0.15.0@071fae58")
         ("@opam/ppx_optcomp@opam:v0.14.0@47cec200")
         ("@opam/ppx_let@opam:v0.14.0@eb9b93e0")
         ("@opam/ppx_inline_test@opam:v0.14.1@2e4fdd8d")
         ("@opam/ppx_deriving_yojson@opam:3.6.1@faf11a7c")
-        ("@opam/ppx_deriving@opam:5.1@3037236f")
+        ("@opam/ppx_deriving@opam:5.1@089b343d")
         ("@opam/ocamlformat@opam:0.15.0@8e036963")
         ("@opam/ocamlbuild@opam:0.14.0@6ac75d03")
         ("@opam/markup@opam:0.8.2@87975241")
@@ -2440,23 +2282,17 @@ in
         ("@opam/luv@github:bryphe/luv:luv.opam#8e9f2b0@d41d8cd9")
         ("@opam/lru@github:bryphe/lru:lru.opam#2708c70@d41d8cd9")
         ("@opam/logs@opam:0.7.0@1d03143e")
-        ("@opam/fs@github:bryphe/reason-native:fs.opam#5a7a756@d41d8cd9")
-        ("@opam/fp@github:bryphe/reason-native:fp.opam#5a7a756@d41d8cd9")
+        ("@opam/fs@github:bryphe/reason-native:fs.opam#e16590c@d41d8cd9")
+        ("@opam/fp@github:bryphe/reason-native:fp.opam#e16590c@d41d8cd9")
         ("@opam/fmt@opam:0.8.9@e0843a5b")
         ("@opam/dune-private-libs@opam:2.5.1@60c1661f")
         ("@opam/dune-configurator@opam:2.5.1@aeb9d8d5")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@opam/dir@github:bryphe/reason-native:dir.opam#5a7a756@d41d8cd9")
+        ("@opam/dir@github:bryphe/reason-native:dir.opam#e16590c@d41d8cd9")
         ("@opam/decoders-yojson@opam:0.4.0@cb39dea6")
         ("@opam/charInfo_width@opam:1.1.0@4296bdfe")
         ("@opam/angstrom@opam:0.15.0@48ede9cb")
       ];
-      src = pkgs.fetchFromGitHub {
-        owner = "onivim";
-        repo = "oni2";
-        rev = "40b0ffc7d935c12bce94a6aeea9603cae964c67c";
-        sha256 = "08gk7zdkfxccbpp2nbw6s113qklcz8bzdl841m7y9ld7izyw83sa";
-      };
       build = {
         buildEnv = [
           ("ONI2_APPCAST_BASEURL=${"http://localhost:8080/"}")
@@ -2917,7 +2753,7 @@ in
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@esy-ocaml/reason@3.6.2@d41d8cd9")
+        ("@esy-ocaml/reason@3.7.0@d41d8cd9")
       ];
       src = pkgs.fetchFromGitHub {
         owner = "bryphe";
@@ -2950,7 +2786,7 @@ in
       depKeys = [
         ("universalify@0.1.2@d41d8cd9")
         ("jsonfile@4.0.0@d41d8cd9")
-        ("graceful-fs@4.2.4@d41d8cd9")
+        ("graceful-fs@4.2.6@d41d8cd9")
       ];
       src = pkgs.fetchurl {
         url = "https://registry.npmjs.org/fs-extra/-/fs-extra-7.0.1.tgz";
@@ -3005,14 +2841,14 @@ in
         mode = "esy";
       };
     };
-    "graceful-fs@4.2.4@d41d8cd9" = {
+    "graceful-fs@4.2.6@d41d8cd9" = {
       pname = "graceful-fs";
-      version = "4.2.4";
+      version = "4.2.6";
       depKeys = [
       ];
       src = pkgs.fetchurl {
-        url = "https://registry.npmjs.org/graceful-fs/-/graceful-fs-4.2.4.tgz";
-        sha256 = "0l8p8vjiymrhvzizwh3z59vfrasl0k0dr7cz8s8j16c2dhn5gb98";
+        url = "https://registry.npmjs.org/graceful-fs/-/graceful-fs-4.2.6.tgz";
+        sha256 = "0dz5rck3zvvblkxq2234654axjslp6ackixnb5dsh9nzxm8l4cr5";
       };
       build = {
         mode = "esy";
@@ -3107,7 +2943,7 @@ in
         ("refmterr@3.3.2@d41d8cd9")
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@esy-ocaml/reason@3.6.2@d41d8cd9")
+        ("@esy-ocaml/reason@3.7.0@d41d8cd9")
       ];
       src = pkgs.fetchFromGitHub {
         owner = "revery-ui";
@@ -3124,7 +2960,7 @@ in
       pname = "jsonfile";
       version = "4.0.0";
       depKeys = [
-        ("graceful-fs@4.2.4@d41d8cd9")
+        ("graceful-fs@4.2.6@d41d8cd9")
       ];
       src = pkgs.fetchurl {
         url = "https://registry.npmjs.org/jsonfile/-/jsonfile-4.0.0.tgz";
@@ -3134,14 +2970,14 @@ in
         mode = "esy";
       };
     };
-    "libvim@8.10869.83@d41d8cd9" = {
+    "libvim@8.10869.87@d41d8cd9" = {
       pname = "libvim";
-      version = "8.10869.83";
+      version = "8.10869.87";
       depKeys = [
       ];
       src = pkgs.fetchurl {
-        url = "https://registry.npmjs.org/libvim/-/libvim-8.10869.83.tgz";
-        sha256 = "0ddxfrv4lbl15msqnhba0hf3xpyxpa3q71h7kpd3x360cnncb4ab";
+        url = "https://registry.npmjs.org/libvim/-/libvim-8.10869.87.tgz";
+        sha256 = "19fds3nkglk61j1dj4m35abm45nd65dcq57dfyp5abihyqp53cz0";
       };
       build = {
         buildPhase = "bash -c \"${if final.os == "windows" then "build/build-windows.sh" else "build/build-posix.sh"}\"";
@@ -3152,14 +2988,14 @@ in
         mode = "esy";
       };
     };
-    "lodash@4.17.20@d41d8cd9" = {
+    "lodash@4.17.21@d41d8cd9" = {
       pname = "lodash";
-      version = "4.17.20";
+      version = "4.17.21";
       depKeys = [
       ];
       src = pkgs.fetchurl {
-        url = "https://registry.npmjs.org/lodash/-/lodash-4.17.20.tgz";
-        sha256 = "1qpjahj6j8l9sag75f9sxfl85r6ab8f7v8w5axv9319wzim8ranj";
+        url = "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz";
+        sha256 = "017qragyfl5ifajdx48lvz46wr0jc1llikgvc2fhqakhwp4pl23a";
       };
       build = {
         mode = "esy";
@@ -3278,22 +3114,22 @@ in
         mode = "esy";
       };
     };
-    "reason-fzy@github:bryphe/reason-fzy#ab172e1@d41d8cd9" = {
+    "reason-fzy@github:CrossR/reason-fzy#485cae1@d41d8cd9" = {
       pname = "reason-fzy";
       version = "1.0";
       depKeys = [
         ("refmterr@3.3.2@d41d8cd9")
         ("ocaml@4.10.0@d41d8cd9")
         ("esy-fzy@github:bryphe/esy-fzy#301dbf6@d41d8cd9")
-        ("@opam/reason@opam:3.6.0@58adb39a")
+        ("@opam/reason@opam:3.6.2@1a34f8a4")
         ("@opam/ppx_inline_test@opam:v0.14.1@2e4fdd8d")
         ("@opam/dune-configurator@opam:2.5.1@aeb9d8d5")
         ("@opam/dune@opam:2.5.0@e0bac278")
       ];
       src = pkgs.fetchFromGitHub {
-        owner = "bryphe";
+        owner = "CrossR";
         repo = "reason-fzy";
-        rev = "ab172e1";
+        rev = "485cae1";
         sha256 = "0q556rswp7y8pyvla1v71q4cb7zwaxdd0fc044kc5av0ahqnhfba";
       };
       build = {
@@ -3327,7 +3163,7 @@ in
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@esy-ocaml/reason@3.6.2@d41d8cd9")
+        ("@esy-ocaml/reason@3.7.0@d41d8cd9")
       ];
       src = pkgs.fetchFromGitHub {
         owner = "jchavarri";
@@ -3344,7 +3180,7 @@ in
       pname = "rechoir";
       version = "0.6.2";
       depKeys = [
-        ("resolve@1.19.0@d41d8cd9")
+        ("resolve@1.20.0@d41d8cd9")
       ];
       src = pkgs.fetchurl {
         url = "https://registry.npmjs.org/rechoir/-/rechoir-0.6.2.tgz";
@@ -3359,12 +3195,12 @@ in
       version = "3.3.2";
       depKeys = [
         ("ocaml@4.10.0@d41d8cd9")
-        ("@reason-native/pastel@0.1.0@d41d8cd9")
+        ("@reason-native/pastel@0.3.0@d41d8cd9")
         ("@reason-native/console@0.1.0@d41d8cd9")
         ("@opam/re@opam:1.9.0@d4d5e13d")
         ("@opam/dune@opam:2.5.0@e0bac278")
         ("@opam/atdgen@opam:2.2.1@d73fda11")
-        ("@esy-ocaml/reason@3.6.2@d41d8cd9")
+        ("@esy-ocaml/reason@3.7.0@d41d8cd9")
       ];
       src = pkgs.fetchurl {
         url = "https://registry.npmjs.org/refmterr/-/refmterr-3.3.2.tgz";
@@ -3376,62 +3212,53 @@ in
         mode = "esy";
       };
     };
-    "rench@github:bryphe/rench#a976fe5@d41d8cd9" = {
+    "rench@1.10.0@d41d8cd9" = {
       pname = "rench";
-      version = "1.9.0";
+      version = "1.10.0";
       depKeys = [
-        ("refmterr@3.3.2@d41d8cd9")
-        ("@reason-native/rely@3.2.1@d41d8cd9")
-        ("@reason-native/console@0.1.0@d41d8cd9")
-        ("@opam/lwt@opam:4.5.0@542100aa")
-        ("@opam/lambda-term@opam:3.1.0@8adc2660")
+        ("@opam/reason@opam:3.6.2@1a34f8a4")
         ("@opam/fpath@opam:0.7.3@674d8125")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@esy-ocaml/reason@3.6.2@d41d8cd9")
       ];
-      src = pkgs.fetchFromGitHub {
-        owner = "bryphe";
-        repo = "rench";
-        rev = "a976fe5";
-        sha256 = "05cd353i3mfagz3ynkrdawfdhn8sp65qy1xahbczx1nbj313fqlc";
+      src = pkgs.fetchurl {
+        url = "https://registry.npmjs.org/rench/-/rench-1.10.0.tgz";
+        sha256 = "0bil3v1m5x0wdipjs79dlsiplvq18sj7rwp61y8q3dy0sb0nc4sy";
       };
       build = {
-        buildPhase = "refmterr dune build -p Rench -j4";
+        buildPhase = "dune build -p Rench -j4";
         installPhase = "esy-installer Rench.install";
         mode = "esy";
       };
     };
-    "reperf@1.5.0@d41d8cd9" = {
+    "reperf@1.5.1@d41d8cd9" = {
       pname = "reperf";
-      version = "1.5.0";
+      version = "1.5.1";
       depKeys = [
-        ("refmterr@3.3.2@d41d8cd9")
         ("ocaml@4.10.0@d41d8cd9")
-        ("@reason-native/pastel@0.1.0@d41d8cd9")
+        ("@opam/reason@opam:3.6.2@1a34f8a4")
         ("@opam/printbox@opam:0.5@82f5d436")
         ("@opam/dune@opam:2.5.0@e0bac278")
-        ("@esy-ocaml/reason@3.6.2@d41d8cd9")
       ];
       src = pkgs.fetchurl {
-        url = "https://registry.npmjs.org/reperf/-/reperf-1.5.0.tgz";
-        sha256 = "1xml6412g9dqhxk5qqmid19i1kx09dlmjiisqyr7nm6i62riq4mz";
+        url = "https://registry.npmjs.org/reperf/-/reperf-1.5.1.tgz";
+        sha256 = "1pg0hdxa6cinc08yszpxibmyggbysqlsx1knhxpsh4wjnc4p0qk6";
       };
       build = {
-        buildPhase = "refmterr dune build -p reperf";
+        buildPhase = "dune build -p reperf";
         installPhase = "esy-installer reperf.install";
         mode = "esy";
       };
     };
-    "resolve@1.19.0@d41d8cd9" = {
+    "resolve@1.20.0@d41d8cd9" = {
       pname = "resolve";
-      version = "1.19.0";
+      version = "1.20.0";
       depKeys = [
         ("path-parse@1.0.6@d41d8cd9")
         ("is-core-module@2.2.0@d41d8cd9")
       ];
       src = pkgs.fetchurl {
-        url = "https://registry.npmjs.org/resolve/-/resolve-1.19.0.tgz";
-        sha256 = "0rpb2fl9gwc9nkgpkncklq7svxbbszk2w06ds6b50idvr4i9pjcc";
+        url = "https://registry.npmjs.org/resolve/-/resolve-1.20.0.tgz";
+        sha256 = "12x15vnr7yf5l0mr5ga28w0rsszm036832mmdp706drn8imgnhfl";
       };
       build = {
         mode = "esy";
@@ -3441,11 +3268,11 @@ in
       pname = "revery-terminal";
       version = "1.0.0";
       depKeys = [
-        ("revery@github:revery-ui/revery#931f3d0@d41d8cd9")
+        ("revery@github:revery-ui/revery#26e8b73@d41d8cd9")
         ("isolinear@github:revery-ui/isolinear#53fc4eb@d41d8cd9")
         ("@revery/timber@2.0.0@d41d8cd9")
         ("@revery/esy-libvterm@1.0.3@d41d8cd9")
-        ("@onivim/reason-native-crash-utils@1.0.1@d41d8cd9")
+        ("@onivim/reason-native-crash-utils@1.0.2@d41d8cd9")
       ];
       src = pkgs.fetchFromGitHub {
         owner = "revery-ui";
@@ -3459,25 +3286,26 @@ in
         mode = "esy";
       };
     };
-    "revery@github:revery-ui/revery#931f3d0@d41d8cd9" = {
+    "revery@github:revery-ui/revery#26e8b73@d41d8cd9" = {
       pname = "revery";
       version = "0.32.0";
       depKeys = [
-        ("reperf@1.5.0@d41d8cd9")
-        ("rench@github:bryphe/rench#a976fe5@d41d8cd9")
+        ("reperf@1.5.1@d41d8cd9")
+        ("rench@1.10.0@d41d8cd9")
         ("rebez@github:jchavarri/rebez#03fa3b7@d41d8cd9")
-        ("reason-native-crash-utils@github:onivim/reason-native-crash-utils#38c8f00@d41d8cd9")
         ("flex@github:bryphe/flex#5e19b05@d41d8cd9")
         ("esy-skia@github:revery-ui/esy-skia#91c98f6@d41d8cd9")
         ("esy-sdl2@2.0.10008@d41d8cd9")
         ("esy-freetype2@2.9.1008@d41d8cd9")
         ("esy-angle-prebuilt@1.0.0@d41d8cd9")
         ("@revery/timber@2.0.0@d41d8cd9")
-        ("@revery/esy-harfbuzz@2.6.8001@d41d8cd9")
+        ("@revery/esy-harfbuzz@2.6.8002@d41d8cd9")
+        ("@reason-native/rely@3.2.1@d41d8cd9")
         ("@opam/uutf@opam:1.0.2@4440868f")
         ("@opam/uucp@opam:13.0.0@e9b515e0")
+        ("@opam/reason@opam:3.6.2@1a34f8a4")
         ("@opam/ppx_optcomp@opam:v0.14.0@47cec200")
-        ("@opam/ppx_deriving@opam:5.1@3037236f")
+        ("@opam/ppx_deriving@opam:5.1@089b343d")
         ("@opam/omd@github:ocaml/omd:omd.opam#1535e3c@d41d8cd9")
         ("@opam/markup@opam:0.8.2@87975241")
         ("@opam/lwt_ppx@opam:2.0.1@e6a764a0")
@@ -3488,14 +3316,14 @@ in
         ("@opam/ctypes@opam:0.15.1@9c7ab4ec")
         ("@opam/charInfo_width@opam:1.1.0@4296bdfe")
         ("@opam/bos@opam:0.2.0@df49e63f")
-        ("@esy-ocaml/reason@3.6.2@d41d8cd9")
-        ("@brisk/brisk-reconciler@github:briskml/brisk-reconciler#10cab2d@d41d8cd9")
+        ("@onivim/reason-native-crash-utils@1.0.2@d41d8cd9")
+        ("@brisk/brisk-reconciler@github:briskml/brisk-reconciler#c9d5c4c@d41d8cd9")
       ];
       src = pkgs.fetchFromGitHub {
         owner = "revery-ui";
         repo = "revery";
-        rev = "931f3d0";
-        sha256 = "0dxmfb9hm33myy1qpi3m1r9ra903lyzlvjbbl6sf65bc770rg3cb";
+        rev = "26e8b73";
+        sha256 = "0zb7g4i5mkizdn23nis4ryzw4k4j9xfiipmcv06j4jj9mki25z6b";
       };
       build = {
         buildPhase = "dune build -p reason-harfbuzz,reason-skia,reason-sdl2,Revery";

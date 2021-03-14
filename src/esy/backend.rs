@@ -20,7 +20,6 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::io::Write;
 use std::path::*;
-use std::rc::Rc;
 
 #[derive(Clone, Debug)]
 pub struct EsyLock {
@@ -65,9 +64,42 @@ impl EsyLock {
 		}
 		Ok(InstalledPkgs { esy, opam })
 	}
+	
+	async fn manifest_contents<'a>(
+		opts: &CliOpts,
+		extract: &Option<fetch::ExtractSource<'a>>,
+		manifest: &ManifestPath) -> Result<String> {
+		Ok(match manifest {
+			ManifestPath::Remote(manifest_path) => {
+				extract.as_ref()
+					.ok_or_else(|| anyhow!("manifest path given, but no source given"))?
+					.file_contents(manifest_path)
+					.await?
+			},
+			ManifestPath::Local(manifest_path) => {
+				let no_parent = || anyhow!(
+					"can't get `../../` from {}",
+					&opts.lock_path
+				);
+				let lock_root = Path::new(&opts.lock_path).parent()
+					.ok_or_else(no_parent)?
+					.parent()
+					.ok_or_else(no_parent)?;
+				(|| async {
+					fetch::ExtractSource::from(&lock_root).await?
+						.file_contents(manifest_path)
+						.await
+				})().await.with_context(|| format!(
+					"can't get manifest {} from {:?}",
+					&manifest_path, &lock_root
+				))?
+			},
+		})
+	}
 
 	async fn finalize_spec(
-		opam_repo: Rc<CachedRepo>,
+		opts: &CliOpts,
+		opam_repo: &CachedRepo,
 		realised_src: Option<&PathBuf>,
 		esy_spec: &mut EsySpec,
 		installed: &InstalledPkgs,
@@ -84,6 +116,12 @@ impl EsyLock {
 		} else {
 			None
 		};
+		
+		let explicit_manifest = if let Some(manifest_path) = esy_spec.meta.manifest_path.as_ref() {
+			Some(Self::manifest_contents(opts, &extract, manifest_path).await?)
+		} else {
+			None
+		};
 
 		match esy_spec
 			.meta
@@ -92,11 +130,8 @@ impl EsyLock {
 		{
 			PkgType::Opam => {
 				let mut files = None;
-				let manifest = if let Some(manifest_path) = esy_spec.meta.manifest_path.as_ref() {
-					extract
-						.ok_or_else(|| anyhow!("manifest path given, but no source given"))?
-						.file_contents(&manifest_path)
-						.await?
+				let manifest = if let Some(contents) = explicit_manifest {
+					contents
 				} else {
 					let repo_path = &opam_repo.path;
 					let repo = fetch::ExtractSource::from(repo_path).await?;
@@ -135,18 +170,25 @@ impl EsyLock {
 				}
 			}
 			PkgType::Esy => {
-				if let Some(extract) = extract {
-					// NOTE: some esy packages are just npm packages, depending on whether they have
-					// an `esy` property in them
-					let manifest = {
+				// NOTE: some esy packages are just npm packages, depending on whether they have
+				// an `esy` property in them
+				let manifest = if let Some(contents) = explicit_manifest {
+					Some(contents)
+				} else {
+					if let Some(extract) = extract {
 						if extract.exists("esy.json").await {
-							extract.file_contents("esy.json").await
+							Some(extract.file_contents("esy.json").await?)
 						} else {
-							extract.file_contents("package.json").await
+							Some(extract.file_contents("package.json").await?)
 						}
-					}?;
+					} else {
+						None
+					}
+				};
+				if let Some(manifest) = manifest {
 					let esy = esy_manifest::PackageJson::from_str(&manifest)
 						.with_context(|| format!("deserializing manifest:\n\n{}", &manifest))?;
+					info!("esy manifest: {:?}", &esy);
 
 					// Now that we have access to package.json, we can populate a better name/version
 					// than we got from the lockfile.
@@ -228,7 +270,7 @@ impl Backend for EsyLock {
 			owner: "ocaml".to_owned(),
 			repo: "opam-repository".to_owned(),
 		};
-		let opam_repo = Rc::new(CachedRepo::cache(&self.opts, &opam_repo_git).await?);
+		let opam_repo = CachedRepo::cache(&self.opts, &opam_repo_git).await?;
 
 		let realised_sources = fetch::realise_sources(
 			self.lockfile
@@ -249,12 +291,13 @@ impl Backend for EsyLock {
 
 		let specs = self.lockfile.lock.specs.iter_mut();
 		let stream = futures::stream::iter(specs);
+		let cli_opts_ref = &self.opts;
+		let opam_repo_ref = &opam_repo;
 		foreach_unordered(parallelism, stream, |(key, esy_spec)| {
-			let opam_repo_ref = opam_repo.clone();
 			let realised_src = realised_sources.get(key);
 			async move {
 				debug!("starting... {:?}", &esy_spec.spec.id.name);
-				Self::finalize_spec(opam_repo_ref, realised_src, esy_spec, installed_ref)
+				Self::finalize_spec(cli_opts_ref, opam_repo_ref, realised_src, esy_spec, installed_ref)
 					.await
 					.with_context(|| format!("Finalizing spec: {:?}", esy_spec))
 			}
@@ -265,9 +308,15 @@ impl Backend for EsyLock {
 }
 
 #[derive(Debug, Clone)]
+enum ManifestPath {
+	Local(String),
+	Remote(String),
+}
+
+#[derive(Debug, Clone)]
 struct EsyMeta {
 	pkg_type: Option<PkgType>,
-	manifest_path: Option<String>,
+	manifest_path: Option<ManifestPath>,
 	manifest: Option<command::Manifest>,
 }
 
@@ -398,16 +447,30 @@ impl<'de> Visitor<'de> for EsySpecVisitor {
 					partial.id.set_version(version);
 				}
 				"source" => {
-					let EsySrc {
+					let EsySrcInfo {
 						src,
 						manifest,
 						opam,
-					} = map.next_value::<EsySrc>()?;
-					partial.set_src(src);
+					} = map.next_value::<EsySrcInfo>()?;
+
+					let remote_src = match src {
+						EsySrc::Local(prefix) => {
+							if let Some(manifest) = manifest {
+								meta.manifest_path = Some(ManifestPath::Local(
+									format!("{}/{}", prefix, manifest)
+								));
+							};
+							Src::None
+						},
+						EsySrc::Remote(src) => {
+							if let Some(manifest) = manifest {
+								meta.manifest_path = Some(ManifestPath::Remote(manifest));
+							}
+							src
+						},
+					};
+					partial.set_src(remote_src);
 					opam_src = opam;
-					if let Some(manifest) = manifest {
-						meta.manifest_path = Some(manifest);
-					}
 				}
 				"dependencies" => {
 					let keys = map.next_value::<Vec<String>>()?.into_iter().map(Key::new);
@@ -428,8 +491,23 @@ impl<'de> Visitor<'de> for EsySpecVisitor {
 }
 
 #[derive(Debug, Clone)]
-struct EsySrc {
-	src: Src,
+enum EsySrc {
+	Remote(Src),
+	Local(String),
+}
+
+impl EsySrc {
+	fn extension(&self) -> Option<&str> {
+		match self {
+			Self::Local(_) => None,
+			Self::Remote(src) => src.extension(),
+		}
+	}
+}
+
+#[derive(Debug, Clone)]
+struct EsySrcInfo {
+	src: EsySrc,
 	manifest: Option<String>,
 	opam: Option<EsySrcOpam>,
 }
@@ -440,19 +518,19 @@ struct EsySrcOpam {
 	version: String,
 }
 
-impl<'de> Deserialize<'de> for EsySrc {
+impl<'de> Deserialize<'de> for EsySrcInfo {
 	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
 	where
 		D: Deserializer<'de>,
 	{
-		deserializer.deserialize_any(EsySrcVisitor)
+		deserializer.deserialize_any(EsySrcInfoVisitor)
 	}
 }
 
-struct EsySrcVisitor;
+struct EsySrcInfoVisitor;
 
-impl EsySrcVisitor {
-	fn parse(spec: &str) -> Result<EsySrc> {
+impl EsySrcInfoVisitor {
+	fn parse(spec: &str) -> Result<EsySrcInfo> {
 		let (typ, src) = split_one(":", spec);
 		let src = src.ok_or_else(|| anyhow!("invalid spec"))?;
 		match typ {
@@ -465,12 +543,12 @@ impl EsySrcVisitor {
 				let repo = repo.to_owned();
 				let owner = owner.to_owned();
 				let manifest = manifest.map(|m| m.to_owned());
-				Ok(EsySrc {
-					src: Src::Github(Github {
+				Ok(EsySrcInfo {
+					src: EsySrc::Remote(Src::Github(Github {
 						repo: GithubRepo { owner, repo },
 						git_ref,
 						fetch_submodules: false, // may be modified in fetch::upgrade_gitmodules
-					}),
+					})),
 					manifest,
 					opam: None,
 				})
@@ -480,14 +558,14 @@ impl EsySrcVisitor {
 				let url = it.next().unwrap().to_owned();
 				// TODO handle (optional?) digest after hash
 				// TODO handle (optional) manifest
-				Ok(EsySrc {
-					src: Src::Archive(Url::new(url)),
+				Ok(EsySrcInfo {
+					src: EsySrc::Remote(Src::Archive(Url::new(url))),
 					manifest: None,
 					opam: None,
 				})
 			}
-			"no-source" => Ok(EsySrc {
-				src: Src::None,
+			"no-source" => Ok(EsySrcInfo {
+				src: EsySrc::Remote(Src::None),
 				manifest: None,
 				opam: None,
 			}),
@@ -495,11 +573,11 @@ impl EsySrcVisitor {
 		}
 	}
 
-	fn extract(sources: Vec<String>) -> Result<EsySrc> {
-		let mut parsed: Vec<EsySrc> = sources
+	fn extract(sources: Vec<String>) -> Result<EsySrcInfo> {
+		let mut parsed: Vec<EsySrcInfo> = sources
 			.iter()
 			.map(|s| Self::parse(s))
-			.collect::<Result<Vec<EsySrc>>>()?;
+			.collect::<Result<Vec<EsySrcInfo>>>()?;
 
 		// To aid filetype detection, we prefer sources with an extension
 		parsed.sort_by_key(|v| v.src.extension().unwrap_or("").to_owned());
@@ -518,14 +596,15 @@ impl EsySrcVisitor {
 	}
 }
 
+#[derive(Debug, Clone)]
 enum SrcType {
 	Install,
 	LinkDev,
 	Unknown(String),
 }
 
-impl<'de> Visitor<'de> for EsySrcVisitor {
-	type Value = EsySrc;
+impl<'de> Visitor<'de> for EsySrcInfoVisitor {
+	type Value = EsySrcInfo;
 	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
 		formatter.write_str("esy source")
 	}
@@ -537,6 +616,8 @@ impl<'de> Visitor<'de> for EsySrcVisitor {
 		let mut src = None;
 		let mut typ = None;
 		let mut opam = None;
+		let mut local_path = None;
+		let mut local_manifest = None;
 		while let Some(key) = map.next_key::<&str>()? {
 			match key {
 				// source.source is an array of archives.
@@ -552,6 +633,12 @@ impl<'de> Visitor<'de> for EsySrcVisitor {
 						other => SrcType::Unknown(other.to_owned()),
 					})
 				}
+				"path" => {
+					local_path = Some(map.next_value::<String>()?);
+				},
+				"manifest" => {
+					local_manifest = Some(map.next_value::<String>()?);
+				},
 				"opam" => opam = Some(map.next_value()?),
 				_ => {
 					map.next_value::<IgnoredAny>()?;
@@ -566,9 +653,9 @@ impl<'de> Visitor<'de> for EsySrcVisitor {
 				}
 				src.ok_or_else(|| anyhow!("Missing `source.source`"))
 			}
-			Some(SrcType::LinkDev) => Ok(EsySrc {
-				src: Src::None,
-				manifest: None,
+			Some(SrcType::LinkDev) => Ok(EsySrcInfo {
+				src: local_path.map(EsySrc::Local).unwrap_or(EsySrc::Remote(Src::None)),
+				manifest: local_manifest,
 				opam,
 			}),
 			Some(SrcType::Unknown(u)) => Err(anyhow!("Unknown source type: {}", u)),

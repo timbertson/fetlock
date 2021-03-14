@@ -11,7 +11,7 @@ use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::fmt;
 use std::io::{ErrorKind, Write};
-use std::path::PathBuf;
+use std::path::{Path,PathBuf};
 use std::process::{ExitStatus, Stdio};
 use std::str;
 use tokio::fs;
@@ -221,12 +221,13 @@ enum SourceType {
 
 #[derive(Debug, Clone)]
 pub struct ExtractSource<'a> {
-	root: &'a PathBuf,
+	root: &'a Path,
 	source_type: SourceType,
 }
 
 impl ExtractSource<'_> {
-	pub async fn from(root: &PathBuf) -> Result<ExtractSource<'_>> {
+	pub async fn from<P: AsRef<Path>>(root: &P) -> Result<ExtractSource<'_>> {
+		let root = root.as_ref();
 		debug!("ExtractSource::from({:?})", root);
 		let source_type = if fs::metadata(root).await?.is_dir() {
 			SourceType::Directory

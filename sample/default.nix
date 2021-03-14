@@ -8,7 +8,7 @@ let
   
   yarnSelection = yarn.load ./yarn.nix {};
 
-  esySelection = esy.load ./esy.nix {
+  esySelection = esy.load ./oni2.nix {
     pkgOverrides = self:
       let
         fixupLibPath = name: o: stdenv.mkDerivation (self.specToAttrs (o.spec // {

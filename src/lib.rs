@@ -8,6 +8,7 @@ pub use lock::*;
 mod backend;
 mod cache;
 mod cmd;
+mod lock_src;
 mod nom_util;
 mod opts;
 mod stream_util;

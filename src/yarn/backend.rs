@@ -1,8 +1,8 @@
 // yarn.lock backend
 use crate::err::*;
 use crate::nix_serialize::{WriteContext, Writeable};
-use crate::string_util::*;
 use crate::stream_util::*;
+use crate::string_util::*;
 use crate::*;
 use anyhow::*;
 use async_trait::async_trait;
@@ -51,7 +51,7 @@ struct PackageDist {
 
 #[derive(Debug, Clone, Deserialize)]
 struct PackageListing {
-	dist: PackageDist
+	dist: PackageDist,
 }
 
 #[derive(Debug, Clone)]
@@ -72,10 +72,10 @@ impl YarnSpec {
 				"workspace" => {
 					// TODO accept src from context
 					return Ok(());
-				},
+				}
 				other => {
 					return Err(anyhow!("Unsupported repo: {}", other));
-				},
+				}
 			};
 
 			// TODO escaping with `url`?
@@ -83,12 +83,15 @@ impl YarnSpec {
 			let body = reqwest::get(&url)
 				.await
 				.with_context(|| format!("GET {}", &url))?
-				.text().await?;
+				.text()
+				.await?;
 			let listing: PackageListing = serde_json::from_str(&body)?;
 			debug!("package listing for {:?}: {:?}", self.spec.id, listing);
 			self.spec.src = Src::Archive(Url::new(listing.dist.tarball));
 			Ok(())
-		})().await.with_context(|| desc)
+		})()
+		.await
+		.with_context(|| desc)
 	}
 }
 
@@ -173,9 +176,12 @@ impl YarnLockFile {
 		}
 		Ok(())
 	}
-	
+
 	async fn populate_sources(&mut self) -> Result<()> {
-		info!("resolving {} package sources from online repository...", self.0.specs.len());
+		info!(
+			"resolving {} package sources from online repository...",
+			self.0.specs.len()
+		);
 		let stream = futures::stream::iter(self.0.specs.values_mut());
 		foreach_unordered(10, stream, |spec| spec.populate_src()).await
 	}
@@ -282,7 +288,8 @@ impl<'de> Visitor<'de> for YarnSpecVisitor {
 				.and_then(|res| DepResolution::parse(&res)),
 		)?;
 		spec.id.set_name(resolution.name.clone());
-		spec.extra.insert("pkgname".to_owned(), Expr::str(resolution.name.clone()));
+		spec.extra
+			.insert("pkgname".to_owned(), Expr::str(resolution.name.clone()));
 
 		let mut optional_deps = HashSet::new();
 		for (k, v) in dependencies.unwrap_or_default().iter() {
@@ -344,7 +351,9 @@ fn split_name(s: &str) -> Result<(&str, &str)> {
 			.ok_or_else(|| anyhow!("invalid spec: {:?}", s))?
 	};
 	let (name, remainder) = s.split_at(at_idx);
-	let remainder = remainder.strip_prefix("@").ok_or_else(|| anyhow!("remainder doesn't start with `@`"))?;
+	let remainder = remainder
+		.strip_prefix("@")
+		.ok_or_else(|| anyhow!("remainder doesn't start with `@`"))?;
 	Ok((name, remainder))
 }
 
@@ -353,16 +362,22 @@ mod tests {
 	use super::*;
 	#[test]
 	fn test_resolution() {
-		assert_eq!(DepResolution::parse("foo@npm:1.2.3").unwrap(), DepResolution {
-			name: "foo".to_owned(),
-			key: Key::new("foo@1.2.3".to_owned()),
-			registry: "npm".to_owned(),
-		});
+		assert_eq!(
+			DepResolution::parse("foo@npm:1.2.3").unwrap(),
+			DepResolution {
+				name: "foo".to_owned(),
+				key: Key::new("foo@1.2.3".to_owned()),
+				registry: "npm".to_owned(),
+			}
+		);
 
-		assert_eq!(DepResolution::parse("@org/pkg@npm:1.2.3").unwrap(), DepResolution {
-			name: "@org/pkg".to_owned(),
-			key: Key::new("@org/pkg@1.2.3".to_owned()),
-			registry: "npm".to_owned(),
-		});
+		assert_eq!(
+			DepResolution::parse("@org/pkg@npm:1.2.3").unwrap(),
+			DepResolution {
+				name: "@org/pkg".to_owned(),
+				key: Key::new("@org/pkg@1.2.3".to_owned()),
+				registry: "npm".to_owned(),
+			}
+		);
 	}
 }

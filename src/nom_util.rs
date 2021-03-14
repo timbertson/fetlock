@@ -13,10 +13,10 @@ impl<'a, T, P> SrcParser<'a, T> for P where P: Parser<Src<'a>, T, SrcError<'a>> 
 
 /// A combinator that takes a parser `inner` and produces a parser that also consumes both leading and
 /// trailing whitespace, returning the output of `inner`.
-pub fn ws<'a, I: 'a, O, F,>(filler: F, inner: I) -> impl FnMut(Src<'a>) -> Res<O>
+pub fn ws<'a, I: 'a, O, F>(filler: F, inner: I) -> impl FnMut(Src<'a>) -> Res<O>
 where
 	I: SrcParser<'a, O>,
-	F: SrcParser<'a, ()> + Copy
+	F: SrcParser<'a, ()> + Copy,
 {
 	delimited(filler, inner, filler)
 }
@@ -38,7 +38,6 @@ where
 	})?;
 	Ok(ret)
 }
-
 
 #[cfg(test)]
 pub mod test {

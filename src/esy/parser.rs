@@ -698,9 +698,9 @@ pub mod esy {
 
 #[cfg(test)]
 mod tests {
-	use crate::nom_util::test::*;
-	use super::*;
 	use super::ws;
+	use super::*;
+	use crate::nom_util::test::*;
 
 	#[test]
 	fn test_string_subparsers() {

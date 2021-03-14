@@ -13,6 +13,7 @@ pub struct GemSpec {
 pub enum Section {
 	Git(Vec<GitField>),
 	Gem(Vec<GemField>),
+	Dependencies(Vec<Name>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,6 +30,9 @@ pub enum GitField {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct File(Vec<Section>);
+
+// convention: each field consumes any preceeding newline(s), we don't expect a newline at the
+// end of any fields. We additionally accept any number of newlines at file end.
 
 fn indent0(s: Src) -> Res<()> {
 	map(take_while(|ch| ch == '\n'), |_| ())(s)
@@ -102,6 +106,17 @@ fn specs(s: Src) -> Res<Vec<GemSpec>> {
 	)(s)
 }
 
+fn dependency_field(s: Src) -> Res<Name> {
+	map(
+		tuple((
+			indent2,
+			take_while1(|ch| ch != '\n' && ch != ' ' && ch != '!'),
+			non_newline,
+		)),
+		|(_, name, _)| Name(name.to_owned()),
+	)(s)
+}
+
 fn gem_field(s: Src) -> Res<GemField> {
 	alt((
 		map(specs, GemField::Specs),
@@ -129,6 +144,10 @@ fn section(s: Src) -> Res<Option<Section>> {
 			map(preceded(tag("GEM"), many0(gem_field)), |fields| {
 				Some(Section::Gem(fields))
 			}),
+			map(
+				preceded(tag("DEPENDENCIES"), many0(dependency_field)),
+				|fields| Some(Section::Dependencies(fields)),
+			),
 			map(
 				// discard these
 				preceded(
@@ -160,7 +179,6 @@ pub fn entire_file(s: Src) -> Res<File> {
 mod tests {
 	use super::*;
 	pub use crate::nom_util::test::*;
-	// use log::*;
 
 	#[test]
 	fn test_git_section() {

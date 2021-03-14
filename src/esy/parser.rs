@@ -1,6 +1,6 @@
 use crate::esy::eval::{Eval, NixCtx};
 use crate::expr::{Expr, StringComponentOf};
-use crate::nom_util::*;
+pub use crate::nom_util::*;
 use anyhow::*;
 
 // <bool>          ::= true | false
@@ -192,15 +192,6 @@ impl<'a> StringAtom<'a> {
 
 pub type OpamSC<'a> = StringComponentOf<Value<'a>>;
 
-/// A combinator that takes a parser `inner` and produces a parser that also consumes both leading and
-/// trailing whitespace, returning the output of `inner`.
-fn ws<'a, F: 'a, O>(inner: F) -> impl FnMut(Src<'a>) -> Res<O>
-where
-	F: SrcParser<'a, O>,
-{
-	delimited(filler, inner, filler)
-}
-
 // <comment>       ::= ( "(*" { <char> }* "*)" ) | ( "#" { <char\newline> }* <newline> )
 fn ocaml_comment(s: Src) -> Res<()> {
 	discard(tuple((tag("(*"), many_till(anychar, tag("*)")))))(s)
@@ -219,6 +210,13 @@ fn line_comment(s: Src) -> Res<()> {
 }
 fn comment(s: Src) -> Res<()> {
 	alt((ocaml_comment, line_comment))(s)
+}
+
+fn ws<'a, F: 'a, O>(inner: F) -> impl FnMut(Src<'a>) -> Res<O>
+where
+	F: SrcParser<'a, O>,
+{
+	crate::nom_util::ws(filler, inner)
 }
 
 /// We discard comments anywhere whitespace is allowed
@@ -698,53 +696,11 @@ pub mod esy {
 	}
 }
 
-pub fn parse<'a, T, F>(mut p: F, contents: &'a str) -> Result<T>
-where
-	F: FnMut(Src<'a>) -> Res<T>,
-{
-	let (_, ret) = p(contents).map_err(|e| {
-		let msg: String = match e {
-			Err::Incomplete(_) => {
-				panic!()
-			}
-			Err::Error(e) | Err::Failure(e) => {
-				format!("Parse error - trace:\n{}", convert_error(contents, e))
-			}
-		};
-		anyhow!(msg)
-	})?;
-	Ok(ret)
-}
-
 #[cfg(test)]
 mod tests {
+	use crate::nom_util::test::*;
 	use super::*;
-	use log::*;
-
-	fn valid<'a, T, F>(p: F, contents: &'a str) -> ()
-	where
-		F: FnMut(Src<'a>) -> Res<T>,
-		T: std::fmt::Debug,
-	{
-		match parse(all_consuming(p), contents) {
-			Ok(result) => info!("{:?}", result),
-			Err(p) => panic!(format!("{}", p)),
-		}
-	}
-
-	fn p<'a, T, F>(p: F, contents: &'a str) -> T
-	where
-		F: FnMut(Src<'a>) -> Res<T>,
-		T: std::fmt::Debug,
-	{
-		match parse(all_consuming(p), contents) {
-			Ok(result) => {
-				info!("{:?}", result);
-				result
-			}
-			Err(p) => panic!(format!("{}", p)),
-		}
-	}
+	use super::ws;
 
 	#[test]
 	fn test_string_subparsers() {

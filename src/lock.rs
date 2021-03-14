@@ -37,6 +37,15 @@ impl std::borrow::Borrow<str> for Name {
 	}
 }
 
+// newtype for a package version
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Version(pub String);
+impl std::borrow::Borrow<str> for Version {
+	fn borrow(&self) -> &str {
+		self.0.as_str()
+	}
+}
+
 impl Key {
 	pub fn new(raw: String) -> Key {
 		Key(raw)
@@ -65,6 +74,7 @@ impl<'de> Deserialize<'de> for Key {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Id {
+	// TODO use Name and Version types
 	pub name: String,
 	pub version: String,
 }

@@ -24,6 +24,7 @@ async fn run() -> Result<()> {
 	match opts.lock_type {
 		lock::Type::Esy => process::<fetlock::esy::EsyLock>(opts).await,
 		lock::Type::Yarn => process::<fetlock::yarn::YarnLock>(opts).await,
+		lock::Type::Bundler => process::<fetlock::bundler::BundlerLock>(opts).await,
 	}
 }
 

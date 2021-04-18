@@ -12,6 +12,7 @@ use std::iter::Iterator;
 pub enum Type {
 	Esy,
 	Yarn,
+	Bundler,
 }
 
 impl fmt::Display for Type {
@@ -20,6 +21,7 @@ impl fmt::Display for Type {
 		f.write_str(match self {
 			Esy => "esy",
 			Yarn => "yarn",
+			Bundler => "bundler",
 		})
 	}
 }
@@ -29,7 +31,7 @@ impl fmt::Display for Type {
 pub struct Key(String);
 
 // newtype for a logical package name
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Deserialize)]
 pub struct Name(pub String);
 impl std::borrow::Borrow<str> for Name {
 	fn borrow(&self) -> &str {
@@ -38,7 +40,7 @@ impl std::borrow::Borrow<str> for Name {
 }
 
 // newtype for a package version
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Deserialize)]
 pub struct Version(pub String);
 impl std::borrow::Borrow<str> for Version {
 	fn borrow(&self) -> &str {

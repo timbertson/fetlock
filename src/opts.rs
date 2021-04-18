@@ -61,6 +61,7 @@ impl CliOpts {
 		{
 			"esy" => lock::Type::Esy,
 			"yarn" => lock::Type::Yarn,
+			"bundler" => lock::Type::Bundler,
 			other => return Err(anyhow!("Unknown type: {}", other)),
 		};
 		let repo_freshness_days = matches

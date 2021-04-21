@@ -64,36 +64,41 @@ impl EsyLock {
 		}
 		Ok(InstalledPkgs { esy, opam })
 	}
-	
+
 	async fn manifest_contents<'a>(
 		opts: &CliOpts,
 		extract: &Option<fetch::ExtractSource<'a>>,
-		manifest: &ManifestPath) -> Result<String> {
+		manifest: &ManifestPath,
+	) -> Result<String> {
 		Ok(match manifest {
 			ManifestPath::Remote(manifest_path) => {
-				extract.as_ref()
+				extract
+					.as_ref()
 					.ok_or_else(|| anyhow!("manifest path given, but no source given"))?
 					.file_contents(manifest_path)
 					.await?
-			},
+			}
 			ManifestPath::Local(manifest_path) => {
-				let no_parent = || anyhow!(
-					"can't get `../../` from {}",
-					&opts.lock_path
-				);
-				let lock_root = Path::new(&opts.lock_path).parent()
+				let no_parent = || anyhow!("can't get `../../` from {}", &opts.lock_path);
+				let lock_root = Path::new(&opts.lock_path)
+					.parent()
 					.ok_or_else(no_parent)?
 					.parent()
 					.ok_or_else(no_parent)?;
 				(|| async {
-					fetch::ExtractSource::from(&lock_root).await?
+					fetch::ExtractSource::from(&lock_root)
+						.await?
 						.file_contents(manifest_path)
 						.await
-				})().await.with_context(|| format!(
-					"can't get manifest {} from {:?}",
-					&manifest_path, &lock_root
-				))?
-			},
+				})()
+				.await
+				.with_context(|| {
+					format!(
+						"can't get manifest {} from {:?}",
+						&manifest_path, &lock_root
+					)
+				})?
+			}
 		})
 	}
 
@@ -116,7 +121,7 @@ impl EsyLock {
 		} else {
 			None
 		};
-		
+
 		let explicit_manifest = if let Some(manifest_path) = esy_spec.meta.manifest_path.as_ref() {
 			Some(Self::manifest_contents(opts, &extract, manifest_path).await?)
 		} else {
@@ -297,9 +302,15 @@ impl Backend for EsyLock {
 			let realised_src = realised_sources.get(key);
 			async move {
 				debug!("starting... {:?}", &esy_spec.spec.id.name);
-				Self::finalize_spec(cli_opts_ref, opam_repo_ref, realised_src, esy_spec, installed_ref)
-					.await
-					.with_context(|| format!("Finalizing spec: {:?}", esy_spec))
+				Self::finalize_spec(
+					cli_opts_ref,
+					opam_repo_ref,
+					realised_src,
+					esy_spec,
+					installed_ref,
+				)
+				.await
+				.with_context(|| format!("Finalizing spec: {:?}", esy_spec))
 			}
 		})
 		.await?;
@@ -456,18 +467,17 @@ impl<'de> Visitor<'de> for EsySpecVisitor {
 					let remote_src = match src {
 						EsySrc::Local(prefix) => {
 							if let Some(manifest) = manifest {
-								meta.manifest_path = Some(ManifestPath::Local(
-									format!("{}/{}", prefix, manifest)
-								));
+								meta.manifest_path =
+									Some(ManifestPath::Local(format!("{}/{}", prefix, manifest)));
 							};
 							Src::None
-						},
+						}
 						EsySrc::Remote(src) => {
 							if let Some(manifest) = manifest {
 								meta.manifest_path = Some(ManifestPath::Remote(manifest));
 							}
 							src
-						},
+						}
 					};
 					partial.set_src(remote_src);
 					opam_src = opam;
@@ -635,10 +645,10 @@ impl<'de> Visitor<'de> for EsySrcInfoVisitor {
 				}
 				"path" => {
 					local_path = Some(map.next_value::<String>()?);
-				},
+				}
 				"manifest" => {
 					local_manifest = Some(map.next_value::<String>()?);
-				},
+				}
 				"opam" => opam = Some(map.next_value()?),
 				_ => {
 					map.next_value::<IgnoredAny>()?;
@@ -654,7 +664,9 @@ impl<'de> Visitor<'de> for EsySrcInfoVisitor {
 				src.ok_or_else(|| anyhow!("Missing `source.source`"))
 			}
 			Some(SrcType::LinkDev) => Ok(EsySrcInfo {
-				src: local_path.map(EsySrc::Local).unwrap_or(EsySrc::Remote(Src::None)),
+				src: local_path
+					.map(EsySrc::Local)
+					.unwrap_or(EsySrc::Remote(Src::None)),
 				manifest: local_manifest,
 				opam,
 			}),

@@ -37,6 +37,13 @@ in
         else ""
       ) + finalBuild.buildPhase;
 
+    # TODO preBuild?
+    shellHook =
+      (if build ? buildEnv
+        then (final.exportVars build.buildEnv) + "\n"
+        else ""
+      );
+
     # TODO don't need to include ocaml as dependency if it's a node package
     # TODO which deps can we get away with not propagating?
     propagatedBuildInputs =

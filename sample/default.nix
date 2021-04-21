@@ -1,12 +1,23 @@
-{ pkgs ? import <nixpkgs> {}}:
+{ pkgs ? import <nixpkgs> {}, packageOverrides ? self: []}:
 with pkgs;
 let
   osx = darwin.apple_sdk.frameworks;
   ifDarwin = deps: if stdenv.isDarwin then deps else [];
   esy = (callPackage ../nix/esy {});
   yarn = (callPackage ../nix/yarn {});
+  bundler = (callPackage ../nix/bundler {});
   
   yarnSelection = yarn.load ./yarn.nix {};
+  
+  bundlerSelection = bundler.load ./bundler.nix {
+    pkgOverrides = self: [
+      (self.overrideAttrs {
+        nokogiri = o: {
+          buildInputs = (o.buildInputs or []) ++ [ libiconv zlib ];
+        };
+      })
+    ];
+  };
 
   esySelection = esy.load ./oni2.nix {
     pkgOverrides = self:
@@ -94,51 +105,37 @@ let
         });
         Oni2 = o:
         {
-          # sed 1: we have libintl via gettext dependency, don't use your silly hardcoded homebrew path!
-          # buildinfo: requires git, and has all the wrong node_modules paths...
-          # setup.json: default `node scripts/bootstrap.js is flush with references to the build dir and vendored stuff...
-          # {
-          #   "node": "/private/var/folders/8h/9qtq_hhn6lg69q27h5d17lw80000gp/T/nix-build-Oni2-0.5.9-nightly.drv-0/source/vendor/node-v12.17.0/osx/node",
-          #   "nodeScript": "/private/var/folders/8h/9qtq_hhn6lg69q27h5d17lw80000gp/T/nix-build-Oni2-0.5.9-nightly.drv-0/source/node",
-          #   "bundledExtensions": "/private/var/folders/8h/9qtq_hhn6lg69q27h5d17lw80000gp/T/nix-build-Oni2-0.5.9-nightly.drv-0/source/extensions",
-          #   "developmentExtensions": "/private/var/folders/8h/9qtq_hhn6lg69q27h5d17lw80000gp/T/nix-build-Oni2-0.5.9-nightly.drv-0/source/development_extensions",
-          #   "rg": "/private/var/folders/8h/9qtq_hhn6lg69q27h5d17lw80000gp/T/nix-build-Oni2-0.5.9-nightly.drv-0/source/vendor/ripgrep-v0.10.0/mac/rg",
-          #   "rls": "/private/var/folders/8h/9qtq_hhn6lg69q27h5d17lw80000gp/T/nix-build-Oni2-0.5.9-nightly.drv-0/source/vendor/reason-language-server/bin.native"
-          # }
+          src = fetchFromGitHub {
+            owner = "onivim";
+            repo = "Oni2";
+            rev = "39bb26f68040326ecf4d03f6c4428c05f13a02d5";
+            sha256 = "0lb7a48d7i93gshyqzvshbsff6nyknsl9hdjdszmqyirgawmrgs9";
+          };
+          patches = [
+            ./oni2-buildinfo.patch
+            ./oni2-gettext.patch
+          ];
+          # without passing explicitly, oni will search homebrew paths on mac
+          GETTEXT_LIB_PATH = "${gettext}/lib";
           buildPhase =
           ''
-            sed -E -i -e 's|getLibIntlPath\(\)|"-lintl"|' src/reason-libvim/config/discover.re
             ln -s ${yarnSelection.toplevelPackage}/node_modules ./node/node_modules
-
-            cat > src/gen_buildinfo/generator.re <<"EOF"
-              let oc = open_out("BuildInfo.re");
-              Printf.fprintf(
-                oc,
-                {|
-              let commitId = "[built-with-nix]";
-              let version = "1.0.0";
-              let defaultUpdateChannel = "unstable";
-              let extensionHostVersion = "1.0.0";
-              |}
-              );
-              close_out(oc);
-            EOF
-            
-            # node scripts/bootstrap.js
-            cat > assets/configuration/setup.json <<EOF
-            {
-              "node": "${o.src}/vendor/node-v12.17.0/osx/node",
-              "nodeScript": "$out/node",
-              "bundledExtensions": "${o.src}/extensions",
-              "developmentExtensions": "${o.src}/development_extensions",
-              "rg": "${o.src}/vendor/ripgrep-v0.10.0/mac/rg",
-              "rls": "${o.src}/vendor/reason-language-server/bin.native"
-            }
-            EOF
+            node scripts/bootstrap.js
           '' + o.buildPhase;
 
+          # bootstrap.js hardcodes a bunch of paths relative to itself,
+          # so we need to run it again after installation, from $out
           installPhase = o.installPhase + ''
-            cp -a node $out/node
+            cp -a scripts $out/scripts
+            cp -a assets $out/scripts
+
+            ln -s ${o.src}/node $out/node
+            ln -s ${o.src}/extensions $out/extensions
+            ln -s ${o.src}/development_extensions $out/development_extensions
+            ln -s ${o.src}/vendor $out/vendor
+
+            node scripts/bootstrap.js
+            rm -rf $out/scripts
           '';
           passthru = o.passthru;
         };
@@ -161,7 +158,7 @@ let
         esy-skia = ifDarwin [ osx.ApplicationServices ];
         libvim = [ncurses.dev] ++ (ifDarwin [ osx.AppKit ]);
       })
-    ];
+    ] ++ (packageOverrides self);
   };
 in
 {
@@ -170,5 +167,8 @@ in
   });
   yarn = yarnSelection.toplevelPackage.overrideAttrs (o: {
     passthru = yarnSelection.drvsByName;
+  });
+  bundler = bundlerSelection.toplevelPackage.overrideAttrs (o: {
+    passthru = bundlerSelection.drvsByName;
   });
 }

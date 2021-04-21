@@ -67,19 +67,18 @@ let
 							
 							# apply frontend build function to all specs
 							drvs = mapAttrs
-								(key: v:
-									let
-										# ensure `spec` and `key` are accessible through the drv
-										spec = { inherit key; } // v;
-										attrs = self.specToAttrs spec;
-										passthru = { inherit spec; };
-									in
-									self.mkDerivation (attrs // {
-										passthru = (attrs.passthru or {}) // passthru;
-									})
-								)
+								(key: v: self.specToDrv ({inherit key; } // v))
 								self.specs;
 								
+							specToDrv = spec:
+								let
+									attrs = self.specToAttrs spec;
+									passthru = { inherit spec; };
+								in
+								self.mkDerivation (attrs // {
+									passthru = (attrs.passthru or {}) // passthru;
+								});
+
 							# keys typically embed version information,
 							# names provide less brittle lookup for human use
 							# (but may not be unique, so keys are preferred when possible)

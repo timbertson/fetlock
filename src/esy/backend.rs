@@ -23,6 +23,7 @@ use std::path::*;
 
 #[derive(Clone, Debug)]
 pub struct EsyLock {
+	src: LocalSrc,
 	opts: CliOpts,
 	lockfile: EsyLockFile,
 }
@@ -66,7 +67,7 @@ impl EsyLock {
 	}
 
 	async fn manifest_contents<'a>(
-		opts: &CliOpts,
+		src: &LocalSrc,
 		extract: &Option<fetch::ExtractSource<'a>>,
 		manifest: &ManifestPath,
 	) -> Result<String> {
@@ -79,8 +80,9 @@ impl EsyLock {
 					.await?
 			}
 			ManifestPath::Local(manifest_path) => {
-				let no_parent = || anyhow!("can't get `../../` from {}", &opts.lock_path);
-				let lock_root = Path::new(&opts.lock_path)
+				let lock_path = src.lock_path();
+				let no_parent = || anyhow!("can't get `../../` from {:?}", &lock_path);
+				let lock_root = Path::new(&lock_path)
 					.parent()
 					.ok_or_else(no_parent)?
 					.parent()
@@ -103,7 +105,7 @@ impl EsyLock {
 	}
 
 	async fn finalize_spec(
-		opts: &CliOpts,
+		src: &LocalSrc,
 		opam_repo: &CachedRepo,
 		realised_src: Option<&PathBuf>,
 		esy_spec: &mut EsySpec,
@@ -123,7 +125,7 @@ impl EsyLock {
 		};
 
 		let explicit_manifest = if let Some(manifest_path) = esy_spec.meta.manifest_path.as_ref() {
-			Some(Self::manifest_contents(opts, &extract, manifest_path).await?)
+			Some(Self::manifest_contents(src, &extract, manifest_path).await?)
 		} else {
 			None
 		};
@@ -239,11 +241,15 @@ impl EsyLock {
 impl Backend for EsyLock {
 	type Spec = EsySpec;
 
-	async fn load(opts: CliOpts) -> Result<Self> {
+	async fn load(src: LocalSrc, opts: CliOpts) -> Result<Self> {
 		let context = LockContext::new(lock::Type::Esy);
-		let contents = std::fs::read_to_string(&opts.lock_path)?;
+		let contents = std::fs::read_to_string(src.lock_path())?;
 		let lockfile: EsyLockFile = serde_json::from_str(&contents)?;
-		Ok(EsyLock { lockfile, opts })
+		Ok(EsyLock {
+			src,
+			opts,
+			lockfile,
+		})
 	}
 
 	fn lock_mut(&mut self) -> &mut Lock<Self::Spec> {
@@ -296,14 +302,14 @@ impl Backend for EsyLock {
 
 		let specs = self.lockfile.lock.specs.iter_mut();
 		let stream = futures::stream::iter(specs);
-		let cli_opts_ref = &self.opts;
+		let src_ref = &self.src;
 		let opam_repo_ref = &opam_repo;
 		foreach_unordered(parallelism, stream, |(key, esy_spec)| {
 			let realised_src = realised_sources.get(key);
 			async move {
 				debug!("starting... {:?}", &esy_spec.spec.id.name);
 				Self::finalize_spec(
-					cli_opts_ref,
+					src_ref,
 					opam_repo_ref,
 					realised_src,
 					esy_spec,

@@ -34,34 +34,40 @@ async fn ensure_digest(implementation: &mut Spec) -> Result<()> {
 	Ok(())
 }
 
-async fn calculate_digest(src: &Src) -> Result<Sha256> {
-	// using Debug formatting is lazy, but easy :shrug:
-	let cache_filename = cache_hash(&format!("{:?}", src));
-	let cache_shard = &cache_filename[0..2];
+pub async fn calculate_digest(src: &Src) -> Result<Sha256> {
+	let result: Result<Sha256> = (|| async {
+		// using Debug formatting is lazy, but easy :shrug:
+		let cache_filename = cache_hash(&format!("{:?}", src));
+		let cache_shard = &cache_filename[0..2];
 
-	let mut cache_dir = cache_root();
-	cache_dir.push("digests");
-	cache_dir.push(cache_shard);
+		let mut cache_dir = cache_root();
+		cache_dir.push("digests");
+		cache_dir.push(cache_shard);
 
-	let cache_path = cache_dir.join(cache_filename);
-	debug!(
-		"checking cached contents ({:?}) for src {:?}",
-		&cache_path, src
-	);
-	match fs::read(&cache_path).await {
-		Ok(bytes) => Ok(Sha256::new(String::from_utf8(bytes)?.trim_end().to_owned())),
-		Err(e) => {
-			if e.kind() == ErrorKind::NotFound {
-				info!("fetch: {:?}", src);
-				fs::create_dir_all(&cache_dir).await?;
-				let digest = do_prefetch(src).await?;
-				crate::fs::write_atomically(&cache_path, |mut f| Ok(write!(f, "{}\n", digest)?))?;
-				Ok(digest)
-			} else {
-				Ok(Err(e).with_context(|| format!("reading {:?}", &cache_path))?)
+		let cache_path = cache_dir.join(cache_filename);
+		debug!(
+			"checking cached contents ({:?}) for src {:?}",
+			&cache_path, src
+		);
+		match fs::read(&cache_path).await {
+			Ok(bytes) => Ok(Sha256::new(String::from_utf8(bytes)?.trim_end().to_owned())),
+			Err(e) => {
+				if e.kind() == ErrorKind::NotFound {
+					info!("fetch: {:?}", src);
+					fs::create_dir_all(&cache_dir).await?;
+					let digest = do_prefetch(src).await?;
+					crate::fs::write_atomically(&cache_path, |mut f| {
+						Ok(write!(f, "{}\n", digest)?)
+					})?;
+					Ok(digest)
+				} else {
+					Ok(Err(e).with_context(|| format!("reading {:?}", &cache_path))?)
+				}
 			}
 		}
-	}
+	})()
+	.await;
+	result.with_context(|| format!("fetching source {:?}", src))
 }
 
 #[derive(Debug)]
@@ -99,7 +105,7 @@ impl FetchMany {
 		command
 	}
 
-	async fn realise(&self) -> Result<Vec<String>> {
+	async fn realise(&self) -> Result<Vec<PathBuf>> {
 		self.run_command("nix-build", &mut self.build_command(), Stdio::piped())
 			.await?;
 
@@ -117,7 +123,7 @@ impl FetchMany {
 			)
 			.await?;
 		let errmsg = format!("parsing JSON: {}", &json);
-		Ok(serde_json::from_str::<Vec<String>>(&json).with_context(|| errmsg)?)
+		Ok(serde_json::from_str::<Vec<PathBuf>>(&json).with_context(|| errmsg)?)
 	}
 
 	async fn check_stdout<'a, 'b>(
@@ -190,8 +196,13 @@ pub async fn realise_sources<'a, It: Iterator<Item = (&'a Key, &'a Spec)>>(
 	Ok(pairs
 		.into_iter()
 		.zip(paths)
-		.map(|((key, _), path)| (key.to_owned(), PathBuf::from(path)))
+		.map(|((key, _), path)| (key.to_owned(), path))
 		.collect::<HashMap<Key, PathBuf>>())
+}
+
+pub async fn realise_source<'a>(src_digest: SrcDigest<'a>) -> Result<PathBuf> {
+	let paths = FetchMany::singleton(&src_digest)?.realise().await?;
+	Ok(paths.into_iter().next().expect("empty iter"))
 }
 
 #[derive(Debug, Clone)]

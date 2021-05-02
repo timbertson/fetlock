@@ -3,7 +3,6 @@ use crate::*;
 use anyhow::*;
 use async_trait::async_trait;
 use serde::Deserialize;
-use std::path::*;
 use tokio::process::Command;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -32,10 +31,11 @@ pub struct BundlerLock(Lock<Spec>);
 impl Backend for BundlerLock {
 	type Spec = Spec;
 
-	async fn load(opts: CliOpts) -> Result<Self> {
+	async fn load(src: LocalSrc, opts: CliOpts) -> Result<Self> {
 		// TODO we need both the lockfile and the Gemfile,
 		// the CLIopts include only the lockfile
-		let base_dir = Path::new(&opts.lock_path)
+		let lock_path = src.lock_path();
+		let base_dir = lock_path
 			.parent()
 			.and_then(|p| p.to_str())
 			.ok_or_else(|| anyhow!("can't get parent directory of lockfile"))?;

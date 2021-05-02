@@ -1,4 +1,5 @@
 use crate::lock;
+use crate::lock_src::*;
 use anyhow::*;
 use getopts::Options;
 use std::env;
@@ -6,8 +7,7 @@ use std::env;
 #[derive(Debug, Clone)]
 pub struct CliOpts {
 	pub out_path: Option<String>,
-	pub lock_type: lock::Type,
-	pub lock_path: String,
+	pub lock_src: LockSrc,
 	pub repo_freshness_days: u32,
 }
 
@@ -37,9 +37,15 @@ impl CliOpts {
 		opts.optopt("o", "out", "output file (default: stdout)", "PATH");
 		opts.optopt(
 			"",
-			"repo-freshness",
-			"maximum age (in days) for cached repos",
+			"clone-freshness",
+			"maximum age (in days) for cloned repos",
 			"DAYS",
+		);
+		opts.optopt(
+			"",
+			"repo",
+			"operate on a github repository (author/repo)",
+			"AUTHOR/REPO",
 		);
 
 		let matches = opts.parse(&argv[1..])?;
@@ -65,15 +71,16 @@ impl CliOpts {
 			other => return Err(anyhow!("Unknown type: {}", other)),
 		};
 		let repo_freshness_days = matches
-			.opt_str("repo-freshness")
+			.opt_str("clone-freshness")
 			.map(|s| str::parse(&s))
 			.transpose()?
 			.unwrap_or(1);
-		let lock_path = matches.free.into_iter().next().unwrap();
+		let repo = matches.opt_str("repo");
+		let lock_rel = matches.free.into_iter().next();
+		let lock_src = LockSrc::parse(lock_type, repo, lock_rel)?;
 		Ok(CliOpts {
 			out_path,
-			lock_type,
-			lock_path,
+			lock_src,
 			repo_freshness_days,
 		})
 	}

@@ -25,9 +25,9 @@ pub struct YarnLock {
 impl Backend for YarnLock {
 	type Spec = YarnSpec;
 
-	async fn load(opts: CliOpts) -> Result<Self> {
+	async fn load(src: LocalSrc, opts: CliOpts) -> Result<Self> {
 		let context = LockContext::new(lock::Type::Yarn);
-		let contents = std::fs::read_to_string(&opts.lock_path)?;
+		let contents = std::fs::read_to_string(src.lock_path())?;
 		let mut lockfile: YarnLockFile = serde_yaml::from_str(&contents)?;
 		lockfile.fixup_keys()?;
 		lockfile.populate_sources().await?;

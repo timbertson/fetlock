@@ -32,8 +32,8 @@ pub async fn main() -> Result<()> {
 
 async fn process<B: Backend + fmt::Debug>(opts: CliOpts) -> Result<()> {
 	info!("loading {:?}", &opts.lock_src);
-	let src = opts.lock_src.resolve().await?;
-	let mut lock = B::load(&src, opts.clone())
+	let lock_src = opts.lock_src.resolve().await?;
+	let mut lock = B::load(&lock_src, opts.clone())
 		.await
 		.with_context(|| format!("loading {:?}", &opts.lock_src))?;
 	debug!("{:?}", lock);
@@ -58,7 +58,15 @@ async fn process<B: Backend + fmt::Debug>(opts: CliOpts) -> Result<()> {
 		.get_mut(&root_key)
 		.ok_or_else(|| anyhow!("root spec ({}) is not defined", root_key))?;
 
-	if let Some((src, digest)) = src.src_digest {
+	// src comes from an explicit `src`, or `lock_src` if it's remote
+	let src_digest = if let Some(gh) = opts.src {
+		let src = gh.resolve().await?;
+		let digest = fetch::calculate_digest(&src).await?;
+		Some((src, digest))
+	} else {
+		lock_src.src_digest
+	};
+	if let Some((src, digest)) = src_digest {
 		debug!("setting src {:?}, on root {:?}", src, lock_mut.context.root);
 		let spec_ref: &mut Spec = root_spec.borrow_mut();
 		spec_ref.set_src_digest(src, digest);

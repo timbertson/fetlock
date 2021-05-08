@@ -41,6 +41,18 @@ impl GithubSrc {
 		let rev = resolve_git::resolve(&url, &self.git_ref).await?;
 		Ok(self.repo.src_for_rev(rev))
 	}
+
+	pub fn parse(repo: &str) -> Result<GithubSrc> {
+		let (path, git_ref) = split_one("#", &repo);
+		let (owner, repo) = split_one_or_else("/", path, || anyhow!("invalid repo: {}", repo))?;
+		Ok(GithubSrc {
+			repo: GithubRepo {
+				owner: owner.to_owned(),
+				repo: repo.to_owned(),
+			},
+			git_ref: git_ref.unwrap_or("HEAD").to_owned(),
+		})
+	}
 }
 
 #[derive(Debug, Clone)]
@@ -82,19 +94,13 @@ impl LocalSrc {
 impl LockSrc {
 	pub fn parse(
 		lock_type: lock::Type,
-		repo: Option<String>,
+		repo: Option<&str>,
 		relative: Option<String>,
 	) -> Result<LockSrc> {
 		let root: Option<Result<LockRoot>> = repo.map(|repo| {
 			let (path, git_ref) = split_one("#", &repo);
 			let (owner, repo) = split_one_or_else("/", path, || anyhow!("invalid repo: {}", repo))?;
-			Ok(LockRoot::Github(GithubSrc {
-				repo: GithubRepo {
-					owner: owner.to_owned(),
-					repo: repo.to_owned(),
-				},
-				git_ref: git_ref.unwrap_or("HEAD").to_owned(),
-			}))
+			Ok(LockRoot::Github(GithubSrc::parse(repo)?))
 		});
 		let root = root.transpose()?;
 		let (root, relative): (LockRoot, String) = match (root, relative) {

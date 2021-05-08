@@ -8,6 +8,7 @@ use std::env;
 pub struct CliOpts {
 	pub out_path: Option<String>,
 	pub lock_src: LockSrc,
+	pub src: Option<GithubSrc>,
 	pub repo_freshness_days: u32,
 }
 
@@ -43,8 +44,14 @@ impl CliOpts {
 		);
 		opts.optopt(
 			"",
-			"repo",
-			"operate on a github repository (author/repo)",
+			"from",
+			"create a lockfile directly from on a github repository (author/repo)",
+			"AUTHOR/REPO",
+		);
+		opts.optopt(
+			"",
+			"src",
+			"set src to a github repository (author/repo)",
 			"AUTHOR/REPO",
 		);
 
@@ -75,12 +82,15 @@ impl CliOpts {
 			.map(|s| str::parse(&s))
 			.transpose()?
 			.unwrap_or(1);
-		let repo = matches.opt_str("repo");
+		let lock_src = matches.opt_str("from");
+		let src = matches.opt_str("src");
+		let src = src.as_deref().map(GithubSrc::parse).transpose()?;
 		let lock_rel = matches.free.into_iter().next();
-		let lock_src = LockSrc::parse(lock_type, repo, lock_rel)?;
+		let lock_src = LockSrc::parse(lock_type, lock_src.as_deref(), lock_rel)?;
 		Ok(CliOpts {
 			out_path,
 			lock_src,
+			src,
 			repo_freshness_days,
 		})
 	}

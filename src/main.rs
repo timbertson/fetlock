@@ -1,5 +1,6 @@
 use anyhow::*;
 use log::*;
+use std::borrow::BorrowMut;
 use std::fmt;
 use std::io::stdout;
 use std::io::Write;
@@ -11,7 +12,6 @@ use crate::nix_serialize::{WriteContext, Writeable};
 use crate::Backend;
 use crate::CliOpts;
 use crate::*;
-use crate::{LocalSrc, LockRoot};
 
 pub async fn main() -> Result<()> {
 	env_logger::from_env(env_logger::Env::default().default_filter_or("info"))
@@ -32,27 +32,39 @@ pub async fn main() -> Result<()> {
 
 async fn process<B: Backend + fmt::Debug>(opts: CliOpts) -> Result<()> {
 	info!("loading {:?}", &opts.lock_src);
-	let relative = opts.lock_src.relative.clone();
-	let src = match &opts.lock_src.root {
-		LockRoot::Path(p) => LocalSrc::new(p.clone(), relative),
-		LockRoot::Github(gh) => {
-			let src = gh.resolve().await?;
-			let digest = fetch::calculate_digest(&src).await?;
-			LocalSrc::new(
-				fetch::realise_source(SrcDigest {
-					src: &src,
-					digest: &digest,
-				})
-				.await?,
-				relative,
-			)
-		}
-	};
-	let mut lock = B::load(src, opts.clone())
+	let src = opts.lock_src.resolve().await?;
+	let mut lock = B::load(&src, opts.clone())
 		.await
 		.with_context(|| format!("loading {:?}", &opts.lock_src))?;
 	debug!("{:?}", lock);
-	fetch::populate_source_digests(lock.lock_mut()).await?;
+
+	// ensure there is a root package, using a virtual one if necessary
+	let lock_mut = lock.lock_mut();
+	let root_key = match &mut lock_mut.context.root {
+		Root::Package(key) => key.clone(),
+		Root::Virtual(keys) => {
+			let key = Key::new("_virtual_root".to_owned());
+			let pseudo_root = Root::Package(key.clone());
+			let mut spec = PartialSpec::empty();
+			spec.add_deps(keys);
+			let spec = spec.build()?;
+			lock_mut.add_impl(key.clone(), B::Spec::wrap(spec));
+			key
+		}
+	};
+
+	let root_spec: &mut B::Spec = lock_mut
+		.specs
+		.get_mut(&root_key)
+		.ok_or_else(|| anyhow!("root spec ({}) is not defined", root_key))?;
+
+	if let Some((src, digest)) = src.src_digest {
+		debug!("setting src {:?}, on root {:?}", src, lock_mut.context.root);
+		let spec_ref: &mut Spec = root_spec.borrow_mut();
+		spec_ref.set_src_digest(src, digest);
+	}
+
+	fetch::populate_source_digests(lock_mut).await?;
 	let lock = lock.finalize().await?;
 
 	match opts.out_path {

@@ -28,7 +28,7 @@ let
           };
         }));
       in [
-      (self.override {
+      (self.overrideDrv {
         # we already have one in nix, just use that:
         esy-nasm = _: pkgs.nasm;
 
@@ -119,7 +119,7 @@ let
           GETTEXT_LIB_PATH = "${gettext}/lib";
           buildPhase =
           ''
-            ln -s ${yarnSelection.toplevelPackage}/node_modules ./node/node_modules
+            ln -s ${yarnSelection.dependencies}/node_modules ./node/node_modules
             node scripts/bootstrap.js
           '' + o.buildPhase;
 
@@ -161,14 +161,15 @@ let
     ] ++ (packageOverrides self);
   };
 in
+with lib;
 {
-  esy = esySelection.toplevelPackage.overrideAttrs (o: {
+  esy = (head esySelection.dependencies).overrideAttrs (o: {
     passthru = esySelection.drvsByName;
   });
-  yarn = yarnSelection.toplevelPackage.overrideAttrs (o: {
+  yarn = (head yarnSelection.dependencies).overrideAttrs (o: {
     passthru = yarnSelection.drvsByName;
   });
-  bundler = bundlerSelection.toplevelPackage.overrideAttrs (o: {
+  bundler = (head bundlerSelection.dependencies).overrideAttrs (o: {
     passthru = bundlerSelection.drvsByName;
   });
 }

@@ -3,6 +3,7 @@ use crate::nix_serialize::Writeable;
 use anyhow::*;
 use lazy_static::lazy_static;
 use serde::de::{Deserialize, Deserializer};
+use std::borrow::BorrowMut;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Debug;
@@ -130,9 +131,15 @@ impl PartialId {
 }
 
 #[derive(Debug, Clone)]
+pub enum Root {
+	Package(Key),
+	Virtual(Vec<Key>),
+}
+
+#[derive(Debug, Clone)]
 pub struct LockContext {
 	pub lock_type: Type,
-	pub toplevel: Vec<Key>,
+	pub root: Root,
 	pub extra: BTreeMap<String, Expr>,
 }
 
@@ -144,13 +151,9 @@ impl LockContext {
 	pub fn new(lock_type: Type) -> LockContext {
 		LockContext {
 			lock_type,
-			toplevel: vec![],
+			root: Root::Virtual(Vec::new()),
 			extra: BTreeMap::new(),
 		}
-	}
-
-	pub fn add_toplevel(&mut self, key: Key) {
-		self.toplevel.push(key)
 	}
 }
 
@@ -283,6 +286,10 @@ impl SrcDigest<'_> {
 	}
 }
 
+pub trait AsSpec: Writeable + BorrowMut<Spec> + Debug + Clone {
+	fn wrap(spec: Spec) -> Self;
+}
+
 #[derive(Debug, Clone)]
 pub struct Spec {
 	pub id: Id,
@@ -301,6 +308,11 @@ impl Spec {
 		})
 	}
 
+	pub fn set_src_digest(&mut self, src: Src, digest: Sha256) {
+		self.src = src;
+		self.digest = Some(digest);
+	}
+
 	pub fn build_inputs(&self) -> Vec<Expr> {
 		let mut ret = self.build_inputs.clone();
 		if self.src.extension().map_or(false, |ext| ext == "zip") {
@@ -311,6 +323,12 @@ impl Spec {
 
 	pub fn add_build_input(&mut self, dep: Expr) {
 		self.build_inputs.push(dep)
+	}
+}
+
+impl AsSpec for Spec {
+	fn wrap(spec: Spec) -> Self {
+		spec
 	}
 }
 
@@ -368,14 +386,14 @@ impl PartialSpec {
 }
 
 #[derive(Debug, Clone)]
-pub struct Lock<Spec: Writeable> {
+pub struct Lock<S: AsSpec> {
 	pub context: LockContext,
-	pub specs: BTreeMap<Key, Spec>,
+	pub specs: BTreeMap<Key, S>,
 	pub vars: BTreeMap<&'static str, Expr>,
 }
 
-impl<Spec: Writeable> Lock<Spec> {
-	pub fn new(context: LockContext) -> Lock<Spec> {
+impl<S: AsSpec> Lock<S> {
+	pub fn new(context: LockContext) -> Lock<S> {
 		Lock {
 			context,
 			specs: BTreeMap::new(),
@@ -383,7 +401,11 @@ impl<Spec: Writeable> Lock<Spec> {
 		}
 	}
 
-	pub fn add_impl(&mut self, k: Key, v: Spec) {
+	pub fn add_impl(&mut self, k: Key, v: S) {
 		self.specs.insert(k, v);
+	}
+
+	pub fn set_root(&mut self, root: Root) {
+		self.context.root = root;
 	}
 }

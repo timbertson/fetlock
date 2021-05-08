@@ -31,7 +31,7 @@ pub struct BundlerLock(Lock<Spec>);
 impl Backend for BundlerLock {
 	type Spec = Spec;
 
-	async fn load(src: LocalSrc, opts: CliOpts) -> Result<Self> {
+	async fn load(src: &LocalSrc, opts: CliOpts) -> Result<Self> {
 		// TODO we need both the lockfile and the Gemfile,
 		// the CLIopts include only the lockfile
 		let lock_path = src.lock_path();
@@ -50,11 +50,10 @@ impl Backend for BundlerLock {
 		)
 		.await?;
 		let lockfile: RawFile = serde_json::from_str(&contents)?;
-		let mut lock: Lock<Spec> = Lock::new(LockContext::new(lock::Type::Bundler));
+		let mut lock: Lock<Spec> = Lock::<Spec>::new(LockContext::new(lock::Type::Bundler));
 		let RawFile { specs, toplevel } = lockfile;
-		for toplevel in toplevel.into_iter() {
-			lock.context.add_toplevel(Key::new(toplevel));
-		}
+		let roots: Vec<Key> = toplevel.into_iter().map(Key::new).collect();
+		lock.set_root(Root::Virtual(roots));
 
 		for spec in specs.into_iter() {
 			let RawSpec {

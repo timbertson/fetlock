@@ -25,7 +25,7 @@ pub struct YarnLock {
 impl Backend for YarnLock {
 	type Spec = YarnSpec;
 
-	async fn load(src: LocalSrc, opts: CliOpts) -> Result<Self> {
+	async fn load(src: &LocalSrc, opts: CliOpts) -> Result<Self> {
 		let context = LockContext::new(lock::Type::Yarn);
 		let contents = std::fs::read_to_string(src.lock_path())?;
 		let mut lockfile: YarnLockFile = serde_yaml::from_str(&contents)?;
@@ -111,6 +111,22 @@ impl BorrowMut<Spec> for YarnSpec {
 impl Writeable for YarnSpec {
 	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> std::io::Result<()> {
 		self.spec.write_to(c)
+	}
+}
+
+impl AsSpec for YarnSpec {
+	fn wrap(spec: Spec) -> Self {
+		let name = spec.id.name.clone();
+		YarnSpec {
+			spec,
+			resolution: DepResolution {
+				name: name.clone(),
+				key: Key::new(name),
+				registry: "fake".to_owned(),
+			},
+			find_keys: Vec::new(),
+			optional_deps: HashSet::new(),
+		}
 	}
 }
 
@@ -223,10 +239,8 @@ impl<'de> Visitor<'de> for YarnVisitor {
 						.collect::<Result<Vec<DepResolution>>>();
 					let mut spec = map.next_value::<YarnSpec>()?;
 					spec.find_keys = into_serde(find_keys)?;
-					// the first element in the map is the toplevel package
-					if ret.0.context.toplevel.is_empty() {
-						ret.0.context.toplevel.push(spec.resolution.key.clone());
-					}
+
+					// TODO: populate root from package.json
 					ret.0.add_impl(spec.resolution.key.clone(), spec);
 				}
 			}

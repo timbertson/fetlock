@@ -331,13 +331,16 @@ impl Writeable for LockContext {
 	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
 		let LockContext {
 			lock_type,
-			toplevel,
+			root,
 			extra,
 		} = self;
 		c.bracket_attrs(|c| {
 			c.attr(&"type", lock_type)?;
 			c.attr(&"version", &Self::version())?;
-			c.attr(&"toplevel", toplevel)?;
+			match root {
+				Root::Package(key) => c.attr(&"root", &key)?,
+				Root::Virtual(keys) => c.attr(&"dependencies", &keys)?,
+			}
 			for (k, v) in extra.iter() {
 				c.attr(k, v)?;
 			}
@@ -497,7 +500,7 @@ impl<K: fmt::Display + Debug + Clone, V: Writeable> Writeable for BTreeMap<K, V>
 	}
 }
 
-impl<Spec: Writeable + Debug + Clone> Writeable for Lock<Spec> {
+impl<S: AsSpec> Writeable for Lock<S> {
 	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
 		let Lock {
 			context,

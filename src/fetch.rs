@@ -7,7 +7,6 @@ use anyhow::*;
 use lazy_static::lazy_static;
 use log::*;
 use regex::Regex;
-use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::fmt;
 use std::io::{ErrorKind, Write};
@@ -17,9 +16,7 @@ use std::str;
 use tokio::fs;
 use tokio::process::Command;
 
-pub async fn populate_source_digests<S: BorrowMut<Spec> + Writeable>(
-	lock: &mut Lock<S>,
-) -> Result<()> {
+pub async fn populate_source_digests<S: AsSpec>(lock: &mut Lock<S>) -> Result<()> {
 	let impls = lock.specs.values_mut().map(|x| x.borrow_mut());
 	foreach_unordered(8, futures::stream::iter(impls), |i| ensure_digest(i)).await
 }

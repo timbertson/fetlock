@@ -195,7 +195,7 @@ impl EsyLock {
 				if let Some(manifest) = manifest {
 					let esy = esy_manifest::PackageJson::from_str(&manifest)
 						.with_context(|| format!("deserializing manifest:\n\n{}", &manifest))?;
-					info!("esy manifest: {:?}", &esy);
+					debug!("esy manifest: {:?}", &esy);
 
 					// Now that we have access to package.json, we can populate a better name/version
 					// than we got from the lockfile.
@@ -241,12 +241,12 @@ impl EsyLock {
 impl Backend for EsyLock {
 	type Spec = EsySpec;
 
-	async fn load(src: LocalSrc, opts: CliOpts) -> Result<Self> {
+	async fn load(src: &LocalSrc, opts: CliOpts) -> Result<Self> {
 		let context = LockContext::new(lock::Type::Esy);
 		let contents = std::fs::read_to_string(src.lock_path())?;
 		let lockfile: EsyLockFile = serde_json::from_str(&contents)?;
 		Ok(EsyLock {
-			src,
+			src: src.clone(),
 			opts,
 			lockfile,
 		})
@@ -375,7 +375,7 @@ impl<'de> Visitor<'de> for EsyVisitor {
 		while let Some(key) = map.next_key::<&str>()? {
 			match key {
 				"root" => {
-					ret.lock.context.add_toplevel(map.next_value::<Key>()?);
+					ret.lock.set_root(Root::Package(map.next_value::<Key>()?));
 				}
 				"node" => {
 					ret.lock.specs = map
@@ -407,6 +407,15 @@ impl Borrow<Spec> for EsySpec {
 impl BorrowMut<Spec> for EsySpec {
 	fn borrow_mut(&mut self) -> &mut Spec {
 		&mut self.spec
+	}
+}
+
+impl AsSpec for EsySpec {
+	fn wrap(spec: Spec) -> Self {
+		EsySpec {
+			spec,
+			meta: EsyMeta::empty(),
+		}
 	}
 }
 

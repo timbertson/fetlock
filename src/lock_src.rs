@@ -16,6 +16,19 @@ pub struct LockSrc {
 	pub relative: String,
 }
 
+impl LockSrc {
+	pub async fn resolve(&self) -> Result<LocalSrc> {
+		let relative = self.relative.clone();
+		match &self.root {
+			LockRoot::Path(p) => Ok(LocalSrc::path(p.clone(), relative)),
+			LockRoot::Github(gh) => {
+				let src = gh.resolve().await?;
+				LocalSrc::fetch_src(src, relative).await
+			}
+		}
+	}
+}
+
 #[derive(Debug, Clone)]
 pub struct GithubSrc {
 	repo: GithubRepo,
@@ -34,11 +47,30 @@ impl GithubSrc {
 pub struct LocalSrc {
 	root: PathBuf,
 	relative: String,
+	pub src_digest: Option<(Src, Sha256)>,
 }
 
 impl LocalSrc {
-	pub fn new(root: PathBuf, relative: String) -> Self {
-		Self { root, relative }
+	fn path(root: PathBuf, relative: String) -> Self {
+		Self {
+			root,
+			relative,
+			src_digest: None,
+		}
+	}
+
+	async fn fetch_src(src: Src, relative: String) -> Result<Self> {
+		let digest = fetch::calculate_digest(&src).await?;
+		let root = fetch::realise_source(SrcDigest {
+			src: &src,
+			digest: &digest,
+		})
+		.await?;
+		Ok(Self {
+			root,
+			relative,
+			src_digest: Some((src, digest)),
+		})
 	}
 
 	pub fn lock_path(&self) -> PathBuf {

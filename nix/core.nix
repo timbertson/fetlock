@@ -29,6 +29,10 @@ let
 						let
 							# Utility function for use in dependency lookup
 							getDrv = key: getAttr key self.drvs;
+
+							rootKey = self.context.root;
+							rootAttrs = (getAttr rootKey self.specs);
+
 							overrideAll = fn: drvs: mapAttrs (k: fn) drvs;
 							overrideOnly = attrs: fn:
 								overrideAll (drv:
@@ -73,7 +77,10 @@ let
 							specToDrv = spec:
 								let
 									attrs = self.specToAttrs spec;
-									passthru = { inherit spec; };
+									passthru = {
+										inherit spec;
+										overrideSpec = fn: self.specToDrv (fn spec);
+									};
 								in
 								self.mkDerivation (attrs // {
 									passthru = (attrs.passthru or {}) // passthru;
@@ -91,13 +98,21 @@ let
 							mkDerivation = stdenv.mkDerivation;
 							specToAttrs = abort "specToAttrs must be overridden";
 							
-							toplevelPackages = map getDrv self.context.toplevel;
-							toplevelPackage = head self.toplevelPackages;
+							# root may not always be buildable, since not all backends
+							# have enough package metadata for that
+							# But in some cases it may be easier to override the root
+							# spec than build your own derivation.
+							root = getDrv rootKey;
+							
+							# In other cases, you can ignore `root` and use `dependencies`
+							# (and optionally `src`) for your own derivation
+							dependencies = map getDrv rootDependencyKeys;
+							src = (getAttr rootKey specs).src;
 
 							# Utilities for overriding the result derivation set.
 							inherit overrideAll;
 
-							override = attrs:
+							overrideDrv = attrs:
 								overrideOnly attrs (fn: drv: fn drv);
 
 							overrideAttrs = attrs:
@@ -112,6 +127,9 @@ let
 								overrideOnly attrs (extra: drv: drv.overrideAttrs (o: {
 									propagatedBuildInputs = (o.propagatedBuildInputs or []) ++ extra;
 								}));
+
+							overrideSpec = attrs:
+								overrideOnly attrs (fn: drv: drv.overrideSpec fn);
 						};
 
 					sourceOverlay = import lock; # TODO allow literal?

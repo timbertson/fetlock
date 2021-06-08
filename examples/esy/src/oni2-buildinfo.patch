@@ -1,0 +1,38 @@
+From 163e9968a1d080f86a5a0690df72208d57e29168 Mon Sep 17 00:00:00 2001
+From: Tim Cuthbertson <tim@gfxmonk.net>
+Date: Sat, 20 Mar 2021 20:40:40 +1100
+Subject: [PATCH 2/2] buildinfo: allow building without a git tree
+
+---
+ src/gen_buildinfo/generator.re | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/src/gen_buildinfo/generator.re b/src/gen_buildinfo/generator.re
+index 2e0daea8..edda01f2 100644
+--- a/src/gen_buildinfo/generator.re
++++ b/src/gen_buildinfo/generator.re
+@@ -4,7 +4,9 @@
+ 
+ let getCommitId = () => {
+   let ic = Unix.open_process_in("git rev-parse --short HEAD");
+-  let commitId = input_line(ic);
++  let commitId = try (input_line(ic)) {
++  | End_of_file => "[unknown commit]"
++  };
+   let () = close_in(ic);
+   commitId;
+ };
+@@ -16,8 +18,9 @@ let getVersion = () => {
+ };
+ 
+ let getExtensionHostVersion = () => {
++  print_endline(Sys.getcwd());
+   Yojson.Safe.from_file(
+-    "../../../../../../../../node/node_modules/@onivim/vscode-exthost/package.json",
++    "../../../../node/node_modules/@onivim/vscode-exthost/package.json",
+   )
+   |> Yojson.Safe.Util.member("version")
+   |> Yojson.Safe.Util.to_string;
+-- 
+2.24.3 (Apple Git-128)
+

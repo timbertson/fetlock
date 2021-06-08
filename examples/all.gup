@@ -1,0 +1,6 @@
+#!bash
+gup -u \
+  bundler/result \
+  yarn/result \
+  esy/result \
+  ;

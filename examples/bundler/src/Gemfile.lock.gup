@@ -1,0 +1,3 @@
+#!bash -eu
+gup -u Gemfile
+bundle lock --lockfile="$1"

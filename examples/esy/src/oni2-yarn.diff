@@ -1,0 +1,80 @@
+diff --git node/package.json node/package.json
+index 2ca8988b..566320e4 100644
+--- node/package.json
++++ node/package.json
+@@ -19,7 +19,7 @@
+   },
+   "author": "",
+   "license": "SEE LICENSE IN README.md",
+-  "devDependencies": {
++  "// devDependencies": {
+     "@types/node": "^11.9.5",
+     "typescript": "^3.3.3333"
+   },
+diff --git node/yarn.lock node/yarn.lock
+index cdaab3a8..33e5ffab 100644
+--- node/yarn.lock
++++ node/yarn.lock
+@@ -7,7 +7,7 @@
+   resolved "https://registry.yarnpkg.com/@onivim/vscode-exthost/-/vscode-exthost-1.52.1000.tgz#f69523da388b9595662ff12c600fe5fe0c2150ae"
+   integrity sha512-MuW8QfmHPj9q5D37lHdavUZG5cuCanTF8hZ1k/sCGbWKBCVCHPOtQ74pxRFa91t+JCXDTpzXdiW6DBLh+fIjDA==
+   dependencies:
+-    graceful-fs "4.2.3"
++    graceful-fs "4.1.11"
+     iconv-lite-umd "0.6.8"
+     minimist "^1.2.5"
+     native-watchdog "1.3.0"
+@@ -77,7 +77,7 @@ fs-extra@^8.1.0:
+   resolved "https://registry.yarnpkg.com/fs-extra/-/fs-extra-8.1.0.tgz#49d43c45a88cd9677668cb7be1b46efdb8d2e1c0"
+   integrity sha512-yhlQgA6mnOJUKOsRUFsgJdQCvkKhcz8tlZG5HBQfReYZy46OwLcY+Zia0mtdHsOo9y/hP+CxMN0TU9QxoOtG4g==
+   dependencies:
+-    graceful-fs "^4.2.0"
++    graceful-fs "4.1.11"
+     jsonfile "^4.0.0"
+     universalify "^0.1.0"
+ 
+@@ -92,7 +92,7 @@ http-proxy-agent@^2.1.0:
+   integrity sha512-qwHbBLV7WviBl0rQsOzH6o5lwyOIvwp/BdFnvVxXORldu5TmjFfjzBcWUWS5kWAZhmv+JtiDhSuQCp4sBfbIgg==
+   dependencies:
+     agent-base "4"
+-    debug "3.1.0"
++    debug "3.2.6"
+ 
+ https-proxy-agent@^2.2.3:
+   version "2.2.4"
+@@ -100,7 +100,7 @@ https-proxy-agent@^2.2.3:
+   integrity sha512-OmvfoQ53WLjtA9HeYP9RNrWMJzzAz1JGaSFr1nijg0PVR1JaD/xbJq1mdEIIlxGpXp9eSe/O2LgU9DJmTPd0Eg==
+   dependencies:
+     agent-base "^4.3.0"
+-    debug "^3.1.0"
++    debug "3.2.6"
+ 
+ iconv-lite-umd@0.6.8:
+   version "0.6.8"
+@@ -117,7 +117,7 @@ jsonfile@^4.0.0:
+   resolved "https://registry.yarnpkg.com/jsonfile/-/jsonfile-4.0.0.tgz#8771aae0799b64076b76640fca058f9c10e33ecb"
+   integrity sha1-h3Gq4HmbZAdrdmQPygWPnBDjPss=
+   optionalDependencies:
+-    graceful-fs "^4.1.6"
++    graceful-fs "4.1.11"
+ 
+ minimist@^1.2.5:
+   version "1.2.5"
+@@ -173,7 +173,7 @@ socks-proxy-agent@^4.0.1:
+   resolved "https://registry.yarnpkg.com/socks-proxy-agent/-/socks-proxy-agent-4.0.2.tgz#3c8991f3145b2799e70e11bd5fbc8b1963116386"
+   integrity sha512-NT6syHhI9LmuEMSK6Kd2V7gNv5KFZoLE7V5udWmn0de+3Mkj3UMA/AJPLyeNUVmElCurSHtUdM3ETpR3z770Wg==
+   dependencies:
+-    agent-base "~4.2.1"
++    agent-base "4.3.0"
+     socks "~2.3.2"
+ 
+ socks@~2.3.2:
+@@ -208,7 +208,7 @@ vscode-proxy-agent@^0.5.2:
+   resolved "https://registry.yarnpkg.com/vscode-proxy-agent/-/vscode-proxy-agent-0.5.2.tgz#0c90d24d353957b841d741da7b2701e3f0a044c4"
+   integrity sha512-1cCNPxrWIrmUwS+1XGaXxkh3G1y7z2fpXl1sT74OZvELaryQWYb3NMxMLJJ4Q/CpPLEyuhp/bAN7nzHxxFcQ5Q==
+   dependencies:
+-    debug "^3.1.0"
++    debug "3.2.6"
+     http-proxy-agent "^2.1.0"
+     https-proxy-agent "^2.2.3"
+     socks-proxy-agent "^4.0.1"

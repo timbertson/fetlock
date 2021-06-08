@@ -1,0 +1,3 @@
+#!bash -eux
+gup -u ../../bin src/Gemfile.lock
+../../bin/fetlock -o "$1" -t bundler "$(dirname "$2")/src/Gemfile.lock"

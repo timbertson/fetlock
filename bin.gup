@@ -1,0 +1,6 @@
+#!bash -eu
+gup --always
+cargo build
+gup --ifchange target/debug/fetlock
+mkdir "$1"
+ln -sfn ../target/debug/fetlock "$1"

@@ -136,6 +136,15 @@ pub enum Root {
 	Virtual(Vec<Key>),
 }
 
+impl Root {
+	pub fn key(&self) -> Key {
+		match self {
+			Root::Package(key) => key.clone(),
+			Root::Virtual(keys) => Key::new("_virtual_root".to_owned()),
+		}
+	}
+}
+
 #[derive(Debug, Clone)]
 pub struct LockContext {
 	pub lock_type: Type,
@@ -351,6 +360,7 @@ impl PartialSpec {
 	}
 
 	pub fn build(self) -> Result<Spec> {
+		let error_desc = format!("building {:?}", &self); // TODO make this lazy
 		match self {
 			Self {
 				id,
@@ -358,16 +368,19 @@ impl PartialSpec {
 				src,
 				extra,
 			} => {
-				let id = id.build()?;
-				let src = src.ok_or_else(|| anyhow!("src required"))?;
-				Ok(Spec {
-					id,
-					dep_keys,
-					build_inputs: Vec::new(),
-					src,
-					extra,
-					digest: None,
-				})
+				let built : Result<Spec> = (|| {
+					let id = id.build()?;
+					let src = src.ok_or_else(|| anyhow!("src required"))?;
+					Ok(Spec {
+						id,
+						dep_keys,
+						build_inputs: Vec::new(),
+						src,
+						extra,
+						digest: None,
+					})
+				})();
+				built.with_context(||error_desc)
 			}
 		}
 	}

@@ -10,6 +10,7 @@ Fetlock is a _unified tool_ for converting various lockfiles into `nix` expressi
  - [yarn][] (nodejs): rudimentary support for v2 lockfiles
    - no `bin` wrappers
    - no `install` script / native compilation support
+ - [bundler][] (rubygems):
 
 ---
 

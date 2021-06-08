@@ -1,25 +1,13 @@
-{ pkgs ? import <nixpkgs> {}, packageOverrides ? self: []}:
+{ pkgs ? import <nixpkgs> {}}:
 with pkgs;
 let
   osx = darwin.apple_sdk.frameworks;
   ifDarwin = deps: if stdenv.isDarwin then deps else [];
-  esy = (callPackage ../nix/esy {});
-  yarn = (callPackage ../nix/yarn {});
-  bundler = (callPackage ../nix/bundler {});
+  esy = (callPackage ../../nix/esy {});
+  yarn = (callPackage ../../nix/yarn {});
+  yarnSelection = yarn.load ../yarn/lock.nix {};
   
-  yarnSelection = yarn.load ./yarn.nix {};
-  
-  bundlerSelection = bundler.load ./bundler.nix {
-    pkgOverrides = self: [
-      (self.overrideAttrs {
-        nokogiri = o: {
-          buildInputs = (o.buildInputs or []) ++ [ libiconv zlib ];
-        };
-      })
-    ];
-  };
-
-  esySelection = esy.load ./oni2.nix {
+  selection = esy.load ./lock.nix {
     pkgOverrides = self:
       let
         fixupLibPath = name: o: stdenv.mkDerivation (self.specToAttrs (o.spec // {
@@ -158,18 +146,9 @@ let
         esy-skia = ifDarwin [ osx.ApplicationServices ];
         libvim = [ncurses.dev] ++ (ifDarwin [ osx.AppKit ]);
       })
-    ] ++ (packageOverrides self);
+    ];
   };
 in
-with lib;
-{
-  esy = (head esySelection.dependencies).overrideAttrs (o: {
-    passthru = esySelection.drvsByName;
-  });
-  yarn = (head yarnSelection.dependencies).overrideAttrs (o: {
-    passthru = yarnSelection.drvsByName;
-  });
-  bundler = (head bundlerSelection.dependencies).overrideAttrs (o: {
-    passthru = bundlerSelection.drvsByName;
-  });
-}
+selection.root.overrideAttrs (o: {
+  passthru = selection.drvsByName;
+})

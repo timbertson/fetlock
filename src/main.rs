@@ -35,21 +35,24 @@ async fn process<B: Backend + fmt::Debug>(opts: CliOpts) -> Result<()> {
 	let lock_src = opts.lock_src.resolve().await?;
 	let mut lock = B::load(&lock_src, opts.clone())
 		.await
-		.with_context(|| format!("loading {:?}", &opts.lock_src))?;
+		.with_context(|| format!("loading {:?}", &lock_src))?;
 	debug!("{:?}", lock);
 
 	// ensure there is a root package, using a virtual one if necessary
 	let lock_mut = lock.lock_mut();
-	let root_key = match &mut lock_mut.context.root {
-		Root::Package(key) => key.clone(),
+	let root_key = lock_mut.context.root.key();
+	match &mut lock_mut.context.root {
+		Root::Package(key) => (),
 		Root::Virtual(keys) => {
-			let key = Key::new("_virtual_root".to_owned());
-			let pseudo_root = Root::Package(key.clone());
+			let pseudo_root = Root::Package(root_key.clone());
 			let mut spec = PartialSpec::empty();
+			spec.id.set_name("fetlock-virtual-root".to_owned());
+			spec.id.set_version("dev".to_owned());
+			spec.set_src(Src::None);
 			spec.add_deps(keys);
-			let spec = spec.build()?;
-			lock_mut.add_impl(key.clone(), B::Spec::wrap(spec));
-			key
+			let spec = spec.build()
+				.with_context(||"virtual root spec")?;
+			lock_mut.add_impl(root_key.clone(), B::Spec::wrap(spec));
 		}
 	};
 

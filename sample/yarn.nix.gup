@@ -1,3 +1,0 @@
-#!bash -eux
-gup -u ../compile
-../target/debug/fetlock -o "$1" -t yarn ../../../scratch/oni2/node/yarn.lock

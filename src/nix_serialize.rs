@@ -337,10 +337,7 @@ impl Writeable for LockContext {
 		c.bracket_attrs(|c| {
 			c.attr(&"type", lock_type)?;
 			c.attr(&"version", &Self::version())?;
-			match root {
-				Root::Package(key) => c.attr(&"root", &key)?,
-				Root::Virtual(keys) => c.attr(&"dependencies", &keys)?,
-			}
+			c.attr(&"root", &root.key())?;
 			for (k, v) in extra.iter() {
 				c.attr(k, v)?;
 			}

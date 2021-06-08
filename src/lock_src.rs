@@ -1,3 +1,4 @@
+use log::*;
 use crate::string_util::*;
 use crate::*;
 use anyhow::*;
@@ -97,9 +98,8 @@ impl LockSrc {
 		repo: Option<&str>,
 		relative: Option<String>,
 	) -> Result<LockSrc> {
+		debug!("parsing lock src:: {:?} {:?}", &repo, &relative);
 		let root: Option<Result<LockRoot>> = repo.map(|repo| {
-			let (path, git_ref) = split_one("#", &repo);
-			let (owner, repo) = split_one_or_else("/", path, || anyhow!("invalid repo: {}", repo))?;
 			Ok(LockRoot::Github(GithubSrc::parse(repo)?))
 		});
 		let root = root.transpose()?;

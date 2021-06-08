@@ -1,3 +1,4 @@
+use log::*;
 use crate::lock;
 use crate::lock_src::*;
 use anyhow::*;
@@ -59,6 +60,7 @@ impl CliOpts {
 		if matches.opt_present("h") {
 			return usage(&program, opts);
 		}
+		debug!("parsing opts: {:?}", &matches);
 
 		if matches.free.len() != 1 {
 			return Err(anyhow!(

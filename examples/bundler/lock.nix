@@ -6,11 +6,16 @@ in
   context = {
     type = "bundler";
     version = "1";
-    toplevel = [
-      ("rails")
-    ];
+    root = "_virtual_root";
   };
   specs = {
+    _virtual_root = {
+      pname = "fetlock-virtual-root";
+      version = "dev";
+      depKeys = [
+        ("rails")
+      ];
+    };
     actioncable = {
       pname = "actioncable";
       version = "6.1.3.1";

@@ -1,0 +1,85 @@
+From 94a5b89aa9716890664deffd88828a49ba6ad823 Mon Sep 17 00:00:00 2001
+From: Tim Cuthbertson <tim@gfxmonk.net>
+Date: Sat, 20 Mar 2021 20:40:06 +1100
+Subject: [PATCH 1/2] reason-libvim discovery: respect GETTEXT_LIB_PATH if
+ defined
+
+---
+ src/reason-libvim/config/discover.re | 47 +++++++++++++++++-----------
+ 1 file changed, 29 insertions(+), 18 deletions(-)
+
+diff --git a/src/reason-libvim/config/discover.re b/src/reason-libvim/config/discover.re
+index a614b350..fae9ec55 100644
+--- a/src/reason-libvim/config/discover.re
++++ b/src/reason-libvim/config/discover.re
+@@ -11,22 +11,6 @@ let uname = () => {
+   uname;
+ };
+ 
+-let getLibIntlPath = () =>
+-  try({
+-    let ic =
+-      Unix.open_process_in(
+-        "find /usr/local/Cellar -name libintl.a -print 2>/dev/null",
+-      );
+-    let path = input_line(ic);
+-    let () = close_in(ic);
+-    path;
+-  }) {
+-  | ex =>
+-    prerr_endline("Unable to find libintl: " ++ Printexc.to_string(ex));
+-    prerr_endline("You may need to install gettext: `brew install gettext`");
+-    failwith("Unable to find libintl");
+-  };
+-
+ let get_os =
+   switch (Sys.os_type) {
+   | "Win32" => Windows
+@@ -64,6 +48,34 @@ let _ = print_endline(libPath);
+ let ccopt = s => ["-ccopt", s];
+ let cclib = s => ["-cclib", s];
+ 
++let libIntlFlags = () =>
++  try({
++    // If GETTEXT_LIB_PATH is specified,
++    // add it to the lib path
++    let gettextLib = Unix.getenv("GETTEXT_LIB_PATH");
++    ccopt("-L" ++ gettextLib) @ cclib("-lintl")
++  }) {
++    | Not_found => {
++      // Otherwise search for a homebrew installation
++      try({
++        let ic =
++          Unix.open_process_in(
++            "find /usr/local/Cellar -name libintl.a -print 2>/dev/null",
++          );
++        let path = input_line(ic);
++        let () = close_in(ic);
++        cclib(path);
++      }) {
++      | ex =>
++        prerr_endline("Unable to find libintl: " ++ Printexc.to_string(ex));
++        prerr_endline("You may need to install gettext: `brew install gettext`,");
++        prerr_endline("or set $GETTEXT_LIB_PATH to gettext's lib path.");
++        failwith("Unable to find libintl");
++      };
++    }
++  };
++
++
+ let flags =
+   switch (get_os) {
+   | Windows =>
+@@ -86,8 +98,7 @@ let flags =
+     @ cclib("-lXt")
+   | _ =>
+     []
+-    @ ccopt(libPath)
+-    @ cclib(getLibIntlPath())
++    @ libIntlFlags()
+     @ cclib("-lvim")
+     @ cclib("-lm")
+     @ cclib("-lncurses")
+-- 
+2.24.3 (Apple Git-128)
+

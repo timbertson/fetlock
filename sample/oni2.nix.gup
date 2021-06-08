@@ -1,3 +1,0 @@
-#!bash -eux
-gup -u ../compile
-../target/debug/fetlock -o oni2.nix -t esy ../../../scratch/oni2/esy.lock/index.json

@@ -31,7 +31,7 @@ let
 							getDrv = key: getAttr key self.drvs;
 
 							rootKey = self.context.root;
-							rootAttrs = (getAttr rootKey self.specs);
+							rootAttrs = getAttr rootKey self.specs;
 
 							overrideAll = fn: drvs: mapAttrs (k: fn) drvs;
 							overrideOnly = attrs: fn:
@@ -106,8 +106,8 @@ let
 							
 							# In other cases, you can ignore `root` and use `dependencies`
 							# (and optionally `src`) for your own derivation
-							dependencies = map getDrv rootDependencyKeys;
-							src = (getAttr rootKey specs).src;
+							dependencies = map getDrv (getAttr rootKey self.specs).depKeys;
+							src = (getAttr rootKey self.specs).src;
 
 							# Utilities for overriding the result derivation set.
 							inherit overrideAll;

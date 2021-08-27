@@ -49,7 +49,10 @@ async fn process<B: Backend + fmt::Debug>(opts: CliOpts) -> Result<()> {
 			spec.id.set_name("fetlock-virtual-root".to_owned());
 			spec.id.set_version("dev".to_owned());
 			spec.set_src(Src::None);
+			// TODO deps empty for yarn example?
 			spec.add_deps(keys);
+			// let the backend add any mandatory properties
+			B::virtual_root(&mut spec);
 			let spec = spec.build()
 				.with_context(||"virtual root spec")?;
 			lock_mut.add_impl(root_key.clone(), B::Spec::wrap(spec));

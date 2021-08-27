@@ -25,6 +25,12 @@ pub struct YarnLock {
 impl Backend for YarnLock {
 	type Spec = YarnSpec;
 
+	fn virtual_root(spec: &mut PartialSpec) {
+		spec.extra
+			.insert("pkgname".to_owned(), Expr::str("virtual-root".to_owned()
+		));
+	}
+
 	async fn load(src: &LocalSrc, opts: CliOpts) -> Result<Self> {
 		let context = LockContext::new(lock::Type::Yarn);
 		let contents = std::fs::read_to_string(src.lock_path())?;
@@ -65,16 +71,19 @@ pub struct YarnSpec {
 impl YarnSpec {
 	async fn populate_src(&mut self) -> Result<()> {
 		let desc = format!("populating src for {:?}", &self.spec.id);
-		(|| async move {
+		let result: Result<()> = (|| async move {
 			// https://github.com/npm/registry/blob/master/docs/REGISTRY-API.md#getpackageversion
-			let root = match self.resolution.registry.as_str() {
-				"npm" => "https://registry.npmjs.org/",
-				"workspace" => {
-					// TODO accept src from context
+			let root = match self.resolution.registry.as_deref() {
+				Some("npm") => "https://registry.npmjs.org/",
+				None => {
 					return Ok(());
-				}
-				other => {
-					return Err(anyhow!("Unsupported repo: {}", other));
+				},
+				Some(other) => {
+					// TODO known repos:
+					// - workspace (local files)
+					// - patch (???)
+					warn!("Unsupported repo: {} (in package {:?})", other, self.spec.id);
+					return Ok(());
 				}
 			};
 
@@ -89,9 +98,8 @@ impl YarnSpec {
 			debug!("package listing for {:?}: {:?}", self.spec.id, listing);
 			self.spec.src = Src::Archive(Url::new(listing.dist.tarball));
 			Ok(())
-		})()
-		.await
-		.with_context(|| desc)
+		})().await;
+		result.with_context(|| desc)
 	}
 }
 
@@ -122,7 +130,7 @@ impl AsSpec for YarnSpec {
 			resolution: DepResolution {
 				name: name.clone(),
 				key: Key::new(name),
-				registry: "fake".to_owned(),
+				registry: None,
 			},
 			find_keys: Vec::new(),
 			optional_deps: HashSet::new(),
@@ -235,12 +243,13 @@ impl<'de> Visitor<'de> for YarnVisitor {
 					let find_keys = key
 						.split(", ")
 						.into_iter()
-						.map(|s| DepResolution::parse(s))
+						.map(|s| DepResolution::parse(s).with_context(||"toplevel yarn key"))
 						.collect::<Result<Vec<DepResolution>>>();
 					let mut spec = map.next_value::<YarnSpec>()?;
 					spec.find_keys = into_serde(find_keys)?;
 
 					// TODO: populate root from package.json
+					// Or, look for the impl @`workspace:.`
 					ret.0.add_impl(spec.resolution.key.clone(), spec);
 				}
 			}
@@ -299,7 +308,7 @@ impl<'de> Visitor<'de> for YarnSpecVisitor {
 		let resolution = into_serde(
 			resolution
 				.ok_or_else(|| anyhow!("resolution not found"))
-				.and_then(|res| DepResolution::parse(&res)),
+				.and_then(|res| DepResolution::parse(&res).with_context(||"resolution field")),
 		)?;
 		spec.id.set_name(resolution.name.clone());
 		spec.extra
@@ -328,18 +337,20 @@ impl<'de> Visitor<'de> for YarnSpecVisitor {
 struct DepResolution {
 	name: String,
 	key: Key,
-	registry: String,
+	registry: Option<String>,
 }
 
 impl DepResolution {
 	fn parse(s: &str) -> Result<DepResolution> {
 		let (name, rest) = split_name(s)?;
-		let (registry, version) =
-			split_one_or_else(":", rest, || anyhow!("invalid spec: {:?}", s))?;
+		let (registry, version) = match split_one(":", rest) {
+			(registry, Some(version)) => (Some(registry), version),
+			(version, None) => (None, version),
+		};
 		Ok(DepResolution {
 			name: name.to_owned(),
 			key: Key::new(format!("{}@{}", name, version)),
-			registry: registry.to_owned(),
+			registry: registry.map(|x| x.to_owned()),
 		})
 	}
 }
@@ -393,5 +404,15 @@ mod tests {
 				registry: "npm".to_owned(),
 			}
 		);
+
+		assert_eq!(
+			DepResolution::parse("foo@^1.2.3").unwrap(),
+			DepResolution {
+				name: "foo".to_owned(),
+				key: Key::new("foo@^1.2.3".to_owned()),
+				registry: None,
+			}
+		);
+
 	}
 }

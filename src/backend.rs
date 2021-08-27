@@ -1,5 +1,5 @@
 // common interface followed by all backends
-use crate::lock::{AsSpec, Lock};
+use crate::lock::{AsSpec, Lock, PartialSpec};
 use crate::lock_src::LocalSrc;
 use crate::CliOpts;
 use anyhow::*;
@@ -11,6 +11,11 @@ use async_trait::async_trait;
 #[async_trait(?Send)]
 pub trait Backend: Sized + std::fmt::Debug {
 	type Spec: AsSpec;
+
+	// Allow customisation of the virtual root package
+	// (e.g. inserting extra attributes which the nix frontend
+	// requires for all packages)
+	fn virtual_root(spec: &mut PartialSpec) {}
 
 	// Parse file, populate a lock structure
 	// async because some implementations will need

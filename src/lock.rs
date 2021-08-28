@@ -331,10 +331,6 @@ impl Spec {
 		}
 		ret
 	}
-
-	pub fn add_build_input(&mut self, dep: Expr) {
-		self.build_inputs.push(dep)
-	}
 }
 
 impl AsSpec for Spec {
@@ -348,6 +344,7 @@ pub struct PartialSpec {
 	pub id: PartialId,
 	pub dep_keys: Vec<Key>,
 	pub src: Option<Src>,
+	pub build_inputs: Vec<Expr>,
 	pub extra: BTreeMap<String, Expr>,
 }
 
@@ -356,6 +353,7 @@ impl PartialSpec {
 		Self {
 			id: PartialId::empty(),
 			dep_keys: Vec::new(),
+			build_inputs: Vec::new(),
 			src: None,
 			extra: BTreeMap::new(),
 		}
@@ -367,6 +365,7 @@ impl PartialSpec {
 			Self {
 				id,
 				dep_keys,
+				build_inputs,
 				src,
 				extra,
 			} => {
@@ -376,7 +375,7 @@ impl PartialSpec {
 					Ok(Spec {
 						id,
 						dep_keys,
-						build_inputs: Vec::new(),
+						build_inputs,
 						src,
 						extra,
 						digest: None,
@@ -393,6 +392,10 @@ impl PartialSpec {
 
 	pub fn add_deps(&mut self, dep_keys: &mut Vec<Key>) {
 		self.dep_keys.append(dep_keys);
+	}
+
+	pub fn add_build_input(&mut self, dep: Expr) {
+		self.build_inputs.push(dep)
 	}
 
 	pub fn set_src(&mut self, src: Src) {

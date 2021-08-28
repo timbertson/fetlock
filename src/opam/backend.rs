@@ -139,7 +139,6 @@ impl Backend for OpamLock {
 		let mut solution: Solution = serde_json::from_str(&contents)?;
 
 		let mut lock: Lock<OpamSpec> = Lock::<OpamSpec>::new(LockContext::new(lock::Type::Bundler));
-		// TODO
 		lock.set_root(Root::Package(package_name));
 		for (name, selection) in solution.0.drain() {
 			let mut spec = PartialSpec::empty();
@@ -156,7 +155,15 @@ impl Backend for OpamLock {
 					.map(|d| Key::new(d.clone()))
 					.collect(),
 			);
-			// TODO add depexts
+
+			for dep in selection.depexts.required {
+				spec.add_build_input(Expr::Literal(format!("pkgs.{}", dep)));
+			}
+
+			for dep in selection.depexts.optional {
+				spec.add_build_input(Expr::Literal(format!("pkgs.{} or null", dep)));
+			}
+
 			lock.add_impl(
 				Key::new(name.clone()),
 				OpamSpec {

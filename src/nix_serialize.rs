@@ -121,7 +121,7 @@ impl<W: Write> WriteContext<'_, W> {
 						'"' | '\\' => {
 							write!(self.file, "\\")?;
 							write!(self.file, "{}", ch)?;
-						},
+						}
 						'$' => {
 							let next = chars.next();
 							if next == Some('{') {
@@ -132,12 +132,12 @@ impl<W: Write> WriteContext<'_, W> {
 									write!(self.file, "{}", n)?;
 								}
 							}
-						},
+						}
 						other => write!(self.file, "{}", ch)?,
 					}
 				}
 				Ok(())
-			},
+			}
 			StringMode::Multiline => {
 				/* TODO
 				$ can be escaped by prefixing it with '' (that is, two single quotes), i.e., ''$.
@@ -150,7 +150,7 @@ impl<W: Write> WriteContext<'_, W> {
 					match ch {
 						'\n' => {
 							self.nl()?;
-						},
+						}
 						'$' => {
 							let next = chars.next();
 							if next == Some('{') {
@@ -161,7 +161,7 @@ impl<W: Write> WriteContext<'_, W> {
 									self.write_char(n)?;
 								}
 							}
-						},
+						}
 						'\'' => {
 							let next = chars.next();
 							if next == Some('\'') {
@@ -172,12 +172,12 @@ impl<W: Write> WriteContext<'_, W> {
 									self.write_char(n)?;
 								}
 							}
-						},
+						}
 						other => self.write_char(ch)?,
 					}
 				}
 				Ok(())
-			},
+			}
 		}
 	}
 

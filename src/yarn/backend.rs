@@ -27,8 +27,7 @@ impl Backend for YarnLock {
 
 	fn virtual_root(spec: &mut PartialSpec) {
 		spec.extra
-			.insert("pkgname".to_owned(), Expr::str("virtual-root".to_owned()
-		));
+			.insert("pkgname".to_owned(), Expr::str("virtual-root".to_owned()));
 	}
 
 	async fn load(src: &LocalSrc, opts: CliOpts) -> Result<Self> {
@@ -77,12 +76,15 @@ impl YarnSpec {
 				Some("npm") => "https://registry.npmjs.org/",
 				None => {
 					return Ok(());
-				},
+				}
 				Some(other) => {
 					// TODO known repos:
 					// - workspace (local files)
 					// - patch (???)
-					warn!("Unsupported repo: {} (in package {:?})", other, self.spec.id);
+					warn!(
+						"Unsupported repo: {} (in package {:?})",
+						other, self.spec.id
+					);
 					return Ok(());
 				}
 			};
@@ -98,7 +100,8 @@ impl YarnSpec {
 			debug!("package listing for {:?}: {:?}", self.spec.id, listing);
 			self.spec.src = Src::Archive(Url::new(listing.dist.tarball));
 			Ok(())
-		})().await;
+		})()
+		.await;
 		result.with_context(|| desc)
 	}
 }
@@ -243,7 +246,7 @@ impl<'de> Visitor<'de> for YarnVisitor {
 					let find_keys = key
 						.split(", ")
 						.into_iter()
-						.map(|s| DepResolution::parse(s).with_context(||"toplevel yarn key"))
+						.map(|s| DepResolution::parse(s).with_context(|| "toplevel yarn key"))
 						.collect::<Result<Vec<DepResolution>>>();
 					let mut spec = map.next_value::<YarnSpec>()?;
 					spec.find_keys = into_serde(find_keys)?;
@@ -308,7 +311,7 @@ impl<'de> Visitor<'de> for YarnSpecVisitor {
 		let resolution = into_serde(
 			resolution
 				.ok_or_else(|| anyhow!("resolution not found"))
-				.and_then(|res| DepResolution::parse(&res).with_context(||"resolution field")),
+				.and_then(|res| DepResolution::parse(&res).with_context(|| "resolution field")),
 		)?;
 		spec.id.set_name(resolution.name.clone());
 		spec.extra
@@ -413,6 +416,5 @@ mod tests {
 				registry: None,
 			}
 		);
-
 	}
 }

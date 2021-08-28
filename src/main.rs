@@ -54,8 +54,7 @@ async fn process<B: Backend + fmt::Debug>(opts: CliOpts) -> Result<()> {
 			spec.add_deps(keys);
 			// let the backend add any mandatory properties
 			B::virtual_root(&mut spec);
-			let spec = spec.build()
-				.with_context(||"virtual root spec")?;
+			let spec = spec.build().with_context(|| "virtual root spec")?;
 			lock_mut.add_impl(root_key.clone(), B::Spec::wrap(spec));
 		}
 	};

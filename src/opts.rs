@@ -1,8 +1,8 @@
-use log::*;
 use crate::lock;
 use crate::lock_src::*;
 use anyhow::*;
 use getopts::Options;
+use log::*;
 use std::env;
 
 #[derive(Debug, Clone)]

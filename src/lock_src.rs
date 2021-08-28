@@ -1,7 +1,7 @@
-use log::*;
 use crate::string_util::*;
 use crate::*;
 use anyhow::*;
+use log::*;
 use std::path::*;
 
 #[derive(Debug, Clone)]
@@ -99,9 +99,8 @@ impl LockSrc {
 		relative: Option<String>,
 	) -> Result<LockSrc> {
 		debug!("parsing lock src:: {:?} {:?}", &repo, &relative);
-		let root: Option<Result<LockRoot>> = repo.map(|repo| {
-			Ok(LockRoot::Github(GithubSrc::parse(repo)?))
-		});
+		let root: Option<Result<LockRoot>> =
+			repo.map(|repo| Ok(LockRoot::Github(GithubSrc::parse(repo)?)));
 		let root = root.transpose()?;
 		let (root, relative): (LockRoot, String) = match (root, relative) {
 			(_, None) => Err(anyhow!("path required")), // TODO guess relative from type

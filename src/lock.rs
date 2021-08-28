@@ -370,7 +370,7 @@ impl PartialSpec {
 				src,
 				extra,
 			} => {
-				let built : Result<Spec> = (|| {
+				let built: Result<Spec> = (|| {
 					let id = id.build()?;
 					let src = src.ok_or_else(|| anyhow!("src required"))?;
 					Ok(Spec {
@@ -382,7 +382,7 @@ impl PartialSpec {
 						digest: None,
 					})
 				})();
-				built.with_context(||error_desc)
+				built.with_context(|| error_desc)
 			}
 		}
 	}

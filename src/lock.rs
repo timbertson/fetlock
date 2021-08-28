@@ -12,6 +12,7 @@ use std::iter::Iterator;
 #[derive(Debug, Copy, Clone)]
 pub enum Type {
 	Esy,
+	Opam,
 	Yarn,
 	Bundler,
 }
@@ -21,6 +22,7 @@ impl fmt::Display for Type {
 		use Type::*;
 		f.write_str(match self {
 			Esy => "esy",
+			Opam => "opam",
 			Yarn => "yarn",
 			Bundler => "bundler",
 		})

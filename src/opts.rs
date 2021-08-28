@@ -75,6 +75,7 @@ impl CliOpts {
 			.as_str()
 		{
 			"esy" => lock::Type::Esy,
+			"opam" => lock::Type::Opam,
 			"yarn" => lock::Type::Yarn,
 			"bundler" => lock::Type::Bundler,
 			other => return Err(anyhow!("Unknown type: {}", other)),

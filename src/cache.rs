@@ -13,7 +13,6 @@ use std::time::SystemTime;
 use tokio::process::Command;
 use tokio::sync::Mutex;
 
-// 1 day
 const SECONDS_PER_DAY: u64 = 60 * 60 * 24;
 
 pub fn cache_root() -> PathBuf {

@@ -26,5 +26,6 @@ pub use main::main;
 
 // backends
 pub mod bundler;
+pub mod opam;
 pub mod esy;
 pub mod yarn;

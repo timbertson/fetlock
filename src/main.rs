@@ -25,6 +25,7 @@ pub async fn main() -> Result<()> {
 
 	match opts.lock_src.lock_type {
 		lock::Type::Esy => process::<crate::esy::EsyLock>(opts).await,
+		lock::Type::Opam => process::<crate::opam::OpamLock>(opts).await,
 		lock::Type::Yarn => process::<crate::yarn::YarnLock>(opts).await,
 		lock::Type::Bundler => process::<crate::bundler::BundlerLock>(opts).await,
 	}

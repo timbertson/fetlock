@@ -7,6 +7,7 @@ use crate::esy::opam_manifest::Opam;
 use crate::esy::{command, esy_manifest, eval};
 use crate::fetch;
 use crate::nix_serialize::{WriteContext, Writeable};
+use crate::opam::opam2nix;
 use crate::stream_util::*;
 use crate::string_util::*;
 use crate::*;
@@ -109,6 +110,7 @@ impl EsyLock {
 		opam_repo: &CachedRepo,
 		realised_src: Option<&PathBuf>,
 		esy_spec: &mut EsySpec,
+		opam_solution: &opam2nix::Solution,
 		installed: &InstalledPkgs,
 	) -> Result<()> {
 		let start = std::time::Instant::now();
@@ -257,6 +259,7 @@ impl Backend for EsyLock {
 	}
 
 	async fn finalize(mut self) -> Result<Lock<Self::Spec>> {
+		use opam2nix::{DirectSpec, Request};
 		match self
 			.lockfile
 			.lock
@@ -295,6 +298,18 @@ impl Backend for EsyLock {
 		let installed = self.partition_specs()?;
 		let installed_ref = &installed;
 
+		let opam_request = Request {
+			repositories: Vec::new(),
+			solution: Some(vec![DirectSpec {
+				name: "TODO".to_owned(),
+				version: Some("TODO".to_owned()),
+				definition: PathBuf::from("TODO"),
+			}]),
+			spec: None,
+		};
+
+		let opam_solution = opam2nix::solve(&opam_request).await?;
+
 		let parallelism = 10;
 		// TODO sorting and no parallelism makes ordering deterministic for testing
 		// let parallelism = 1;
@@ -304,6 +319,7 @@ impl Backend for EsyLock {
 		let stream = futures::stream::iter(specs);
 		let src_ref = &self.src;
 		let opam_repo_ref = &opam_repo;
+		let opam_solution_ref = &opam_solution;
 		foreach_unordered(parallelism, stream, |(key, esy_spec)| {
 			let realised_src = realised_sources.get(key);
 			async move {
@@ -313,6 +329,7 @@ impl Backend for EsyLock {
 					opam_repo_ref,
 					realised_src,
 					esy_spec,
+					opam_solution_ref,
 					installed_ref,
 				)
 				.await

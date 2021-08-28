@@ -1,84 +1,17 @@
 // opam backend. Note that opam doesn't have a builtin lock file,
 // so we lean on `opam2nix extract` to solve
+use super::opam2nix;
 use crate::cache::CachedRepo;
 use crate::nix_serialize::{WriteContext, Writeable};
 use crate::*;
 use anyhow::*;
 use async_trait::async_trait;
-use log::*;
 use std::borrow::{Borrow, BorrowMut};
 use std::io::Write;
-use tokio::process::Command;
 
 #[derive(Clone, Debug)]
 pub struct OpamSpec {
 	spec: Spec,
-}
-
-// Structures used for communicating with opam2nix
-pub mod opam2nix {
-	use serde;
-	use std::collections::HashMap;
-	use std::path::PathBuf;
-
-	// Input
-	#[derive(Clone, Debug, serde::Serialize)]
-	pub struct Repository {
-		pub id: String,
-		pub path: PathBuf,
-	}
-
-	#[derive(Clone, Debug, serde::Serialize)]
-	pub struct DirectSpec {
-		pub name: String,
-		pub definition: PathBuf,
-	}
-
-	#[derive(Clone, Debug, serde::Serialize)]
-	pub struct Request {
-		pub repositories: Vec<Repository>,
-		pub spec: Vec<DirectSpec>,
-	}
-
-	// Output
-	#[derive(Clone, Debug, serde::Deserialize)]
-	pub struct Src {
-		pub url: String,
-	}
-
-	#[derive(Clone, Debug, serde::Deserialize)]
-	pub struct Command(Vec<String>);
-
-	#[derive(Clone, Debug, Default, serde::Deserialize)]
-	pub struct Depexts {
-		#[serde(default)]
-		pub required: Vec<String>,
-
-		#[serde(default)]
-		pub optional: Vec<String>,
-	}
-
-	#[derive(Clone, Debug, serde::Deserialize)]
-	pub struct SelectedPackage {
-		pub version: String,
-
-		#[serde(default)]
-		pub repository: Option<String>,
-
-		pub src: Option<Src>,
-
-		#[serde(default)]
-		pub depends: Vec<String>,
-
-		#[serde(default)]
-		pub depexts: Depexts,
-
-		pub build_commands: Vec<Command>,
-		pub install_commands: Vec<Command>,
-	}
-
-	#[derive(Clone, Debug, serde::Deserialize)]
-	pub struct Solution(pub HashMap<String, SelectedPackage>);
 }
 
 #[derive(Clone, Debug)]
@@ -91,7 +24,7 @@ impl Backend for OpamLock {
 	type Spec = OpamSpec;
 
 	async fn load(src: &LocalSrc, opts: CliOpts) -> Result<Self> {
-		use opam2nix::{DirectSpec, Repository, Request, Solution};
+		use opam2nix::{DirectSpec, Repository, Request};
 		let context = LockContext::new(lock::Type::Opam);
 		let opam_path = src.lock_path();
 
@@ -120,23 +53,15 @@ impl Backend for OpamLock {
 				id: "opam".to_owned(),
 				path: opam_repo.path.clone(),
 			}],
-			spec: vec![DirectSpec {
+			solution: None,
+			spec: Some(vec![DirectSpec {
 				name: package_name_str.to_owned(),
+				version: None,
 				definition: opam_path,
-			}],
+			}]),
 		};
 
-		let serialized_request = serde_json::to_string(&request)?;
-
-		info!("invoking opam solver");
-		let contents = cmd::run_stdout(
-			"opam2nix extract",
-			Some(&serialized_request),
-			Command::new("opam2nix").arg("extract"),
-		)
-		.await?;
-
-		let mut solution: Solution = serde_json::from_str(&contents)?;
+		let mut solution = opam2nix::solve(&request).await?;
 
 		let mut lock: Lock<OpamSpec> = Lock::<OpamSpec>::new(LockContext::new(lock::Type::Bundler));
 		lock.set_root(Root::Package(package_name));

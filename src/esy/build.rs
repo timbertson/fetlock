@@ -175,7 +175,6 @@ impl NixBuild {
 		let mode_str = match mode {
 			PkgType::Esy => "esy",
 			PkgType::Opam => "opam",
-			// PkgType::Node => "node",
 		};
 
 		map.insert("mode".to_owned(), Expr::str(mode_str.to_owned()));

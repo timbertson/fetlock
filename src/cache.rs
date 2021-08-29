@@ -167,7 +167,7 @@ pub async fn nix_digest_of_git_repo<P: AsRef<Path>>(path: P, rev: String) -> Res
 	cmd::exec(
 		Command::new("bash")
 			.arg("-euc")
-			.arg("git -C \"$REPO\" archive \"$REV\" | tar x -C \"$EXTRACT\"")
+			.arg("git -C \"$REPO\" archive \"$REV\" | tar x -C \"EX$TRACT\"")
 			.env("REPO", path.as_ref())
 			.env("REV", rev)
 			.env("EXTRACT", tmp_dir.path()),

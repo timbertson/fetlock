@@ -1,3 +1,5 @@
+use crate::opam::opam2nix::{SelectedPackage, Command};
+use crate::esy::parser;
 use crate::esy::build::*;
 use crate::esy::eval::*;
 use crate::esy::parser::opam::*;
@@ -17,6 +19,41 @@ pub struct Opam<'a> {
 pub enum Depext {
 	Mandatory(String),
 	IfPresent(String),
+}
+
+pub struct OpamJson<'a>(&'a SelectedPackage);
+impl<'a> OpamJson<'a> {
+	fn parse_str<'s>(s: &'s str) -> Result<Value<'s>> {
+		parser::parse(parser::opam::entire_string, &s)
+			.with_context(|| format!("Parsing opam string: {:?}", s))
+	}
+
+	fn parse_cmd<'c>(script: &'c Vec<Command>) -> Result<Value<'c>> {
+		let values: Vec<Value<'c>> = script.iter().map(|cmd|
+			cmd.0.iter().map(|arg| Self::parse_str(arg)).collect::<Result<Vec<Value<'c>>>>().map(Value::List)
+		).collect::<Result<Vec<Value<'c>>>>()?;
+		Ok(Value::List(values))
+	}
+
+	pub fn build<'c, C: NixCtx>(self, ctx: &C) -> Result<NixBuild> {
+		let mut nix_build = NixBuild::empty(PkgType::Esy);
+		let SelectedPackage {
+			depexts,
+			build_commands,
+			install_commands,
+			..
+		} = self.0;
+		let parsed = Self::parse_cmd(&build_commands)?;
+		nix_build.build = Some(NixBuild::script(PkgType::Opam, ctx, parsed)?);
+
+		let parsed = Self::parse_cmd(&install_commands)?;
+		nix_build.install = Some(NixBuild::script(PkgType::Opam, ctx, parsed)?);
+		
+		// TODO
+		// nix_build.depexts = depexts.required.drain(..).map(|d| 
+
+		Ok(nix_build)
+	}
 }
 
 impl<'a> Opam<'a> {

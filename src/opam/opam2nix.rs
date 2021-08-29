@@ -13,18 +13,39 @@ pub struct Repository {
 	pub path: PathBuf,
 }
 
+#[derive(Clone, Debug)]
+pub enum OpamSource {
+	Path(PathBuf),
+	Contents(String),
+}
+
+impl serde::Serialize for OpamSource {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where S: serde::Serializer {
+		use serde::ser::*;
+		match self {
+			Self::Path(path) => path.serialize(serializer),
+			Self::Contents(contents) => {
+				let mut s = serializer.serialize_struct("opam_source", 1)?;
+				s.serialize_field("contents", &contents)?;
+				s.end()
+			},
+		}
+	}
+}
+
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct DirectSpec {
 	pub name: String,
 	pub version: Option<String>,
-	pub definition: PathBuf,
+	pub definition: OpamSource,
 }
 
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct Request {
 	pub repositories: Vec<Repository>,
 	pub spec: Option<Vec<DirectSpec>>,
-	pub solution: Option<Vec<DirectSpec>>,
+	pub selection: Option<Vec<DirectSpec>>,
 }
 
 // Output
@@ -34,7 +55,7 @@ pub struct Src {
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
-pub struct Command(Vec<String>);
+pub struct Command(pub Vec<String>);
 
 #[derive(Clone, Debug, Default, serde::Deserialize)]
 pub struct Depexts {
@@ -68,15 +89,12 @@ pub struct SelectedPackage {
 pub struct Solution(pub HashMap<String, SelectedPackage>);
 
 pub async fn solve(request: &Request) -> Result<Solution> {
-	let serialized_request = serde_json::to_string(&request)?;
-
+	let serialized_request = serde_json::to_string_pretty(&request)?;
 	info!("invoking opam solver");
 	let contents = cmd::run_stdout(
 		"opam2nix extract",
 		Some(&serialized_request),
 		process::Command::new("opam2nix").arg("extract"),
-	)
-	.await?;
-
+	).await?;
 	Ok(serde_json::from_str(&contents)?)
 }

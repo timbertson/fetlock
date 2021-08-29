@@ -590,9 +590,13 @@ pub mod opam {
 	pub fn quote_string(s: Src) -> Res<Vec<OpamSC>> {
 		delimited(
 			char('"'),
-			map(many0(string_atom), StringAtom::coalesce),
+			string_inner,
 			char('"'),
 		)(s)
+	}
+
+	fn string_inner(s: Src) -> Res<Vec<OpamSC>> {
+		map(many0(string_atom), StringAtom::coalesce)(s)
 	}
 
 	pub fn triplequote_string(s: Src) -> Res<Vec<OpamSC>> {
@@ -631,6 +635,10 @@ pub mod opam {
 				ident,
 			},
 		)(s)
+	}
+
+	pub fn entire_string(s: Src) -> Res<Value> {
+		all_consuming(map(opam::string_inner, Value::String))(s)
 	}
 }
 

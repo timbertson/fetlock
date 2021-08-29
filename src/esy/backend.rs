@@ -168,9 +168,21 @@ impl EsyLock {
 
 					Some(manifest_path) => Some(
 						match manifest_path {
-							ManifestPath::Local(rel_path) => command::Manifest::Path(
-								Self::src_root_path(src)?.join(rel_path).to_string_lossy().to_string()
-							),
+							ManifestPath::Local(rel_path) => {
+								let root_path = Self::src_root_path(src)?;
+								let opam_path = root_path.join(rel_path);
+								let files_path = opam_path.with_file_name("files");
+								if files_path.exists() {
+									esy_spec.spec.extra.insert("files".to_owned(), Expr::Str(
+										vec!(
+											// TODO is `rootSrc` in scope?
+											StringComponent::Expr(Expr::Identifier("rootSrc".to_owned())),
+											StringComponent::Literal(format!("/{}", files_path.to_string_lossy())),
+										)
+									));
+								}
+								command::Manifest::Path(opam_path.to_string_lossy().to_string())
+							},
 							ManifestPath::Remote(_) => {
 								let checkout = Self::extract(realised_src, esy_spec).await?;
 								command::Manifest::Contents(Self::manifest_contents(src, &checkout, &manifest_path).await?)
@@ -195,42 +207,6 @@ impl EsyLock {
 		let name = Name(esy_spec.spec.id.name.to_owned());
 		match esy_spec.meta.pkg_type()? {
 			PkgType::Opam => {
-				/* TODO add `files` in: */
-				/*
-				let files = match esy_spec.meta.manifest {
-					Some(command::Manifest::Path(p)) => {
-						let files_path = p.join("files");
-						if files_path.exists() {
-							Some(files_path)
-						} else {
-							None
-						}
-					},
-					_ => None
-				};
-
-
-				let files_path = repo_path.join(&files_rel);
-				if files_path.exists() {
-					let repo_digest = opam_repo.digest().await?;
-					let base_expr = Expr::Literal(WriteContext::string(|c| {
-						SrcDigest::new(&opam_repo.src, &repo_digest).write_to(c)
-					})?);
-					let files_digest = nix_digest_of_path(&files_path).await?;
-					let mut attrs = BTreeMap::new();
-					attrs.insert("base".to_owned(), base_expr);
-					attrs.insert("path".to_owned(), Expr::str(files_rel));
-					attrs.insert("hash".to_owned(), Expr::str(files_digest.sri_string()));
-					files = Some(Expr::FunCall(Box::new(FunCall {
-						subject: Expr::Literal("final.subtree".to_owned()),
-						args: vec![Expr::AttrSet(attrs)],
-					})));
-				}
-				if let Some(files) = files {
-					esy_spec.spec.extra.insert("files".to_owned(), files);
-				}
-				*/
-
 				let nix_ctx = eval::Ctx::from_map(PkgType::Opam, &name, &installed.opam);
 				// let build = opam
 				// 	.into_nix(&nix_ctx)

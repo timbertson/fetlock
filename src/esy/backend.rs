@@ -2,7 +2,7 @@
 
 use crate::esy::build::PkgType;
 use crate::esy::eval::Pkg;
-use crate::esy::{command, esy_manifest, eval};
+use crate::esy::{command, esy_manifest, eval, opam_manifest};
 use crate::fetch;
 use crate::nix_serialize::{WriteContext, Writeable};
 use crate::opam::opam2nix;
@@ -61,44 +61,6 @@ impl EsyLock {
 		Ok(InstalledPkgs { esy, opam })
 	}
 
-
-	fn src_root_path(src: &LocalSrc) -> Result<PathBuf> {
-		let lock_path = src.lock_path();
-		let no_parent = || anyhow!("can't get `../../` from {:?}", &lock_path);
-		Ok(Path::new(&lock_path)
-			.parent()
-			.ok_or_else(no_parent)?
-			.parent()
-			.ok_or_else(no_parent)?
-			.to_owned())
-	}
-
-	async fn local_manifest_contents<'a>(
-		src: &LocalSrc,
-		manifest_path: &str,
-	) -> Result<String> {
-		let lock_path = src.lock_path();
-		let no_parent = || anyhow!("can't get `../../` from {:?}", &lock_path);
-		let lock_root = Path::new(&lock_path)
-			.parent()
-			.ok_or_else(no_parent)?
-			.parent()
-			.ok_or_else(no_parent)?;
-		(|| async {
-			fetch::ExtractSource::from(&lock_root)
-				.await?
-				.file_contents(manifest_path)
-				.await
-		})()
-		.await
-		.with_context(|| {
-			format!(
-				"can't get manifest {} from {:?}",
-				&manifest_path, &lock_root
-			)
-		})
-	}
-
 	async fn manifest_contents<'a>(
 		src: &LocalSrc,
 		extract: &Option<fetch::ExtractSource<'a>>,
@@ -114,11 +76,19 @@ impl EsyLock {
 					.file_contents(manifest_path)
 					.await
 			},
-			ManifestPath::Local(manifest_path) => Self::local_manifest_contents(src, manifest_path).await,
+			ManifestPath::Local(manifest_path) => {
+				fetch::ExtractSource::from(&src.root).await?
+					.file_contents(manifest_path).await
+					.with_context(|| {
+						format!(
+							"can't get manifest {} from {:?}",
+							&manifest_path, &src.root
+						)
+					})
+			},
 		}
 	}
 
-	// TODO we do this twice, again in finalize_spec
 	async fn extract<'a>(realised_src: Option<&'a PathBuf>, spec: &mut EsySpec) -> Result<Option<fetch::ExtractSource<'a>>> {
 		let result : Result<Option<fetch::ExtractSource>> = {
 			if let Some(path_ref) = realised_src {
@@ -169,8 +139,7 @@ impl EsyLock {
 					Some(manifest_path) => Some(
 						match manifest_path {
 							ManifestPath::Local(rel_path) => {
-								let root_path = Self::src_root_path(src)?;
-								let opam_path = root_path.join(rel_path);
+								let opam_path = src.root.join(rel_path);
 								let files_path = opam_path.with_file_name("files");
 								if files_path.exists() {
 									esy_spec.spec.extra.insert("files".to_owned(), Expr::Str(
@@ -208,12 +177,13 @@ impl EsyLock {
 		match esy_spec.meta.pkg_type()? {
 			PkgType::Opam => {
 				let nix_ctx = eval::Ctx::from_map(PkgType::Opam, &name, &installed.opam);
-				// let build = opam
-				// 	.into_nix(&nix_ctx)
-				// 	.with_context(|| format!("evaluating opam:\n{:?}", &manifest))?;
-				// debug!(" -> as nix: {:?}", build);
-				// esy_spec.spec.extra.insert("build".to_owned(), build.expr());
-				
+				let selected_package = opam_solution.0.get::<str>(name.borrow())
+					.ok_or(anyhow!("opam implementation missing from opam2nix: {:?}", &name))?;
+				let build = opam_manifest::OpamJson(selected_package)
+					.build(&nix_ctx)
+					.with_context(|| format!("evaluating opam package {:?}", &name))?;
+				debug!(" -> as nix: {:?}", build);
+				esy_spec.spec.extra.insert("build".to_owned(), build.expr());
 			}
 			PkgType::Esy => {
 				// NOTE: some esy packages are just npm packages, depending on whether they have
@@ -272,6 +242,30 @@ impl EsyLock {
 #[async_trait(?Send)]
 impl Backend for EsyLock {
 	type Spec = EsySpec;
+
+	fn init_lock_src(src: &mut LockSrc) -> Result<()> {
+		// We expect the user to pass in the lockfile _directory_,
+		// the primary file is `index.json` within it.
+		match &mut src.root {
+			LockRoot::Github(gh) => {
+				src.relative = format!("{}/index.json", src.relative);
+			},
+			LockRoot::Path(local_path) => {
+				// For a local path we want to make src root the parent of
+				// the lock dir, because that's where all relative manifest
+				// paths are resolved against.
+				let invalid_lock = || anyhow!("Invalid lock dir: {:?}", &local_path);
+				let lock_dir_name = local_path.file_name()
+					.and_then(|p| p.to_str())
+					.ok_or_else(invalid_lock)?;
+				let repo_root_path = local_path.parent()
+					.ok_or_else(invalid_lock)?;
+				src.relative = format!("{}/{}/index.json", src.relative, lock_dir_name);
+				*local_path = repo_root_path.to_owned();
+			},
+		}
+		Ok(())
+	}
 
 	async fn load(src: &LocalSrc, opts: CliOpts) -> Result<Self> {
 		let context = LockContext::new(lock::Type::Esy);

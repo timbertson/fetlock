@@ -1,4 +1,4 @@
-use crate::opam::opam2nix::{SelectedPackage, Command};
+use crate::opam::opam2nix::{SelectedPackage, Command, Depexts};
 use crate::esy::parser;
 use crate::esy::build::*;
 use crate::esy::eval::*;
@@ -15,13 +15,7 @@ pub struct Opam<'a> {
 	depexts: Vec<Value<'a>>,
 }
 
-#[derive(Clone, Debug)]
-pub enum Depext {
-	Mandatory(String),
-	IfPresent(String),
-}
-
-pub struct OpamJson<'a>(&'a SelectedPackage);
+pub struct OpamJson<'a>(pub &'a SelectedPackage);
 impl<'a> OpamJson<'a> {
 	fn parse_str<'s>(s: &'s str) -> Result<Value<'s>> {
 		parser::parse(parser::opam::entire_string, &s)
@@ -36,7 +30,7 @@ impl<'a> OpamJson<'a> {
 	}
 
 	pub fn build<'c, C: NixCtx>(self, ctx: &C) -> Result<NixBuild> {
-		let mut nix_build = NixBuild::empty(PkgType::Esy);
+		let mut nix_build = NixBuild::empty(PkgType::Opam);
 		let SelectedPackage {
 			depexts,
 			build_commands,
@@ -49,8 +43,16 @@ impl<'a> OpamJson<'a> {
 		let parsed = Self::parse_cmd(&install_commands)?;
 		nix_build.install = Some(NixBuild::script(PkgType::Opam, ctx, parsed)?);
 		
-		// TODO
-		// nix_build.depexts = depexts.required.drain(..).map(|d| 
+		let Depexts { required, optional } = depexts;
+
+		if required.len() > 0 {
+			nix_build.depexts = Some(Expr::List(required.iter().map(|d| Expr::str(d.to_owned())).collect()));
+		}
+		
+		if optional.len() > 0 {
+			// TODO these aren't referenced by the nix frontend yet
+			nix_build.depext_opts = Some(Expr::List(optional.iter().map(|d| Expr::str(d.to_owned())).collect()));
+		}
 
 		Ok(nix_build)
 	}
@@ -105,6 +107,7 @@ impl<'a> Opam<'a> {
 		Ok(NixBuild {
 			mode,
 			depexts,
+			depext_opts: None,
 			build: build.map_or(Ok(None), |x| NixBuild::script(mode, ctx, x).map(Some))?,
 			install: install.map_or(Ok(None), |x| NixBuild::script(mode, ctx, x).map(Some))?,
 			extra: Default::default(),

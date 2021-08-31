@@ -31,7 +31,8 @@ pub async fn main() -> Result<()> {
 	}
 }
 
-async fn process<B: Backend + fmt::Debug>(opts: CliOpts) -> Result<()> {
+async fn process<B: Backend + fmt::Debug>(mut opts: CliOpts) -> Result<()> {
+	B::init_lock_src(&mut opts.lock_src)?;
 	info!("loading {:?}", &opts.lock_src);
 	let lock_src = opts.lock_src.resolve().await?;
 	let mut lock = B::load(&lock_src, opts.clone())

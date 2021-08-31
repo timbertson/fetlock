@@ -58,7 +58,7 @@ impl GithubSrc {
 
 #[derive(Debug, Clone)]
 pub struct LocalSrc {
-	root: PathBuf,
+	pub root: PathBuf,
 	relative: String,
 	pub src_digest: Option<(Src, Sha256)>,
 }

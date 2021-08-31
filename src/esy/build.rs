@@ -3,6 +3,7 @@
 
 use crate::esy::eval::{Eval, NixCtx};
 use crate::esy::parser::Value;
+use crate::opam::opam2nix::Depexts;
 use crate::{Expr, StringComponent};
 use anyhow::*;
 use log::*;
@@ -60,8 +61,7 @@ pub struct NixBuild {
 	pub mode: PkgType,
 	pub build: Option<Expr>,
 	pub install: Option<Expr>,
-	pub depexts: Option<Expr>,
-	pub depext_opts: Option<Expr>,
+	pub depexts: Depexts,
 	pub extra: BTreeMap<String, Expr>,
 }
 
@@ -71,8 +71,7 @@ impl NixBuild {
 			mode,
 			build: None,
 			install: None,
-			depexts: None,
-			depext_opts: None,
+			depexts: Default::default(),
 			extra: BTreeMap::new(),
 		}
 	}
@@ -172,7 +171,6 @@ impl NixBuild {
 			build,
 			install,
 			depexts,
-			depext_opts,
 			extra,
 		} = self;
 		let mode_str = match mode {
@@ -188,12 +186,18 @@ impl NixBuild {
 		if let Some(install) = install {
 			map.insert("installPhase".to_owned(), install);
 		}
-		if let Some(depexts) = depexts {
-			map.insert("depexts".to_owned(), depexts);
+
+		if !depexts.is_empty() {
+			let Depexts { required, optional } = depexts;
+			map.insert("depexts".to_owned(), Expr::List(
+				required.into_iter().map(|d| Expr::Literal(format!("pkgs.{}", d)))
+				.chain(
+					optional.into_iter().map(|d| Expr::Literal(format!("pkgs.{} or null", d)))
+				)
+				.collect())
+			);
 		}
-		if let Some(depext_opts) = depext_opts {
-			map.insert("depextOpts".to_owned(), depext_opts);
-		}
+
 		for (k, v) in extra {
 			map.insert(k, v);
 		}

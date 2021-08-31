@@ -44,9 +44,16 @@ pub struct DirectSpec {
 }
 
 #[derive(Clone, Debug, serde::Serialize)]
+pub struct SolveSpec {
+	pub name: String,
+	pub definition: OpamSource,
+}
+
+
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct Request {
 	pub repositories: Vec<Repository>,
-	pub spec: Option<Vec<DirectSpec>>,
+	pub spec: Option<Vec<SolveSpec>>,
 	pub selection: Option<Vec<DirectSpec>>,
 }
 
@@ -66,6 +73,12 @@ pub struct Depexts {
 
 	#[serde(default)]
 	pub optional: Vec<String>,
+}
+
+impl Depexts {
+	pub fn is_empty(&self) -> bool {
+		self.required.is_empty() && self.optional.is_empty()
+	}
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]

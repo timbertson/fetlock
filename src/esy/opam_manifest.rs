@@ -1,9 +1,9 @@
+// TODO move into opam
 use crate::esy::build::*;
 use crate::esy::eval::*;
 use crate::esy::parser;
 use crate::esy::parser::*;
-use crate::opam::opam2nix::{Command, Depexts, SelectedPackage};
-use crate::Expr;
+use crate::opam::opam2nix::{Command, SelectedPackage};
 use anyhow::*;
 
 // OPAM file as serialized by opam2nix (JSON)
@@ -42,20 +42,7 @@ impl<'a> OpamJson<'a> {
 		let parsed = Self::parse_cmd(&install_commands)?;
 		nix_build.install = Some(NixBuild::script(PkgType::Opam, ctx, parsed)?);
 
-		let Depexts { required, optional } = depexts;
-
-		if required.len() > 0 {
-			nix_build.depexts = Some(Expr::List(
-				required.iter().map(|d| Expr::str(d.to_owned())).collect(),
-			));
-		}
-
-		if optional.len() > 0 {
-			// TODO these aren't referenced by the nix frontend yet
-			nix_build.depext_opts = Some(Expr::List(
-				optional.iter().map(|d| Expr::str(d.to_owned())).collect(),
-			));
-		}
+		nix_build.depexts = depexts.clone();
 
 		Ok(nix_build)
 	}

@@ -1,8 +1,13 @@
 // opam backend. Note that opam doesn't have a builtin lock file,
 // so we lean on `opam2nix extract` to solve
-use super::opam2nix;
+use log::*;
+use std::collections::HashMap;
+use crate::esy::build::PkgType;
+use crate::esy::eval;
+use crate::opam::opam2nix;
 use crate::cache::CachedRepo;
 use crate::nix_serialize::{WriteContext, Writeable};
+use crate::esy::opam_manifest::OpamJson;
 use crate::*;
 use anyhow::*;
 use async_trait::async_trait;
@@ -24,7 +29,7 @@ impl Backend for OpamLock {
 	type Spec = OpamSpec;
 
 	async fn load(src: &LocalSrc, opts: CliOpts) -> Result<Self> {
-		use opam2nix::{DirectSpec, OpamSource, Repository, Request};
+		use opam2nix::{SolveSpec, OpamSource, Repository, Request};
 		let context = LockContext::new(lock::Type::Opam);
 		let opam_path = src.lock_path();
 
@@ -54,43 +59,42 @@ impl Backend for OpamLock {
 				path: opam_repo.path.clone(),
 			}],
 			selection: None,
-			spec: Some(vec![DirectSpec {
+			spec: Some(vec![SolveSpec {
 				name: package_name_str.to_owned(),
-				version: None,
 				definition: OpamSource::Path(opam_path),
 			}]),
 		};
 
 		let mut solution = opam2nix::solve(&request).await?;
 
-		let mut lock: Lock<OpamSpec> = Lock::<OpamSpec>::new(LockContext::new(lock::Type::Bundler));
+		let mut lock: Lock<OpamSpec> = Lock::<OpamSpec>::new(LockContext::new(lock::Type::Opam));
 		lock.set_root(Root::Package(package_name));
-		for (name, selection) in solution.0.drain() {
+
+		let installed: HashMap<Name, eval::Pkg> = solution.0.iter().map(|(name, selection)| {
+			let key = Key::new(name.to_owned()); // opam keys are simply names
+			let name = Name(name.to_owned());
+			(name.clone(), eval::Pkg { name, key })
+		}).collect();
+			
+		for (name_str, selection) in solution.0.drain() {
 			let mut spec = PartialSpec::empty();
-			spec.set_src(match selection.src {
-				Some(src) => Src::Archive(Url::new(src.url)),
+			spec.set_src(match &selection.src {
+				Some(src) => Src::Archive(Url::new(src.url.clone())),
 				None => Src::None,
 			});
-			spec.id.set_name(name.clone());
-			spec.id.set_version(selection.version);
-			spec.add_deps(
-				&mut selection
-					.depends
-					.iter()
-					.map(|d| Key::new(d.clone()))
-					.collect(),
-			);
+			spec.id.set_name(name_str.clone());
+			spec.id.set_version(selection.version.clone());
 
-			for dep in selection.depexts.required {
-				spec.add_build_input(Expr::Literal(format!("pkgs.{}", dep)));
-			}
-
-			for dep in selection.depexts.optional {
-				spec.add_build_input(Expr::Literal(format!("pkgs.{} or null", dep)));
-			}
+			let name = Name(name_str.to_owned());
+			let nix_ctx = eval::Ctx::from_map(PkgType::Opam, &name, &installed);
+			let build = OpamJson(&selection)
+				.build(&nix_ctx)
+				.with_context(|| format!("evaluating opam package {:?}", &name))?;
+			debug!(" -> as nix: {:?}", build);
+			spec.extra.insert("build".to_owned(), build.expr());
 
 			lock.add_impl(
-				Key::new(name.clone()),
+				Key::new(name_str.clone()),
 				OpamSpec {
 					spec: spec.build()?,
 				},

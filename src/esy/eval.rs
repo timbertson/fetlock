@@ -8,6 +8,7 @@ use std::cmp::Ordering;
 use std::cmp::PartialOrd;
 use std::collections::HashMap;
 
+// TODO move next to Name?
 #[derive(Debug, Clone)]
 pub struct Pkg {
 	pub name: Name,

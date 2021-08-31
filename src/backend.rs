@@ -1,6 +1,6 @@
 // common interface followed by all backends
 use crate::lock::{AsSpec, Lock, PartialSpec};
-use crate::lock_src::{LockSrc,LocalSrc};
+use crate::lock_src::{LocalSrc, LockSrc};
 use crate::CliOpts;
 use anyhow::*;
 use async_trait::async_trait;
@@ -18,7 +18,9 @@ pub trait Backend: Sized + std::fmt::Debug {
 	fn virtual_root(spec: &mut PartialSpec) {}
 
 	// Optionally override how a lock src is initialized
-	fn init_lock_src(src: &mut LockSrc) -> Result<()> { Ok(()) }
+	fn init_lock_src(src: &mut LockSrc) -> Result<()> {
+		Ok(())
+	}
 
 	// Parse file, populate a lock structure
 	// async because some implementations will need

@@ -24,7 +24,7 @@ impl Backend for OpamLock {
 	type Spec = OpamSpec;
 
 	async fn load(src: &LocalSrc, opts: CliOpts) -> Result<Self> {
-		use opam2nix::{DirectSpec, Repository, Request, OpamSource};
+		use opam2nix::{DirectSpec, OpamSource, Repository, Request};
 		let context = LockContext::new(lock::Type::Opam);
 		let opam_path = src.lock_path();
 

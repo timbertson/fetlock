@@ -75,22 +75,22 @@ impl EsyLock {
 					.ok_or_else(|| anyhow!("remote manifest path given, but no source given"))?
 					.file_contents(manifest_path)
 					.await
-			},
-			ManifestPath::Local(manifest_path) => {
-				fetch::ExtractSource::from(&src.root).await?
-					.file_contents(manifest_path).await
-					.with_context(|| {
-						format!(
-							"can't get manifest {} from {:?}",
-							&manifest_path, &src.root
-						)
-					})
-			},
+			}
+			ManifestPath::Local(manifest_path) => fetch::ExtractSource::from(&src.root)
+				.await?
+				.file_contents(manifest_path)
+				.await
+				.with_context(|| {
+					format!("can't get manifest {} from {:?}", &manifest_path, &src.root)
+				}),
 		}
 	}
 
-	async fn extract<'a>(realised_src: Option<&'a PathBuf>, spec: &mut EsySpec) -> Result<Option<fetch::ExtractSource<'a>>> {
-		let result : Result<Option<fetch::ExtractSource>> = {
+	async fn extract<'a>(
+		realised_src: Option<&'a PathBuf>,
+		spec: &mut EsySpec,
+	) -> Result<Option<fetch::ExtractSource<'a>>> {
+		let result: Result<Option<fetch::ExtractSource>> = {
 			if let Some(path_ref) = realised_src {
 				let src = fetch::ExtractSource::from(path_ref).await?;
 				// TODO this upgrade should happen somewhere centrally,
@@ -113,53 +113,63 @@ impl EsyLock {
 			PkgType::Esy => {
 				match Self::extract(realised_src, esy_spec).await? {
 					Some(checkout) => {
-						let contents = if let Some(manifest_path) = esy_spec.meta.manifest_path.as_ref() {
-							Some(Self::manifest_contents(src, &Some(checkout), manifest_path).await?)
-						} else {
-							// TODO ManifestPath::Remote is an assumption
-							if checkout.exists("esy.json").await {
-								Some(checkout.file_contents("esy.json").await?)
-							} else if checkout.exists("package.json").await {
-								Some(checkout.file_contents("package.json").await?)
+						let contents =
+							if let Some(manifest_path) = esy_spec.meta.manifest_path.as_ref() {
+								Some(
+									Self::manifest_contents(src, &Some(checkout), manifest_path)
+										.await?,
+								)
 							} else {
-								None
-							}
-						};
+								// TODO ManifestPath::Remote is an assumption
+								if checkout.exists("esy.json").await {
+									Some(checkout.file_contents("esy.json").await?)
+								} else if checkout.exists("package.json").await {
+									Some(checkout.file_contents("package.json").await?)
+								} else {
+									None
+								}
+							};
 						contents.map(command::Manifest::Contents)
-					},
+					}
 					None => None,
 				}
-			},
+			}
 
 			PkgType::Opam => {
 				match esy_spec.meta.manifest_path.clone() {
 					// all opams must have an explicit manifest
 					None => None,
 
-					Some(manifest_path) => Some(
-						match manifest_path {
-							ManifestPath::Local(rel_path) => {
-								let opam_path = src.root.join(rel_path);
-								let files_path = opam_path.with_file_name("files");
-								if files_path.exists() {
-									esy_spec.spec.extra.insert("files".to_owned(), Expr::Str(
-										vec!(
-											// TODO is `rootSrc` in scope?
-											StringComponent::Expr(Expr::Identifier("rootSrc".to_owned())),
-											StringComponent::Literal(format!("/{}", files_path.to_string_lossy())),
-										)
-									));
-								}
-								command::Manifest::Path(opam_path.to_string_lossy().to_string())
-							},
-							ManifestPath::Remote(_) => {
-								let checkout = Self::extract(realised_src, esy_spec).await?;
-								command::Manifest::Contents(Self::manifest_contents(src, &checkout, &manifest_path).await?)
-							},
+					Some(manifest_path) => Some(match manifest_path {
+						ManifestPath::Local(rel_path) => {
+							let opam_path = src.root.join(rel_path);
+							let files_path = opam_path.with_file_name("files");
+							if files_path.exists() {
+								esy_spec.spec.extra.insert(
+									"files".to_owned(),
+									Expr::Str(vec![
+										// TODO is `rootSrc` in scope?
+										StringComponent::Expr(Expr::Identifier(
+											"rootSrc".to_owned(),
+										)),
+										StringComponent::Literal(format!(
+											"/{}",
+											files_path.to_string_lossy()
+										)),
+									]),
+								);
+							}
+							command::Manifest::Path(opam_path.to_string_lossy().to_string())
 						}
-					),
+						ManifestPath::Remote(_) => {
+							let checkout = Self::extract(realised_src, esy_spec).await?;
+							command::Manifest::Contents(
+								Self::manifest_contents(src, &checkout, &manifest_path).await?,
+							)
+						}
+					}),
 				}
-			},
+			}
 		};
 		esy_spec.meta.manifest = manifest;
 		Ok(())
@@ -177,8 +187,10 @@ impl EsyLock {
 		match esy_spec.meta.pkg_type()? {
 			PkgType::Opam => {
 				let nix_ctx = eval::Ctx::from_map(PkgType::Opam, &name, &installed.opam);
-				let selected_package = opam_solution.0.get::<str>(name.borrow())
-					.ok_or(anyhow!("opam implementation missing from opam2nix: {:?}", &name))?;
+				let selected_package = opam_solution.0.get::<str>(name.borrow()).ok_or(anyhow!(
+					"opam implementation missing from opam2nix: {:?}",
+					&name
+				))?;
 				let build = opam_manifest::OpamJson(selected_package)
 					.build(&nix_ctx)
 					.with_context(|| format!("evaluating opam package {:?}", &name))?;
@@ -192,7 +204,7 @@ impl EsyLock {
 					None => (),
 					Some(command::Manifest::Path(_)) | Some(command::Manifest::Unknown) => {
 						return Err(anyhow!("Esy package has a local manifest path, this should have been resolved in populate_manifest"));
-					},
+					}
 					Some(command::Manifest::Contents(manifest)) => {
 						let esy = esy_manifest::PackageJson::from_str(&manifest)
 							.with_context(|| format!("deserializing manifest:\n\n{}", &manifest))?;
@@ -249,20 +261,20 @@ impl Backend for EsyLock {
 		match &mut src.root {
 			LockRoot::Github(gh) => {
 				src.relative = format!("{}/index.json", src.relative);
-			},
+			}
 			LockRoot::Path(local_path) => {
 				// For a local path we want to make src root the parent of
 				// the lock dir, because that's where all relative manifest
 				// paths are resolved against.
 				let invalid_lock = || anyhow!("Invalid lock dir: {:?}", &local_path);
-				let lock_dir_name = local_path.file_name()
+				let lock_dir_name = local_path
+					.file_name()
 					.and_then(|p| p.to_str())
 					.ok_or_else(invalid_lock)?;
-				let repo_root_path = local_path.parent()
-					.ok_or_else(invalid_lock)?;
+				let repo_root_path = local_path.parent().ok_or_else(invalid_lock)?;
 				src.relative = format!("{}/{}/index.json", src.relative, lock_dir_name);
 				*local_path = repo_root_path.to_owned();
-			},
+			}
 		}
 		Ok(())
 	}
@@ -283,7 +295,7 @@ impl Backend for EsyLock {
 	}
 
 	async fn finalize(mut self) -> Result<Lock<Self::Spec>> {
-		use opam2nix::{DirectSpec, Request, OpamSource};
+		use opam2nix::{DirectSpec, OpamSource, Request};
 		match self
 			.lockfile
 			.lock
@@ -320,8 +332,6 @@ impl Backend for EsyLock {
 		// let parallelism = 1;
 		// specs.sort_by(|a,b| a.id().cmp(&b.id()));
 
-
-
 		// NOTE: we need two passes over packages to finalize.
 		// On the first pass we fetch all remote manifests (JSON and opam).
 		// Then we run opam2nix extract, and finally
@@ -329,49 +339,54 @@ impl Backend for EsyLock {
 		// extract`, and the second pass can then construct the final build
 		// commands for both esy and opam packages.
 		let src_ref = &self.src;
-		
+
 		let specs = self.lockfile.lock.specs.iter_mut();
 		let stream = futures::stream::iter(specs);
 		foreach_unordered(parallelism, stream, |(key, esy_spec)| {
 			let realised_src = realised_sources.get(key);
 			async move {
-				Self::populate_manifest(
-					src_ref,
-					realised_src,
-					esy_spec,
-				)
-				.await
-				.with_context(|| format!("Populating opam manifest: {:?}", esy_spec))
+				Self::populate_manifest(src_ref, realised_src, esy_spec)
+					.await
+					.with_context(|| format!("Populating opam manifest: {:?}", esy_spec))
 			}
 		})
 		.await?;
-		
-		let opam_specs : Vec<DirectSpec> = self.lockfile.lock.specs.iter().filter_map(|(id, esy_spec)| {
-			let definition = if esy_spec.meta.pkg_type == Some(PkgType::Opam) {
-				match &esy_spec.meta.manifest {
-					None | Some(command::Manifest::Unknown) => None,
-					Some(command::Manifest::Path(p)) => Some(OpamSource::Path(PathBuf::from(p.to_owned()))),
-					Some(command::Manifest::Contents(manifest)) => Some(OpamSource::Contents(manifest.to_owned())),
-				}
-			} else {
-				None
-			};
-			let version = {
-				let version = esy_spec.spec.id.version.as_str();
-				if version.contains(':') || version.contains('/') {
-					"dev"
+
+		let opam_specs: Vec<DirectSpec> = self
+			.lockfile
+			.lock
+			.specs
+			.iter()
+			.filter_map(|(id, esy_spec)| {
+				let definition = if esy_spec.meta.pkg_type == Some(PkgType::Opam) {
+					match &esy_spec.meta.manifest {
+						None | Some(command::Manifest::Unknown) => None,
+						Some(command::Manifest::Path(p)) => {
+							Some(OpamSource::Path(PathBuf::from(p.to_owned())))
+						}
+						Some(command::Manifest::Contents(manifest)) => {
+							Some(OpamSource::Contents(manifest.to_owned()))
+						}
+					}
 				} else {
-					version
+					None
+				};
+				let version = {
+					let version = esy_spec.spec.id.version.as_str();
+					if version.contains(':') || version.contains('/') {
+						"dev"
+					} else {
+						version
+					}
 				}
-			}.to_owned();
-			definition.map(|definition|
-				DirectSpec {
+				.to_owned();
+				definition.map(|definition| DirectSpec {
 					name: esy_spec.spec.id.name.to_string(),
 					version: Some(version),
 					definition,
-				}
-			)
-		}).collect();
+				})
+			})
+			.collect();
 		let opam_request = Request {
 			repositories: Vec::new(),
 			selection: Some(opam_specs),
@@ -427,7 +442,8 @@ impl EsyMeta {
 	}
 
 	fn pkg_type(&self) -> Result<PkgType> {
-		self.pkg_type.ok_or_else(|| anyhow!("pkg_type not populated: {:?}", self))
+		self.pkg_type
+			.ok_or_else(|| anyhow!("pkg_type not populated: {:?}", self))
 	}
 }
 
@@ -590,12 +606,18 @@ impl<'de> Visitor<'de> for EsySpecVisitor {
 				}
 			}
 		}
-		if let Some(EsySrcOpam { name, version, path }) = opam_src {
+		if let Some(EsySrcOpam {
+			name,
+			version,
+			path,
+		}) = opam_src
+		{
 			if let Some(path) = path {
 				if meta.manifest_path.is_some() {
-					return err::into_serde(
-						Err(anyhow!("package {:?} has both a manifest path and an opam path", &name))
-					);
+					return err::into_serde(Err(anyhow!(
+						"package {:?} has both a manifest path and an opam path",
+						&name
+					)));
 				}
 				meta.manifest_path = Some(ManifestPath::Local(path));
 			}

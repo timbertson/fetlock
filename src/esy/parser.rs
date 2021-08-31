@@ -192,26 +192,6 @@ impl<'a> StringAtom<'a> {
 
 pub type OpamSC<'a> = StringComponentOf<Value<'a>>;
 
-// <comment>       ::= ( "(*" { <char> }* "*)" ) | ( "#" { <char\newline> }* <newline> )
-fn ocaml_comment(s: Src) -> Res<()> {
-	discard(tuple((tag("(*"), many_till(anychar, tag("*)")))))(s)
-}
-
-fn newline_or_eof(s: Src) -> Res<()> {
-	discard(alt((tag("\n"), eof)))(s)
-}
-
-fn line_comment(s: Src) -> Res<()> {
-	discard(tuple((
-		char('#'),
-		many0(satisfy(|ch| ch != '\n')),
-		newline_or_eof,
-	)))(s)
-}
-fn comment(s: Src) -> Res<()> {
-	alt((ocaml_comment, line_comment))(s)
-}
-
 fn ws<'a, F: 'a, O>(inner: F) -> impl FnMut(Src<'a>) -> Res<O>
 where
 	F: SrcParser<'a, O>,
@@ -221,7 +201,7 @@ where
 
 /// We discard comments anywhere whitespace is allowed
 fn filler(s: Src) -> Res<()> {
-	discard(many0(alt((discard(space1), discard(newline), comment))))(s)
+	discard(many0(alt((discard(space1), discard(newline)))))(s)
 }
 
 fn discard<'a, F: 'a, O>(inner: F) -> impl FnMut(Src<'a>) -> Res<()>
@@ -454,32 +434,6 @@ mod dialect {
 pub mod opam {
 	use super::*;
 
-	// <value>         ::= <bool> | <int> | <string> | <ident> | <varident>
-	//                   | <operator> | <list> | <option> | "(" <value> ")"
-	// For convenience, value is also used to express filters & dependency filters:
-	//
-	// <filter> ::= <filter> <logop> <filter>
-	//            | "!" <filter>
-	//            | "?" <filter>
-	//            | ( <filter> )
-	//            | <filter> <relop> <filter>
-	//            | <varident>
-	//            | <string>
-	//            | <int>
-	//            | <bool>
-	//
-	// <filtered-package-formula> ::= <filtered-package-formula> <logop> <filtered-package-formula>
-	//                              | ( <filtered-package-formula> )
-	//                              | <pkgname> { { <filtered-version-formula> }* }
-	//
-	// <filtered-version-formula> ::= <filtered-version-formula> <logop> <filtered-version-formula>
-	//                              | "!" <filtered-version-formula>
-	//                              | "?" <filtered-version-formula>
-	//                              | "(" <filtered-version-formula> ")"
-	//                              | <relop> <version>
-	//                              | <filter>
-	//                              | <relop> <filter>
-	//
 	pub fn base(s: Src) -> Res<Value> {
 		alt((map(string, Value::String), map(varident, Value::Varident)))(s)
 	}
@@ -514,85 +468,13 @@ pub mod opam {
 		context("string", alt((triplequote_string, quote_string)))(s)
 	}
 
-	#[derive(Clone, Debug, PartialEq, Eq)]
-	pub struct FieldBinding<'a> {
-		pub ident: Src<'a>,
-		pub value: Value<'a>,
-	}
-
-	// <field-binding> ::= <ident> : <value>
-	pub fn field_binding(s: Src) -> Res<FieldBinding> {
-		context(
-			"field_binding",
-			map(
-				separated_pair(ident, context("colon", ws(char(':'))), ws(value)),
-				|(ident, value)| FieldBinding { ident, value },
-			),
-		)(s)
-	}
-
-	#[derive(Clone, Debug, PartialEq, Eq)]
-	pub enum FileItem<'a> {
-		Section(Section<'a>),
-		FieldBinding(FieldBinding<'a>),
-	}
-
-	#[derive(Clone, Debug, PartialEq, Eq)]
-	pub struct Section<'a> {
-		pub ident: Src<'a>,
-		pub string: Option<Vec<OpamSC<'a>>>,
-		pub contents: Vec<FileItem<'a>>,
-	}
-	// <section>       ::= <ident> [ <string> ] "{" <file-contents> "}"
-	fn section(s: Src) -> Res<Section> {
-		map(
-			tuple((
-				ident,
-				ws(opt(string)),
-				delimited(ws(char('{')), file_contents, ws(char('}'))),
-			)),
-			|(ident, string, contents)| Section {
-				ident,
-				string,
-				contents,
-			},
-		)(s)
-	}
-
-	// <file-contents> ::= { <file-item> }*
-	// <file-item>     ::= <field-binding> | <section>
-	fn file_contents(s: Src) -> Res<Vec<FileItem>> {
-		many0(alt((
-			map(field_binding, FileItem::FieldBinding),
-			map(section, FileItem::Section),
-		)))(s)
-	}
-
-	#[derive(Clone, Debug, PartialEq, Eq)]
-	pub enum Term<'a> {
-		String(Vec<OpamSC<'a>>),
-		Varident(Varident<'a>),
-	}
-	// <term>          ::= <string> | <varident>
-	fn term(s: Src) -> Res<Term> {
-		alt((map(string, Term::String), map(varident, Term::Varident)))(s)
-	}
-
-	pub fn entire_file(s: Src) -> Res<Vec<FileItem>> {
-		all_consuming(ws(file_contents))(s)
-	}
-
 	fn string_char(s: Src) -> Res<char> {
 		alt((none_of("\"\\"), escaped_char))(s)
 	}
 
 	// <string>        ::= ( (") { <char> }* (") ) | ( (""") { <char> }* (""") )
 	pub fn quote_string(s: Src) -> Res<Vec<OpamSC>> {
-		delimited(
-			char('"'),
-			string_inner,
-			char('"'),
-		)(s)
+		delimited(char('"'), string_inner, char('"'))(s)
 	}
 
 	fn string_inner(s: Src) -> Res<Vec<OpamSC>> {
@@ -736,37 +618,12 @@ mod tests {
 	}
 
 	#[test]
-	fn test_field_binding() {
-		use opam::*;
-		valid(field_binding, r#"foo: """hello""""#);
-		valid(field_binding, r#"foo: "hello""#);
-		valid(field_binding, r#"foo: true"#);
-	}
-
-	#[test]
 	fn test_list() {
 		use opam::*;
 		valid(list, "[1]");
 		valid(list, "[1 2 3]");
 		valid(list, "[]");
 		valid(list, "[ 1 true \"foo\" ]");
-	}
-
-	#[test]
-	fn test_comment() {
-		valid(ocaml_comment, "(* ocaml comment *)");
-		valid(comment, "(* hi *)");
-		valid(comment, "# hi");
-		valid(ws(bool_), "true # hi");
-		valid(
-			ws(bool_),
-			r#"#initial
-      (* pre-comment *)
-      # another comment
-      true
-      (* more comments *)
-      "#,
-		);
 	}
 
 	#[test]
@@ -833,87 +690,5 @@ mod tests {
       "ocamlfind" {dev & >= "1.7.3-1"}
     ]"#,
 		);
-	}
-
-	#[test]
-	fn test_entire_file() {
-		use opam::*;
-		valid(entire_file, r#"foo: """hello""""#);
-		valid(entire_file, r#"foo: true"#);
-		valid(entire_file, r#"description: """desc""""#);
-		valid(
-			entire_file,
-			r#"
-      build: [ "dune" "runtest" "-p" name ] {with-test & ocaml:version >= "4.07.0"}
-    "#,
-		);
-		valid(
-			entire_file,
-			r#"
-      depends: [
-        "mdx" {with-test & >= "1.4" & < "1.6" }
-      ]
-    "#,
-		);
-		valid(entire_file, r#"
-#leading comment
-opam-version: "2.0"
-synopsis: "Promises and event-driven I/O"
-description: """\
-A promise is a value that may become determined in the future.
-
-Lwt provides typed, composable promises. Promises that are resolved by I/O are
-resolved by Lwt in parallel.
-
-Meanwhile, OCaml code, including code creating and waiting on promises, runs in
-a single thread by default. This reduces the need for locks or other
-synchronization primitives. Code can be run in parallel on an opt-in basis."""
-maintainer: [
-  "Raphaël Proust <code@bnwr.net>" "Anton Bachin <antonbachin@yahoo.com>"
-]
-authors: ["Jérôme Vouillon" "Jérémie Dimino"]
-license: "MIT"
-homepage: "https://github.com/ocsigen/lwt"
-doc: "https://ocsigen.org/lwt"
-bug-reports: "https://github.com/ocsigen/lwt/issues"
-depends: [
-  "cppo" {build & >= "1.1.0"}
-  "dune" {>= "1.8.0"}
-  "dune-configurator"
-  "mmap" {>= "1.1.0"}
-  "ocaml" {>= "4.02.0"}
-  ("ocaml" {>= "4.08.0"} | "ocaml-syntax-shims")
-  "ocplib-endian"
-  "result"
-  "seq"
-  "ocamlfind" {dev & >= "1.7.3-1"}
-]
-depopts: ["base-threads" "base-unix" "conf-libev"]
-conflicts: [
-  "ocaml-variants" {= "4.02.1+BER"}
-]
-build: [
-  [
-    "dune"
-    "exec"
-    "-p"
-    name
-    "src/unix/config/discover.exe"
-    "--"
-    "--save"
-    "--use-libev"
-    "%{conf-libev:installed}%"
-  ]
-  ["dune" "build" "-p" name "-j" jobs]
-]
-dev-repo: "git+https://github.com/ocsigen/lwt.git"
-url {
-  src: "https://github.com/ocsigen/lwt/archive/5.4.0.zip"
-  checksum: [
-    "md5=fc4721bdb1a01225b96e3a2debde95fa"
-    "sha512=e427f08223b77f9af696c9e6f90ff68e27e02e446910ef90d3da542e7b00bf23dd191ac77c1871288faa2289f8d28fc2f44efc3d3fe9165fe1c7a6be88ee49ff"
-  ]
-}
-    "#.trim());
 	}
 }

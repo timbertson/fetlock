@@ -21,7 +21,9 @@ pub enum OpamSource {
 
 impl serde::Serialize for OpamSource {
 	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-	where S: serde::Serializer {
+	where
+		S: serde::Serializer,
+	{
 		use serde::ser::*;
 		match self {
 			Self::Path(path) => path.serialize(serializer),
@@ -29,7 +31,7 @@ impl serde::Serialize for OpamSource {
 				let mut s = serializer.serialize_struct("opam_source", 1)?;
 				s.serialize_field("contents", &contents)?;
 				s.end()
-			},
+			}
 		}
 	}
 }
@@ -95,6 +97,7 @@ pub async fn solve(request: &Request) -> Result<Solution> {
 		"opam2nix extract",
 		Some(&serialized_request),
 		process::Command::new("opam2nix").arg("extract"),
-	).await?;
+	)
+	.await?;
 	Ok(serde_json::from_str(&contents)?)
 }

@@ -1,8 +1,8 @@
 // nix wrapper for build instructions extracted from a manifest,
 // whether that be `esy`, `opam` or `npm`
 
-use crate::esy::eval::{Eval, NixCtx};
-use crate::esy::parser::Value;
+use crate::opam::eval::{Eval, NixCtx};
+use crate::opam::parser::Value;
 use crate::opam::opam2nix::Depexts;
 use crate::{Expr, StringComponent};
 use anyhow::*;

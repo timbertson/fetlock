@@ -1,7 +1,7 @@
-use crate::esy::build::*;
-use crate::esy::eval::*;
-use crate::esy::parser;
-use crate::esy::parser::Value;
+use crate::opam::build::*;
+use crate::opam::eval::*;
+use crate::opam::parser;
+use crate::opam::parser::Value;
 use crate::{Expr, StringComponent};
 use anyhow::*;
 use lazy_static::lazy_static;
@@ -9,6 +9,12 @@ use serde::de::*;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::fmt;
+
+#[derive(Debug, Clone)]
+pub enum Manifest {
+	Path(String),
+	Contents(String),
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct PackageJson {

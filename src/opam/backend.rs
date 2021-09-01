@@ -2,12 +2,12 @@
 // so we lean on `opam2nix extract` to solve
 use log::*;
 use std::collections::HashMap;
-use crate::esy::build::PkgType;
-use crate::esy::eval;
+use crate::opam::build::PkgType;
+use crate::opam::eval;
 use crate::opam::opam2nix;
 use crate::cache::CachedRepo;
 use crate::nix_serialize::{WriteContext, Writeable};
-use crate::esy::opam_manifest::OpamJson;
+use crate::opam::opam_manifest::OpamJson;
 use crate::*;
 use anyhow::*;
 use async_trait::async_trait;

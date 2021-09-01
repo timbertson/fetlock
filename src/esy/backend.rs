@@ -1,8 +1,10 @@
 // esy.lock backend
 
-use crate::esy::build::PkgType;
-use crate::esy::eval::Pkg;
-use crate::esy::{command, esy_manifest, eval, opam_manifest};
+use crate::opam::build::PkgType;
+use crate::opam::eval::Pkg;
+use crate::opam::{eval, opam_manifest};
+use crate::esy::{esy_manifest};
+use crate::esy::esy_manifest::Manifest;
 use crate::fetch;
 use crate::nix_serialize::{WriteContext, Writeable};
 use crate::opam::opam2nix;
@@ -129,7 +131,7 @@ impl EsyLock {
 									None
 								}
 							};
-						contents.map(command::Manifest::Contents)
+						contents.map(Manifest::Contents)
 					}
 					None => None,
 				}
@@ -159,11 +161,11 @@ impl EsyLock {
 									]),
 								);
 							}
-							command::Manifest::Path(opam_path.to_string_lossy().to_string())
+							Manifest::Path(opam_path.to_string_lossy().to_string())
 						}
 						ManifestPath::Remote(_) => {
 							let checkout = Self::extract(realised_src, esy_spec).await?;
-							command::Manifest::Contents(
+							Manifest::Contents(
 								Self::manifest_contents(src, &checkout, &manifest_path).await?,
 							)
 						}
@@ -202,10 +204,10 @@ impl EsyLock {
 				// an `esy` property in them
 				match esy_spec.meta.manifest.as_ref() {
 					None => (),
-					Some(command::Manifest::Path(_)) | Some(command::Manifest::Unknown) => {
+					Some(Manifest::Path(_)) => {
 						return Err(anyhow!("Esy package has a local manifest path, this should have been resolved in populate_manifest"));
 					}
-					Some(command::Manifest::Contents(manifest)) => {
+					Some(Manifest::Contents(manifest)) => {
 						let esy = esy_manifest::PackageJson::from_str(&manifest)
 							.with_context(|| format!("deserializing manifest:\n\n{}", &manifest))?;
 						debug!("esy manifest: {:?}", &esy);
@@ -360,11 +362,11 @@ impl Backend for EsyLock {
 			.filter_map(|(id, esy_spec)| {
 				let definition = if esy_spec.meta.pkg_type == Some(PkgType::Opam) {
 					match &esy_spec.meta.manifest {
-						None | Some(command::Manifest::Unknown) => None,
-						Some(command::Manifest::Path(p)) => {
+						None => None,
+						Some(Manifest::Path(p)) => {
 							Some(OpamSource::Path(PathBuf::from(p.to_owned())))
 						}
-						Some(command::Manifest::Contents(manifest)) => {
+						Some(Manifest::Contents(manifest)) => {
 							Some(OpamSource::Contents(manifest.to_owned()))
 						}
 					}
@@ -429,7 +431,7 @@ enum ManifestPath {
 struct EsyMeta {
 	pkg_type: Option<PkgType>,
 	manifest_path: Option<ManifestPath>,
-	manifest: Option<command::Manifest>,
+	manifest: Option<Manifest>,
 }
 
 impl EsyMeta {

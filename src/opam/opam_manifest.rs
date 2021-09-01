@@ -1,12 +1,11 @@
-// TODO move into opam
-use crate::esy::build::*;
-use crate::esy::eval::*;
-use crate::esy::parser;
-use crate::esy::parser::*;
+use crate::opam::build::*;
+use crate::opam::eval::*;
+use crate::opam::parser;
+use crate::opam::parser::*;
 use crate::opam::opam2nix::{Command, SelectedPackage};
 use anyhow::*;
 
-// OPAM file as serialized by opam2nix (JSON)
+// OPAM file as serialized by opam2nix extract (JSON)
 pub struct OpamJson<'a>(pub &'a SelectedPackage);
 impl<'a> OpamJson<'a> {
 	fn parse_str<'s>(s: &'s str) -> Result<Value<'s>> {

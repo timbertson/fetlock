@@ -1,4 +1,4 @@
-use crate::esy::eval::{Eval, NixCtx};
+use crate::opam::eval::{Eval, NixCtx};
 use crate::expr::{Expr, StringComponentOf};
 pub use crate::nom_util::*;
 use anyhow::*;

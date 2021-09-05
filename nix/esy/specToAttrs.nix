@@ -2,31 +2,20 @@ final: prev:
 with prev.pkgs.lib;
 let
   util = prev.pkgs.callPackage ../util.nix {};
-  addHooks = import ./hooks.nix final prev;
+  ocamlCommon = prev.pkgs.callPackage ../ocamlCommon.nix;
   stdenv = prev.pkgs.stdenv;
-  # too inconvenient to declare as a dependency, just include it always
-  commonBuildDeps = [ prev.pkgs.which ];
-
-  copyFilesHook = prev.makeHook "copy-files" ''
-    function copyOpamFiles {
-      echo "+ copyOpamFiles"
-      cp -r --no-preserve=mode --dereference -v $files/. ./
-    }
-    preBuildHooks+=(copyOpamFiles)
-  '';
-  
-  getDepext = p: getAttrFromPath (splitString "." p) final.pkgs;
+  hooks = import ./hooks.nix final prev;
 in
 {
   key, pname, version,
   depKeys,
   src ? prev.emptyDrv,
-  build ? { mode = "esy"; }, #TODO: after we support link-dev, use abort "no build instructions passed for derivation ${key}"
+  build ? abort "No build instructions passed for esy package ${key}",
   buildInputs ? [],
   opamName ? null,
   files ? null,
 }@spec:
-  let finalBuild = util.populateBuildPhases build; in addHooks build.mode ({
+  let finalBuild = util.populateBuildPhases build; in hooks.extend build.mode ({
     inherit pname version depKeys src;
     configurePhase = "true";
     inherit (finalBuild) installPhase;
@@ -44,14 +33,12 @@ in
         else ""
       );
 
-    # TODO don't need to include ocaml as dependency if it's a node package
-    # TODO which deps can we get away with not propagating?
     propagatedBuildInputs =
       (map final.getDrv depKeys) ++
-      (map getDepext (build.depexts or []));
+      (build.depexts or []);
  
-    buildInputs = buildInputs ++ commonBuildDeps
-      ++ (if files != null then [ copyFilesHook ] else [])
+    buildInputs = buildInputs
+      ++ (if files != null then [ hooks.copyFilesHook ] else [])
       ++ (if build ? exportedEnv
         then [ (final.exportEnvHook { inherit pname; inherit (build) exportedEnv; }) ]
         else []);

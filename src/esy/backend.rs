@@ -298,23 +298,15 @@ impl Backend for EsyLock {
 
 	async fn finalize(mut self) -> Result<Lock<Self::Spec>> {
 		use opam2nix::{DirectSpec, OpamSource, Request};
-		match self
+
+		if let None = self
 			.lockfile
 			.lock
 			.specs
 			.iter()
 			.find(|(key, esy_spec)| esy_spec.spec.id.name == "ocaml")
 		{
-			Some((key, esy_spec)) => {
-				self.lockfile
-					.lock
-					.context
-					.extra
-					.insert("ocaml".to_owned(), Expr::get_drv(key.to_string()));
-			}
-			None => {
-				warn!("no `ocaml` implementation found, you will need to supply one at import time")
-			}
+			warn!("no `ocaml` implementation found, you will need to supply one at import time")
 		}
 
 		let realised_sources = fetch::realise_sources(
@@ -390,6 +382,7 @@ impl Backend for EsyLock {
 			})
 			.collect();
 		let opam_request = Request {
+			ocaml_version: None,
 			repositories: Vec::new(),
 			selection: Some(opam_specs),
 			spec: None,

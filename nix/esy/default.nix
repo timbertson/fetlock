@@ -2,19 +2,11 @@
 with lib;
 let
   core = pkgs.callPackage ../core.nix {};
+  ocamlCommon = pkgs.callPackage ./ocamlCommon.nix {};
 
   base = final: prev: {
     # esy expects `linux` / `windows` anything else probably won't work
     os = stdenv.buildPlatform.parsed.kernel.name;
-    siteLib = prefix: "${prefix}/lib/ocaml/${final.ocaml.version}/site-lib";
-    specToAttrs = import ./specToAttrs.nix final prev;
-    ocaml = final.context.ocaml or (abort ''
-
-      ERROR: No ocaml version present in lockfile.
-      If you still want to build this expression,
-      you will need to set the root `ocaml` attribute
-      in your override.
-    '');
 
     # TODO this will interfere with genuine configure phases, but we don't have any yet
     disableConfigureHook = final.makeHook "disable-configure" ''
@@ -55,5 +47,5 @@ let
 
 in core.makeAPI {
   pkgOverrides = import ./overrides.nix;
-  overlays = [ base ];
+  overlays = [ ocamlCommon.oberlay base ];
 }

@@ -46,12 +46,16 @@ pub struct DirectSpec {
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct SolveSpec {
 	pub name: String,
-	pub definition: OpamSource,
-}
 
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub constraints: Option<Vec<(&'static str, String)>>,
+
+	pub definition: Option<OpamSource>,
+}
 
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct Request {
+	pub ocaml_version: Option<String>,
 	pub repositories: Vec<Repository>,
 	pub spec: Option<Vec<SolveSpec>>,
 	pub selection: Option<Vec<DirectSpec>>,
@@ -91,7 +95,7 @@ pub struct SelectedPackage {
 	pub src: Option<Src>,
 
 	#[serde(default)]
-	pub depends: Vec<String>,
+	pub depends: Vec<Key>,
 
 	#[serde(default)]
 	pub depexts: Depexts,
@@ -112,5 +116,6 @@ pub async fn solve(request: &Request) -> Result<Solution> {
 		process::Command::new("opam2nix").arg("extract"),
 	)
 	.await?;
+	debug!("response: {}", &contents);
 	Ok(serde_json::from_str(&contents)?)
 }

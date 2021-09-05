@@ -29,7 +29,7 @@ impl Backend for OpamLock {
 	type Spec = OpamSpec;
 
 	async fn load(src: &LocalSrc, opts: CliOpts) -> Result<Self> {
-		use opam2nix::{SolveSpec, OpamSource, Repository, Request};
+		use opam2nix::{SolveSpec, OpamSource, Repository, Request, SelectedPackage};
 		let context = LockContext::new(lock::Type::Opam);
 		let opam_path = src.lock_path();
 
@@ -53,16 +53,20 @@ impl Backend for OpamLock {
 
 		let opam_repo = CachedRepo::cache(&opts, &opam_repo_git).await?;
 
+		let specs = vec!(SolveSpec {
+			name: package_name_str.to_owned(),
+			constraints: None,
+			definition: Some(OpamSource::Path(opam_path)),
+		});
+
 		let request = Request {
+			ocaml_version: opts.ocaml_version,
 			repositories: vec![Repository {
 				id: "opam".to_owned(),
 				path: opam_repo.path.clone(),
 			}],
 			selection: None,
-			spec: Some(vec![SolveSpec {
-				name: package_name_str.to_owned(),
-				definition: OpamSource::Path(opam_path),
-			}]),
+			spec: Some(specs),
 		};
 
 		let mut solution = opam2nix::solve(&request).await?;
@@ -75,15 +79,9 @@ impl Backend for OpamLock {
 			let name = Name(name.to_owned());
 			(name.clone(), eval::Pkg { name, key })
 		}).collect();
-			
+
 		for (name_str, selection) in solution.0.drain() {
 			let mut spec = PartialSpec::empty();
-			spec.set_src(match &selection.src {
-				Some(src) => Src::Archive(Url::new(src.url.clone())),
-				None => Src::None,
-			});
-			spec.id.set_name(name_str.clone());
-			spec.id.set_version(selection.version.clone());
 
 			let name = Name(name_str.to_owned());
 			let nix_ctx = eval::Ctx::from_map(PkgType::Opam, &name, &installed);
@@ -92,6 +90,25 @@ impl Backend for OpamLock {
 				.with_context(|| format!("evaluating opam package {:?}", &name))?;
 			debug!(" -> as nix: {:?}", build);
 			spec.extra.insert("build".to_owned(), build.expr());
+
+			let SelectedPackage {
+				version,
+				repository,
+				src,
+				mut depends,
+				depexts,
+				build_commands: _,
+				install_commands: _,
+			} = selection;
+
+			spec.set_src(match src {
+				Some(src) => Src::Archive(Url::new(src.url.clone())),
+				None => Src::None,
+			});
+			spec.id.set_name(name_str.clone());
+			spec.id.set_version(version);
+
+			spec.add_deps(&mut depends);
 
 			lock.add_impl(
 				Key::new(name_str.clone()),

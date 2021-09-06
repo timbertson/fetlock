@@ -1,7 +1,8 @@
 // opam backend. Note that opam doesn't have a builtin lock file,
 // so we lean on `opam2nix extract` to solve
 use log::*;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+use crate::cache;
 use crate::opam::build::PkgType;
 use crate::opam::eval;
 use crate::opam::opam2nix;
@@ -19,6 +20,25 @@ pub struct OpamSpec {
 	spec: Spec,
 }
 
+impl OpamSpec {
+	async fn finalize(&mut self) -> Result<()> {
+		// TODO add `files` attribute
+		Ok(())
+	}
+}
+
+#[derive(Clone, Debug)]
+pub struct OpamRepository {
+	src: Src,
+	digest: Sha256,
+}
+
+impl OpamRepository {
+	fn as_expr(&self) -> Expr {
+		SrcDigest::new(&self.src, &self.digest).as_expr()
+	}
+}
+
 #[derive(Clone, Debug)]
 pub struct OpamLock {
 	lock: Lock<OpamSpec>,
@@ -30,7 +50,6 @@ impl Backend for OpamLock {
 
 	async fn load(src: &LocalSrc, opts: CliOpts) -> Result<Self> {
 		use opam2nix::{SolveSpec, OpamSource, Repository, Request, SelectedPackage};
-		let context = LockContext::new(lock::Type::Opam);
 		let opam_path = src.lock_path();
 
 		let filename = opam_path
@@ -53,6 +72,18 @@ impl Backend for OpamLock {
 
 		let opam_repo = CachedRepo::cache(&opts, &opam_repo_git).await?;
 
+		let mut repositories = BTreeMap::new();
+		repositories.insert("opam".to_owned(),
+			OpamRepository {
+				src: Src::Github(Github {
+					repo: opam_repo_git,
+					git_ref: opam_repo.commit.clone(),
+					fetch_submodules: false,
+				}),
+				digest: opam_repo.digest().await?,
+			}.as_expr()
+		);
+
 		let specs = vec!(SolveSpec {
 			name: package_name_str.to_owned(),
 			constraints: None,
@@ -72,6 +103,7 @@ impl Backend for OpamLock {
 		let mut solution = opam2nix::solve(&request).await?;
 
 		let mut lock: Lock<OpamSpec> = Lock::<OpamSpec>::new(LockContext::new(lock::Type::Opam));
+		lock.context.extra.insert("repositories".to_owned(), Expr::AttrSet(repositories));
 		lock.set_root(Root::Package(package_name));
 
 		let installed: HashMap<Name, eval::Pkg> = solution.0.iter().map(|(name, selection)| {
@@ -79,6 +111,9 @@ impl Backend for OpamLock {
 			let name = Name(name.to_owned());
 			(name.clone(), eval::Pkg { name, key })
 		}).collect();
+
+		let mut repository_caches = HashMap::new();
+		repository_caches.insert("opam".to_owned(), &opam_repo);
 
 		for (name_str, selection) in solution.0.drain() {
 			let mut spec = PartialSpec::empty();
@@ -101,14 +136,30 @@ impl Backend for OpamLock {
 				install_commands: _,
 			} = selection;
 
+			spec.id.set_name(name_str.clone());
+			spec.id.set_version(version.clone());
 			spec.set_src(match src {
 				Some(src) => Src::Archive(Url::new(src.url.clone())),
 				None => Src::None,
 			});
-			spec.id.set_name(name_str.clone());
-			spec.id.set_version(version);
 
 			spec.add_deps(&mut depends);
+			if let Some(repository) = repository {
+				let cache = repository_caches.get(&repository).ok_or(anyhow!("opam2nix returned unknown repository"))?;
+				let files_rel = format!("packages/{}/{}.{}/files", &name_str, &name_str, &version);
+				let local_path = cache.path.join(&files_rel);
+				if local_path.exists() {
+					debug!("Adding files path {:?} from repository `{}`", &files_rel, repository);
+					let hash = cache::nix_digest_of_path(local_path).await?;
+					spec.extra.insert("files".to_owned(), Expr::fun_call(Expr::Literal("final.subtree".to_owned()), vec!(
+						Expr::AttrSet(vec![
+							("base".to_owned(), Expr::Literal(format!("final.repositories.{}", repository))),
+							("path".to_owned(), Expr::Literal(files_rel)),
+							("hash".to_owned(), Expr::Literal(hash.into_string())),
+						].into_iter().collect::<BTreeMap<String,Expr>>())
+					)));
+				}
+			}
 
 			lock.add_impl(
 				Key::new(name_str.clone()),
@@ -125,6 +176,7 @@ impl Backend for OpamLock {
 	}
 
 	async fn finalize(mut self) -> Result<Lock<Self::Spec>> {
+		// add `files` expression for all repo-based packages with an adjacent files directory
 		Ok(self.lock)
 	}
 }

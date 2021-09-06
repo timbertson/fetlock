@@ -13,6 +13,12 @@ use std::time::SystemTime;
 use tokio::process::Command;
 use tokio::sync::Mutex;
 
+/*
+ * Cache is useful for tracking a floating HEAD of tracked repositories
+ * (used for global repositories like opam)
+ * It can also compute the nix digest of any path, for constructing fixed-output derivations.
+ */
+
 const SECONDS_PER_DAY: u64 = 60 * 60 * 24;
 
 pub fn cache_root() -> PathBuf {
@@ -32,6 +38,7 @@ pub fn cache_hash(src: &str) -> String {
 
 pub struct CachedRepo {
 	pub path: PathBuf,
+	pub commit: String,
 	pub src: Src,
 	digest: Rc<Mutex<Memoize<Option<Sha256>>>>,
 }
@@ -128,6 +135,7 @@ impl CachedRepo {
 			})
 		};
 		Ok(CachedRepo {
+			commit: head_rev.to_owned(),
 			src: src.src_for_rev(head_rev),
 			path: repo_path,
 			digest: Rc::new(Mutex::new(Memoize::new(Box::pin(lazy_digest)))),

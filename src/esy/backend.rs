@@ -150,9 +150,9 @@ impl EsyLock {
 								esy_spec.spec.extra.insert(
 									"files".to_owned(),
 									Expr::Str(vec![
-										// TODO is `rootSrc` in scope?
-										StringComponent::Expr(Expr::Identifier(
-											"rootSrc".to_owned(),
+										// TODO I think this needs to be a call to `subtree` to deal with archives
+										StringComponent::Expr(Expr::Literal(
+											"final.rootAttrs.src".to_owned(),
 										)),
 										StringComponent::Literal(format!(
 											"/{}",

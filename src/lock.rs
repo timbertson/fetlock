@@ -295,6 +295,43 @@ impl SrcDigest<'_> {
 	pub fn new<'a>(src: &'a Src, digest: &'a Sha256) -> SrcDigest<'a> {
 		SrcDigest { src, digest }
 	}
+
+	pub fn as_expr(&self) -> Expr {
+		let SrcDigest { src, digest } = self;
+		match src {
+			Src::Github(github) => {
+				let Github {
+					repo: GithubRepo { owner, repo },
+					git_ref,
+					fetch_submodules,
+				} = github;
+				let mut attrs = vec![
+					("owner", Expr::str(owner.to_owned())),
+					("repo", Expr::str(repo.to_owned())),
+					("rev", Expr::str(git_ref.to_owned())),
+					("sha256", Expr::str(digest.to_string())),
+				];
+				if *fetch_submodules {
+					attrs.push(("fetchSubmodules", Expr::Bool(true)));
+				}
+
+				Expr::fun_call(
+					Expr::Literal("fetchFromGitHub".to_owned()),
+					vec!(Expr::attr_set(attrs))
+				)
+			}
+			Src::Archive(url) => {
+				Expr::fun_call(
+					Expr::Literal("pkgs.fetchurl".to_owned()),
+					vec!(Expr::attr_set(vec![
+						("url", Expr::str(url.0.clone())),
+						("sha256", Expr::str(digest.to_string())),
+					]))
+				)
+			}
+			Src::None => Expr::Null, // TODO better error reporting, assert?
+		}
+	}
 }
 
 pub trait AsSpec: Writeable + BorrowMut<Spec> + Debug + Clone {

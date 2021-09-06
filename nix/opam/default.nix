@@ -5,8 +5,11 @@ with lib;
 let
   core = pkgs.callPackage ../core.nix {};
   ocamlCommon = pkgs.callPackage ../esy/ocamlCommon.nix {};
+	overlay = final: prev: {
+		repositories = final.context.repositories;
+	};
 
 in core.makeAPI {
   pkgOverrides = import ../esy/overrides.nix;
-  overlays = [ ocamlCommon.overlay ];
+  overlays = [ ocamlCommon.overlay overlay ];
 }

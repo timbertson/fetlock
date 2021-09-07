@@ -316,7 +316,7 @@ impl SrcDigest<'_> {
 				}
 
 				Expr::fun_call(
-					Expr::Literal("fetchFromGitHub".to_owned()),
+					Expr::Literal("pkgs.fetchFromGitHub".to_owned()),
 					vec!(Expr::attr_set(attrs))
 				)
 			}

@@ -46,6 +46,6 @@ let
   };
 
 in core.makeAPI {
-  pkgOverrides = import ./overrides.nix;
+  pkgOverrides = self: (ocamlCommon.overrides self) ++ (import ./overrides.nix self);
   overlays = [ ocamlCommon.oberlay base ];
 }

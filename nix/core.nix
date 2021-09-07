@@ -112,9 +112,11 @@ let
 							# Utilities for overriding the result derivation set.
 							inherit overrideAll;
 
+							# overrideDrv: each attr is a function taking old drv and returning new
 							overrideDrv = attrs:
 								overrideOnly attrs (fn: drv: fn drv);
 
+							# overrideDrv: each attr is a function taking oldAttrs and returning newAttrs
 							overrideAttrs = attrs:
 								overrideOnly attrs (fn: drv: drv.overrideAttrs fn);
 
@@ -128,6 +130,8 @@ let
 									propagatedBuildInputs = (o.propagatedBuildInputs or []) ++ extra;
 								}));
 
+							# overrideSpec: each attr is a function taking oldSpec and returning newSpec
+							# (spec is the fetlock concept, i.e. the representation in lock.nix)
 							overrideSpec = attrs:
 								overrideOnly attrs (fn: drv: drv.overrideSpec fn);
 						};

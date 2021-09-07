@@ -170,12 +170,12 @@ pub async fn nix_digest_of_path<P: AsRef<Path>>(path: P) -> Result<Sha256> {
 
 // rev could be a reference, but it makes the actual usage awkward
 pub async fn nix_digest_of_git_repo<P: AsRef<Path>>(path: P, rev: String) -> Result<Sha256> {
-	info!("exporting {:?}#{}", path.as_ref(), rev);
+	info!("exporting {:?} revision {}", path.as_ref(), rev);
 	let tmp_dir = tempdir::TempDir::new("fetlock-export")?;
 	cmd::exec(
 		Command::new("bash")
 			.arg("-euc")
-			.arg("git -C \"$REPO\" archive \"$REV\" | tar x -C \"EX$TRACT\"")
+			.arg("git -C \"$REPO\" archive \"$REV\" | tar x -C \"$EXTRACT\"")
 			.env("REPO", path.as_ref())
 			.env("REV", rev)
 			.env("EXTRACT", tmp_dir.path()),

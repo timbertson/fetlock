@@ -110,10 +110,16 @@ pub struct Solution(pub HashMap<String, SelectedPackage>);
 pub async fn solve(request: &Request) -> Result<Solution> {
 	let serialized_request = serde_json::to_string_pretty(&request)?;
 	info!("invoking opam solver");
+
+	let mut command = process::Command::new("opam2nix");
+	command.arg("extract");
+	if log_enabled!(log::Level::Debug) {
+		command.env("OPAM2NIX_VERBOSE", "1");
+	}
 	let contents = cmd::run_stdout(
 		"opam2nix extract",
 		Some(&serialized_request),
-		process::Command::new("opam2nix").arg("extract"),
+		&mut command,
 	)
 	.await?;
 	debug!("response: {}", &contents);

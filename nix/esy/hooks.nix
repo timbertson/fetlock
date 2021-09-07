@@ -1,5 +1,5 @@
 final: prev: {
-  copyFilesHook = prev.pkgs.makeHook "copy-files" ''
+  copyFilesHook = final.makeHook "copy-files" ''
     function copyOpamFiles {
       echo "+ copyOpamFiles"
       cp -r --no-preserve=mode --dereference -v $files/. ./
@@ -23,7 +23,7 @@ final: prev: {
       # one along here.
       opam-installer = pkgs.opam.installer;
 
-      path = prev.makeHook "ocaml-path-hooks" ''
+      path = final.makeHook "ocaml-path-hooks" ''
         function ocamlPathSetup {
           local libPath="lib/ocaml/${final.ocaml.version}/site-lib"
           local libdir="$1/$libPath"

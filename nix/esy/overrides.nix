@@ -34,4 +34,9 @@ in
       propagatedBuildInputs = (o.propagatedBuildInputs or []) ++ [glibtool];
     });
   })
+
+	(self.addPropagatedBuildInputs {
+		esy-cmake = [ pkgs.cmake self.disableConfigureHook ];
+		revery-terminal = ifDarwin [ osx.AppKit osx.Cocoa ];
+	})
 ]

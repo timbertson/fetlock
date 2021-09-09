@@ -2,7 +2,6 @@
 { pkgs, stdenv, lib }:
 {
   overlay = final: prev: {
-    # esy expects `linux` / `windows` anything else probably won't work
     siteLib = prefix: "${prefix}/lib/ocaml/${final.ocaml.version}/site-lib";
     specToAttrs = import ./specToAttrs.nix final prev;
     ocaml = final.drvs.ocaml or final.drvsByName.ocaml or (abort ''
@@ -55,11 +54,6 @@
       esy-tree-sitter = [gcc];
       texinfo = [ perl ];
       yarn-pkg-config = [ libiconv ];
-    })
-
-    (self.addPropagatedBuildInputs {
-      esy-cmake = [ pkgs.cmake self.disableConfigureHook ];
-      revery-terminal = ifDarwin [ osx.AppKit osx.Cocoa ];
     })
   ];
 }

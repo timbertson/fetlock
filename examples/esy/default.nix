@@ -28,7 +28,7 @@ let
           build = o.spec.build // {
             # deps file thanks to https://github.com/NixOS/nixpkgs/blob/master/pkgs/applications/editors/aseprite/skia-make-deps.sh
             buildPhase =
-              let deps = import ./skia-deps.nix { inherit fetchgit; }; in
+              let deps = import ./src/skia-deps.nix { inherit fetchgit; }; in
             ''
               mkdir -p third_party/externals
               ${
@@ -81,7 +81,7 @@ let
             # the stdcxx stuff should be fixed by https://github.com/ocaml/dune/pull/3802
             # in dune 2.8
             # The Foundation include should be upstreamed
-            ./revery-libcxx.diff # note: only works on darwin
+            ./src/revery-libcxx.diff # note: only works on darwin
           ];
         });
         revery-esy-libvterm = (o: {
@@ -100,14 +100,14 @@ let
             sha256 = "0lb7a48d7i93gshyqzvshbsff6nyknsl9hdjdszmqyirgawmrgs9";
           };
           patches = [
-            ./oni2-buildinfo.patch
-            ./oni2-gettext.patch
+            ./src/oni2-buildinfo.patch
+            ./src/oni2-gettext.patch
           ];
           # without passing explicitly, oni will search homebrew paths on mac
           GETTEXT_LIB_PATH = "${gettext}/lib";
           buildPhase =
           ''
-            ln -s ${yarnSelection.dependencies}/node_modules ./node/node_modules
+            ln -s ${yarnSelection.root}/node_modules ./node/node_modules
             node scripts/bootstrap.js
           '' + o.buildPhase;
 

@@ -162,7 +162,7 @@ impl LockContext {
 	pub fn new(lock_type: Type) -> LockContext {
 		LockContext {
 			lock_type,
-			root: Root::Virtual(Vec::new()),
+			root: Root::Package(Key::new("root-pkg-unset".to_owned())),
 			extra: BTreeMap::new(),
 		}
 	}

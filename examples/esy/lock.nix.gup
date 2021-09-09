@@ -3,4 +3,4 @@ gup -u ../../bin ../yarn/lock.nix
 ../../bin/fetlock -o "$1" \
   -t esy \
   --from onivim/oni2#39bb26f68040326ecf4d03f6c4428c05f13a02d5 \
-  esy.lock/index.json
+  esy.lock

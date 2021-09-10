@@ -1231,6 +1231,11 @@ in
         '';
         mode = "opam";
       };
+      files = (final.subtree {
+        base = final.rootAttrs.src;
+        hash = "sha256:1mys1fls2adq4s851gnis9lq33gnjxisjxjkwzr5kar5j22rk71c";
+        path = "esy.lock/opam/ocamlfind.1.8.1/files";
+      });
     };
     "@opam/ocamlformat@opam:0.15.0@8e036963" = {
       pname = "ocamlformat";
@@ -1901,6 +1906,11 @@ in
         installPhase = "";
         mode = "opam";
       };
+      files = (final.subtree {
+        base = final.rootAttrs.src;
+        hash = "sha256:1pannj4qsgh1bm3qg4gza8sxshnz1albqvq0pdi5y9zckv1q3b6b";
+        path = "esy.lock/opam/seq.base/files";
+      });
     };
     "@opam/sexplib0@opam:v0.14.0@ddeb6438" = {
       pname = "sexplib0";

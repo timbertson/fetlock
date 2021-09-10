@@ -103,6 +103,7 @@ let
 							# But in some cases it may be easier to override the root
 							# spec than build your own derivation.
 							root = getDrv rootKey;
+							inherit rootAttrs;
 							
 							# In other cases, you can ignore `root` and use `dependencies`
 							# (and optionally `src`) for your own derivation

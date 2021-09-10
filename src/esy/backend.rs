@@ -140,28 +140,24 @@ impl EsyLock {
 			PkgType::Opam => {
 				match esy_spec.meta.manifest_path.clone() {
 					// all opams must have an explicit manifest
-					None => None,
+					None => return Err(anyhow!(format!("Opam package does not contain an explicit manifest: {:?}", &esy_spec))),
 
 					Some(manifest_path) => Some(match manifest_path {
 						ManifestPath::Local(rel_path) => {
-							let opam_path = src.root.join(rel_path);
-							let files_path = opam_path.with_file_name("files");
-							if files_path.exists() {
-								esy_spec.spec.extra.insert(
-									"files".to_owned(),
-									Expr::Str(vec![
-										// TODO I think this needs to be a call to `subtree` to deal with archives
-										StringComponent::Expr(Expr::Literal(
-											"final.rootAttrs.src".to_owned(),
-										)),
-										StringComponent::Literal(format!(
-											"/{}",
-											files_path.to_string_lossy()
-										)),
-									]),
+							let opam_path_rel = PathBuf::from(rel_path);
+							let files_path_rel = opam_path_rel.with_file_name("files");
+							let files_path_abs = src.root.join(&files_path_rel);
+							debug!("Checking files path {:?} for esy spec {:?}", files_path_abs, &esy_spec);
+							if files_path_abs.exists() {
+								debug!("Adding files path {:?}", files_path_abs);
+								let hash = cache::nix_digest_of_path(files_path_abs).await?;
+								esy_spec.spec.extra.insert("files".to_owned(), cache::subtree_expr(
+									Expr::Literal("final.rootAttrs.src".to_owned()),
+									files_path_rel.to_string_lossy().to_string(),
+									&hash)
 								);
 							}
-							Manifest::Path(opam_path.to_string_lossy().to_string())
+							Manifest::Path(src.root.join(opam_path_rel).to_string_lossy().to_string())
 						}
 						ManifestPath::Remote(_) => {
 							let checkout = Self::extract(realised_src, esy_spec).await?;
@@ -423,7 +419,11 @@ enum ManifestPath {
 #[derive(Debug, Clone)]
 struct EsyMeta {
 	pkg_type: Option<PkgType>,
+
+	// manifest_path is typically for opam files within a source repo.
+	// I don't know whether it can also be used for nonstandard esy.json
 	manifest_path: Option<ManifestPath>,
+
 	manifest: Option<Manifest>,
 }
 
@@ -610,11 +610,12 @@ impl<'de> Visitor<'de> for EsySpecVisitor {
 			if let Some(path) = path {
 				if meta.manifest_path.is_some() {
 					return err::into_serde(Err(anyhow!(
-						"package {:?} has both a manifest path and an opam path",
+						"package {:?} has both a manifest path (from a source archive) and an opam source (from the opam repository)",
 						&name
 					)));
 				}
-				meta.manifest_path = Some(ManifestPath::Local(path));
+				// opam_src path is the directory, not the opam file itself
+				meta.manifest_path = Some(ManifestPath::Local(format!("{}/opam", path)));
 			}
 
 			partial.id.set_version(version);

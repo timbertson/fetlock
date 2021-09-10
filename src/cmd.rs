@@ -53,7 +53,9 @@ pub async fn run(
 	stdout: Stdio,
 	mut command: &mut Command,
 ) -> Result<Option<String>> {
-	let (stdout, stderr, status) = run_raw(stdin, stdout, &mut command).await?;
+	let (stdout, stderr, status) = run_raw(stdin, stdout, &mut command)
+		.await
+		.with_context(|| format!("executing {}", desc))?;
 	if status.success() {
 		Ok(stdout)
 	} else {

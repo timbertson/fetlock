@@ -25,12 +25,14 @@ pub async fn main() -> Result<()> {
 
 	match opts.lock_src.lock_type {
 		lock::Type::Esy => process::<crate::esy::EsyLock>(opts).await,
+		lock::Type::Opam => process::<crate::opam::OpamLock>(opts).await,
 		lock::Type::Yarn => process::<crate::yarn::YarnLock>(opts).await,
 		lock::Type::Bundler => process::<crate::bundler::BundlerLock>(opts).await,
 	}
 }
 
-async fn process<B: Backend + fmt::Debug>(opts: CliOpts) -> Result<()> {
+async fn process<B: Backend + fmt::Debug>(mut opts: CliOpts) -> Result<()> {
+	B::init_lock_src(&mut opts.lock_src)?;
 	info!("loading {:?}", &opts.lock_src);
 	let lock_src = opts.lock_src.resolve().await?;
 	let mut lock = B::load(&lock_src, opts.clone())
@@ -53,8 +55,7 @@ async fn process<B: Backend + fmt::Debug>(opts: CliOpts) -> Result<()> {
 			spec.add_deps(keys);
 			// let the backend add any mandatory properties
 			B::virtual_root(&mut spec);
-			let spec = spec.build()
-				.with_context(||"virtual root spec")?;
+			let spec = spec.build().with_context(|| "virtual root spec")?;
 			lock_mut.add_impl(root_key.clone(), B::Spec::wrap(spec));
 		}
 	};

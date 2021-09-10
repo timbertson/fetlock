@@ -1,8 +1,8 @@
-use log::*;
 use crate::lock;
 use crate::lock_src::*;
 use anyhow::*;
 use getopts::Options;
+use log::*;
 use std::env;
 
 #[derive(Debug, Clone)]
@@ -11,6 +11,7 @@ pub struct CliOpts {
 	pub lock_src: LockSrc,
 	pub src: Option<GithubSrc>,
 	pub repo_freshness_days: u32,
+	pub ocaml_version: Option<String>,
 }
 
 fn usage<T>(program: &str, opts: Options) -> Result<T> {
@@ -56,6 +57,13 @@ impl CliOpts {
 			"AUTHOR/REPO",
 		);
 
+		opts.optopt(
+			"",
+			"ocaml-version",
+			"Required for opam",
+			"VERSION",
+		);
+
 		let matches = opts.parse(&argv[1..])?;
 		if matches.opt_present("h") {
 			return usage(&program, opts);
@@ -75,6 +83,7 @@ impl CliOpts {
 			.as_str()
 		{
 			"esy" => lock::Type::Esy,
+			"opam" => lock::Type::Opam,
 			"yarn" => lock::Type::Yarn,
 			"bundler" => lock::Type::Bundler,
 			other => return Err(anyhow!("Unknown type: {}", other)),
@@ -87,6 +96,8 @@ impl CliOpts {
 		let lock_src = matches.opt_str("from");
 		let src = matches.opt_str("src");
 		let src = src.as_deref().map(GithubSrc::parse).transpose()?;
+		let ocaml_version = matches.opt_str("ocaml-version");
+
 		let lock_rel = matches.free.into_iter().next();
 		let lock_src = LockSrc::parse(lock_type, lock_src.as_deref(), lock_rel)?;
 		Ok(CliOpts {
@@ -94,6 +105,7 @@ impl CliOpts {
 			lock_src,
 			src,
 			repo_freshness_days,
+			ocaml_version,
 		})
 	}
 }

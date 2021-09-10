@@ -121,7 +121,7 @@ impl<W: Write> WriteContext<'_, W> {
 						'"' | '\\' => {
 							write!(self.file, "\\")?;
 							write!(self.file, "{}", ch)?;
-						},
+						}
 						'$' => {
 							let next = chars.next();
 							if next == Some('{') {
@@ -132,12 +132,12 @@ impl<W: Write> WriteContext<'_, W> {
 									write!(self.file, "{}", n)?;
 								}
 							}
-						},
+						}
 						other => write!(self.file, "{}", ch)?,
 					}
 				}
 				Ok(())
-			},
+			}
 			StringMode::Multiline => {
 				/* TODO
 				$ can be escaped by prefixing it with '' (that is, two single quotes), i.e., ''$.
@@ -150,7 +150,7 @@ impl<W: Write> WriteContext<'_, W> {
 					match ch {
 						'\n' => {
 							self.nl()?;
-						},
+						}
 						'$' => {
 							let next = chars.next();
 							if next == Some('{') {
@@ -161,7 +161,7 @@ impl<W: Write> WriteContext<'_, W> {
 									self.write_char(n)?;
 								}
 							}
-						},
+						}
 						'\'' => {
 							let next = chars.next();
 							if next == Some('\'') {
@@ -172,12 +172,12 @@ impl<W: Write> WriteContext<'_, W> {
 									self.write_char(n)?;
 								}
 							}
-						},
+						}
 						other => self.write_char(ch)?,
 					}
 				}
 				Ok(())
-			},
+			}
 		}
 	}
 
@@ -261,7 +261,7 @@ impl<W: Write> WriteContext<'_, W> {
 	}
 }
 
-pub trait Writeable: Debug + Clone {
+pub trait Writeable: Debug {
 	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()>;
 }
 
@@ -281,6 +281,7 @@ impl Writeable for Expr {
 				}
 				Ok(())
 			}
+			Expr::Null => c.write_str("null"),
 			Expr::Bool(b) => c.write(format_args!("{}", b)),
 			Expr::Str(s) => {
 				let mode = StringMode::preferred_v(&s);
@@ -385,35 +386,9 @@ impl Writeable for Spec {
 
 impl Writeable for SrcDigest<'_> {
 	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
-		let SrcDigest { src, digest } = self;
-		match src {
-			Src::Github(github) => {
-				let Github {
-					repo: GithubRepo { owner, repo },
-					git_ref,
-					fetch_submodules,
-				} = github;
-				c.write_str("pkgs.fetchFromGitHub ")?;
-				c.bracket_attrs(|c| {
-					c.attr(&"owner", &owner)?;
-					c.attr(&"repo", &repo)?;
-					c.attr(&"rev", &git_ref)?;
-					c.attr(&"sha256", digest)?;
-					if *fetch_submodules {
-						c.attr(&"fetchSubmodules", &Expr::Bool(true))?;
-					}
-					Ok(())
-				})
-			}
-			Src::Archive(url) => {
-				c.write_str("pkgs.fetchurl ")?;
-				c.bracket_attrs(|c| {
-					c.attr(&"url", &url.0)?;
-					c.attr(&"sha256", digest)
-				})
-			}
-			Src::None => c.write_str("null"), // TODO better error reporting, assert?
-		}
+		// This could be more efficient if written directly, but we need the
+		// Expr implementation in order to store sources in hashmaps etc
+		self.as_expr().write_to(c)
 	}
 }
 

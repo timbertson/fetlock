@@ -1,19 +1,25 @@
 use crate::cmd;
 use crate::memoize::Memoize;
 use crate::CliOpts;
-use crate::{GitUrl, Sha256, Src};
+use crate::{GitUrl, Sha256, Src, Expr};
 use anyhow::*;
 use futures::future::FutureExt;
 use log::*;
 use std::fs;
 use std::fs::*;
 use std::path::*;
+use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::time::SystemTime;
 use tokio::process::Command;
 use tokio::sync::Mutex;
 
-// 1 day
+/*
+ * Cache is useful for tracking a floating HEAD of tracked repositories
+ * (used for global repositories like opam)
+ * It can also compute the nix digest of any path, for constructing fixed-output derivations.
+ */
+
 const SECONDS_PER_DAY: u64 = 60 * 60 * 24;
 
 pub fn cache_root() -> PathBuf {
@@ -33,6 +39,7 @@ pub fn cache_hash(src: &str) -> String {
 
 pub struct CachedRepo {
 	pub path: PathBuf,
+	pub commit: String,
 	pub src: Src,
 	digest: Rc<Mutex<Memoize<Option<Sha256>>>>,
 }
@@ -129,6 +136,7 @@ impl CachedRepo {
 			})
 		};
 		Ok(CachedRepo {
+			commit: head_rev.to_owned(),
 			src: src.src_for_rev(head_rev),
 			path: repo_path,
 			digest: Rc::new(Mutex::new(Memoize::new(Box::pin(lazy_digest)))),
@@ -163,7 +171,7 @@ pub async fn nix_digest_of_path<P: AsRef<Path>>(path: P) -> Result<Sha256> {
 
 // rev could be a reference, but it makes the actual usage awkward
 pub async fn nix_digest_of_git_repo<P: AsRef<Path>>(path: P, rev: String) -> Result<Sha256> {
-	info!("exporting {:?}#{}", path.as_ref(), rev);
+	info!("exporting {:?} revision {}", path.as_ref(), rev);
 	let tmp_dir = tempdir::TempDir::new("fetlock-export")?;
 	cmd::exec(
 		Command::new("bash")
@@ -175,4 +183,14 @@ pub async fn nix_digest_of_git_repo<P: AsRef<Path>>(path: P, rev: String) -> Res
 	)
 	.await?;
 	nix_digest_of_path(tmp_dir.path()).await
+}
+
+pub fn subtree_expr(base: Expr, rel_path: String, hash: &Sha256) -> Expr {
+	Expr::fun_call(Expr::Literal("final.subtree".to_owned()), vec!(
+		Expr::AttrSet(vec![
+			("base".to_owned(), base),
+			("path".to_owned(), Expr::str(rel_path)),
+			("hash".to_owned(), Expr::str(hash.sri_string())),
+		].into_iter().collect::<BTreeMap<String,Expr>>())
+	))
 }

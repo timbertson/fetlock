@@ -12,6 +12,7 @@ use std::iter::Iterator;
 #[derive(Debug, Copy, Clone)]
 pub enum Type {
 	Esy,
+	Opam,
 	Yarn,
 	Bundler,
 }
@@ -21,6 +22,7 @@ impl fmt::Display for Type {
 		use Type::*;
 		f.write_str(match self {
 			Esy => "esy",
+			Opam => "opam",
 			Yarn => "yarn",
 			Bundler => "bundler",
 		})
@@ -160,7 +162,7 @@ impl LockContext {
 	pub fn new(lock_type: Type) -> LockContext {
 		LockContext {
 			lock_type,
-			root: Root::Virtual(Vec::new()),
+			root: Root::Package(Key::new("root-pkg-unset".to_owned())),
 			extra: BTreeMap::new(),
 		}
 	}
@@ -293,6 +295,43 @@ impl SrcDigest<'_> {
 	pub fn new<'a>(src: &'a Src, digest: &'a Sha256) -> SrcDigest<'a> {
 		SrcDigest { src, digest }
 	}
+
+	pub fn as_expr(&self) -> Expr {
+		let SrcDigest { src, digest } = self;
+		match src {
+			Src::Github(github) => {
+				let Github {
+					repo: GithubRepo { owner, repo },
+					git_ref,
+					fetch_submodules,
+				} = github;
+				let mut attrs = vec![
+					("owner", Expr::str(owner.to_owned())),
+					("repo", Expr::str(repo.to_owned())),
+					("rev", Expr::str(git_ref.to_owned())),
+					("sha256", Expr::str(digest.to_string())),
+				];
+				if *fetch_submodules {
+					attrs.push(("fetchSubmodules", Expr::Bool(true)));
+				}
+
+				Expr::fun_call(
+					Expr::Literal("pkgs.fetchFromGitHub".to_owned()),
+					vec!(Expr::attr_set(attrs))
+				)
+			}
+			Src::Archive(url) => {
+				Expr::fun_call(
+					Expr::Literal("pkgs.fetchurl".to_owned()),
+					vec!(Expr::attr_set(vec![
+						("url", Expr::str(url.0.clone())),
+						("sha256", Expr::str(digest.to_string())),
+					]))
+				)
+			}
+			Src::None => Expr::Null, // TODO better error reporting, assert?
+		}
+	}
 }
 
 pub trait AsSpec: Writeable + BorrowMut<Spec> + Debug + Clone {
@@ -329,10 +368,6 @@ impl Spec {
 		}
 		ret
 	}
-
-	pub fn add_build_input(&mut self, dep: Expr) {
-		self.build_inputs.push(dep)
-	}
 }
 
 impl AsSpec for Spec {
@@ -346,6 +381,7 @@ pub struct PartialSpec {
 	pub id: PartialId,
 	pub dep_keys: Vec<Key>,
 	pub src: Option<Src>,
+	pub build_inputs: Vec<Expr>,
 	pub extra: BTreeMap<String, Expr>,
 }
 
@@ -354,6 +390,7 @@ impl PartialSpec {
 		Self {
 			id: PartialId::empty(),
 			dep_keys: Vec::new(),
+			build_inputs: Vec::new(),
 			src: None,
 			extra: BTreeMap::new(),
 		}
@@ -365,22 +402,23 @@ impl PartialSpec {
 			Self {
 				id,
 				dep_keys,
+				build_inputs,
 				src,
 				extra,
 			} => {
-				let built : Result<Spec> = (|| {
+				let built: Result<Spec> = (|| {
 					let id = id.build()?;
 					let src = src.ok_or_else(|| anyhow!("src required"))?;
 					Ok(Spec {
 						id,
 						dep_keys,
-						build_inputs: Vec::new(),
+						build_inputs,
 						src,
 						extra,
 						digest: None,
 					})
 				})();
-				built.with_context(||error_desc)
+				built.with_context(|| error_desc)
 			}
 		}
 	}
@@ -391,6 +429,10 @@ impl PartialSpec {
 
 	pub fn add_deps(&mut self, dep_keys: &mut Vec<Key>) {
 		self.dep_keys.append(dep_keys);
+	}
+
+	pub fn add_build_input(&mut self, dep: Expr) {
+		self.build_inputs.push(dep)
 	}
 
 	pub fn set_src(&mut self, src: Src) {

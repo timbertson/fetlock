@@ -101,6 +101,7 @@ pub enum Expr {
 	LitSeq(Vec<Expr>),
 	Literal(String),
 	Bool(bool),
+	Null,
 	Str(Vec<StringComponent>),
 	Identifier(String),
 	FunCall(Box<FunCall>),
@@ -112,6 +113,17 @@ pub enum Expr {
 impl Expr {
 	pub fn str(s: String) -> Expr {
 		Expr::Str(vec![StringComponent::Literal(s)])
+	}
+
+	pub fn fun_call(subject: Expr, args: Vec<Expr>) -> Expr {
+		Expr::FunCall(Box::new(FunCall { subject, args }))
+	}
+
+	pub fn attr_set<'a>(attrs: Vec<(&'a str, Expr)>) -> Expr {
+		Expr::AttrSet(attrs
+			.into_iter()
+			.map(|(k,v)| (k.to_owned(), v))
+			.collect::<BTreeMap<String, Expr>>())
 	}
 
 	pub fn is_list(&self) -> bool {
@@ -177,6 +189,7 @@ impl Expr {
 			Expr::LitSeq(v) => Expr::LitSeq(v.into_iter().map(|v| v.escape_for_bash()).collect()),
 
 			Expr::Bool(_)
+			| Expr::Null
 			| Expr::Identifier(_)
 			| Expr::Literal(_)
 			| Expr::AttrPath(_)

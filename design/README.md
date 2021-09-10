@@ -51,9 +51,7 @@ The loader is written in Nix, and wraps the minimal nix lock format to provide s
 
  - base fixpoint
  - overriding dependencies / sources
-   - `overrideSpec: { name, version } -> attrSet -> attrSet`
-   - should overrides be function or attrset-based? function seems more powerful.
- - 
+ - exposing the root package(s)
 
 ## Adapter:
 
@@ -62,6 +60,10 @@ Adapters are also written in nix, and provide language-specific functionality to
  - providing a buildPackage function which can be used to build each entity in the lockfile
  - providing language-specific override functionality
  - interpreting language-specific metadata to affect build results
+ 
+## Agent:
+
+Some formats utilize an agent pattern, where we have some fetlock-aware code written in the host language to ease communication. For example, in bundler there's a very simple agent script (written in ruby) which uses the bundler API to generate a simple JSON for fetlock's use. This is dramatically less code than attempting to write a gemfile parser in fetlock itself.
 
 # Naming
 

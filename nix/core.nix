@@ -103,6 +103,7 @@ let
 							# But in some cases it may be easier to override the root
 							# spec than build your own derivation.
 							root = getDrv rootKey;
+							inherit rootAttrs;
 							
 							# In other cases, you can ignore `root` and use `dependencies`
 							# (and optionally `src`) for your own derivation
@@ -112,9 +113,11 @@ let
 							# Utilities for overriding the result derivation set.
 							inherit overrideAll;
 
+							# overrideDrv: each attr is a function taking old drv and returning new
 							overrideDrv = attrs:
 								overrideOnly attrs (fn: drv: fn drv);
 
+							# overrideDrv: each attr is a function taking oldAttrs and returning newAttrs
 							overrideAttrs = attrs:
 								overrideOnly attrs (fn: drv: drv.overrideAttrs fn);
 
@@ -128,6 +131,8 @@ let
 									propagatedBuildInputs = (o.propagatedBuildInputs or []) ++ extra;
 								}));
 
+							# overrideSpec: each attr is a function taking oldSpec and returning newSpec
+							# (spec is the fetlock concept, i.e. the representation in lock.nix)
 							overrideSpec = attrs:
 								overrideOnly attrs (fn: drv: drv.overrideSpec fn);
 						};

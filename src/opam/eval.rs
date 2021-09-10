@@ -1,6 +1,6 @@
-use crate::esy::build::PkgType;
-use crate::esy::parser;
-use crate::esy::parser::*;
+use crate::opam::build::PkgType;
+use crate::opam::parser;
+use crate::opam::parser::*;
 use crate::{Expr, FunCall, Key, Name, StringComponent, StringComponentOf};
 use anyhow::*;
 use log::*;
@@ -8,6 +8,7 @@ use std::cmp::Ordering;
 use std::cmp::PartialOrd;
 use std::collections::HashMap;
 
+// TODO move next to Name?
 #[derive(Debug, Clone)]
 pub struct Pkg {
 	pub name: Name,

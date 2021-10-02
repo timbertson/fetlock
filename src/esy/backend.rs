@@ -6,7 +6,6 @@ use crate::opam::{eval, opam_manifest};
 use crate::esy::{esy_manifest};
 use crate::esy::esy_manifest::Manifest;
 use crate::fetch;
-use crate::nix_serialize::{WriteContext, Writeable};
 use crate::opam::opam2nix;
 use crate::stream_util::*;
 use crate::string_util::*;
@@ -16,10 +15,9 @@ use async_trait::async_trait;
 use log::*;
 use serde::de::*;
 use serde::Deserialize;
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::Borrow;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
-use std::io::Write;
 use std::path::*;
 
 #[derive(Clone, Debug)]
@@ -493,18 +491,6 @@ pub struct EsySpec {
 	meta: EsyMeta,
 }
 
-impl Borrow<Spec> for EsySpec {
-	fn borrow(&self) -> &Spec {
-		&self.spec
-	}
-}
-
-impl BorrowMut<Spec> for EsySpec {
-	fn borrow_mut(&mut self) -> &mut Spec {
-		&mut self.spec
-	}
-}
-
 impl AsSpec for EsySpec {
 	fn wrap(spec: Spec) -> Self {
 		EsySpec {
@@ -512,13 +498,8 @@ impl AsSpec for EsySpec {
 			meta: EsyMeta::empty(),
 		}
 	}
-}
-
-// TODO seems like this should be possible as an implementation on Borrow<Spec>, but no luck
-impl Writeable for EsySpec {
-	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> std::io::Result<()> {
-		self.spec.write_to(c)
-	}
+	fn as_spec_ref(&self) -> &Spec { &self.spec }
+	fn as_spec_mut(&mut self) -> &mut Spec { &mut self.spec }
 }
 
 struct EsySpecVisitor;

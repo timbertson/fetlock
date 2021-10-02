@@ -1,9 +1,8 @@
 use crate::expr::Expr;
-use crate::nix_serialize::Writeable;
 use anyhow::*;
 use lazy_static::lazy_static;
 use serde::de::{Deserialize, Deserializer};
-use std::borrow::BorrowMut;
+use std::borrow::Borrow;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Debug;
@@ -36,7 +35,7 @@ pub struct Key(String);
 // newtype for a logical package name
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Deserialize)]
 pub struct Name(pub String);
-impl std::borrow::Borrow<str> for Name {
+impl Borrow<str> for Name {
 	fn borrow(&self) -> &str {
 		self.0.as_str()
 	}
@@ -45,7 +44,7 @@ impl std::borrow::Borrow<str> for Name {
 // newtype for a package version
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Deserialize)]
 pub struct Version(pub String);
-impl std::borrow::Borrow<str> for Version {
+impl Borrow<str> for Version {
 	fn borrow(&self) -> &str {
 		self.0.as_str()
 	}
@@ -334,8 +333,13 @@ impl SrcDigest<'_> {
 	}
 }
 
-pub trait AsSpec: Writeable + BorrowMut<Spec> + Debug + Clone {
+pub trait AsSpec: Debug + Clone {
 	fn wrap(spec: Spec) -> Self;
+
+	// These could be type constraints `AsRef<Spec> + AsMut<Spec>`,
+	// but it makes for tedious boulerplate
+	fn as_spec_ref(&self) -> &Spec;
+	fn as_spec_mut(&mut self) -> &mut Spec;
 }
 
 #[derive(Debug, Clone)]
@@ -374,6 +378,8 @@ impl AsSpec for Spec {
 	fn wrap(spec: Spec) -> Self {
 		spec
 	}
+	fn as_spec_ref(&self) -> &Spec { self }
+	fn as_spec_mut(&mut self) -> &mut Spec { self }
 }
 
 #[derive(Debug, Clone)]

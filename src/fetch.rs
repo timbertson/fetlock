@@ -17,7 +17,7 @@ use tokio::fs;
 use tokio::process::Command;
 
 pub async fn populate_source_digests<S: AsSpec>(lock: &mut Lock<S>) -> Result<()> {
-	let impls = lock.specs.values_mut().map(|x| x.borrow_mut());
+	let impls = lock.specs.values_mut().map(|x| x.as_spec_mut());
 	foreach_unordered(8, futures::stream::iter(impls), |i| ensure_digest(i)).await
 }
 

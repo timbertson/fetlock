@@ -1,6 +1,5 @@
 use anyhow::*;
 use log::*;
-use std::borrow::BorrowMut;
 use std::fmt;
 use std::io::stdout;
 use std::io::Write;
@@ -75,7 +74,7 @@ async fn process<B: Backend + fmt::Debug>(mut opts: CliOpts) -> Result<()> {
 	};
 	if let Some((src, digest)) = src_digest {
 		debug!("setting src {:?}, on root {:?}", src, lock_mut.context.root);
-		let spec_ref: &mut Spec = root_spec.borrow_mut();
+		let spec_ref: &mut Spec = root_spec.as_spec_mut();
 		spec_ref.set_src_digest(src, digest);
 	}
 

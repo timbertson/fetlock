@@ -1,6 +1,5 @@
 // yarn.lock backend
 use crate::err::*;
-use crate::nix_serialize::{WriteContext, Writeable};
 use crate::stream_util::*;
 use crate::string_util::*;
 use crate::*;
@@ -10,10 +9,8 @@ use log::*;
 use serde::de::*;
 use serde::Deserialize;
 use std::borrow::Cow;
-use std::borrow::{Borrow, BorrowMut};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
-use std::io::Write;
 
 #[derive(Clone, Debug)]
 pub struct YarnLock {
@@ -108,25 +105,6 @@ impl YarnSpec {
 	}
 }
 
-// TODO get rid of this boilerplate?
-impl Borrow<Spec> for YarnSpec {
-	fn borrow(&self) -> &Spec {
-		&self.spec
-	}
-}
-
-impl BorrowMut<Spec> for YarnSpec {
-	fn borrow_mut(&mut self) -> &mut Spec {
-		&mut self.spec
-	}
-}
-
-impl Writeable for YarnSpec {
-	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> std::io::Result<()> {
-		self.spec.write_to(c)
-	}
-}
-
 impl AsSpec for YarnSpec {
 	fn wrap(spec: Spec) -> Self {
 		let name = spec.id.name.clone();
@@ -140,6 +118,10 @@ impl AsSpec for YarnSpec {
 			find_keys: Vec::new(),
 			optional_deps: HashSet::new(),
 		}
+	}
+	fn as_spec_ref(&self) -> &Spec { &self.spec }
+	fn as_spec_mut(&mut self) -> &mut Spec {
+		&mut self.spec
 	}
 }
 

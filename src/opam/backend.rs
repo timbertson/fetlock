@@ -8,13 +8,10 @@ use crate::opam::build::PkgType;
 use crate::opam::eval;
 use crate::opam::opam2nix;
 use crate::cache::CachedRepo;
-use crate::nix_serialize::{WriteContext, Writeable};
 use crate::opam::opam_manifest::OpamJson;
 use crate::*;
 use anyhow::*;
 use async_trait::async_trait;
-use std::borrow::{Borrow, BorrowMut};
-use std::io::Write;
 
 #[derive(Clone, Debug)]
 pub struct OpamSpec {
@@ -191,27 +188,12 @@ impl Backend for OpamLock {
 	}
 }
 
-// TODO get rid of this boilerplate?
-impl Borrow<Spec> for OpamSpec {
-	fn borrow(&self) -> &Spec {
-		&self.spec
-	}
-}
-
-impl BorrowMut<Spec> for OpamSpec {
-	fn borrow_mut(&mut self) -> &mut Spec {
-		&mut self.spec
-	}
-}
-
-impl Writeable for OpamSpec {
-	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> std::io::Result<()> {
-		self.spec.write_to(c)
-	}
-}
-
 impl AsSpec for OpamSpec {
 	fn wrap(spec: Spec) -> Self {
 		todo!()
+	}
+	fn as_spec_ref(&self) -> &Spec { &self.spec }
+	fn as_spec_mut(&mut self) -> &mut Spec {
+		&mut self.spec
 	}
 }

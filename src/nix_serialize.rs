@@ -228,7 +228,7 @@ impl<W: Write> WriteContext<'_, W> {
 		self.bracketed_with(true, "[", "]", f)
 	}
 
-	fn attr<K: fmt::Display, V: Writeable>(&mut self, k: &K, v: &V) -> Result<()> {
+	fn bracket_attr<K: fmt::Display>(&mut self, k: &K, f: impl FnOnce(&mut WriteContext<W>) -> Result<()>) -> Result<()> {
 		lazy_static! {
 			static ref VALID_IDENTIFIER: Regex = Regex::new(r"^[a-zA-Z_][-a-zA-Z_0-9]*$").unwrap();
 		}
@@ -239,9 +239,11 @@ impl<W: Write> WriteContext<'_, W> {
 		} else {
 			self.write_nix_string(k)?;
 		}
-		self.write_str(" = ")?;
-		v.write_to(self)?;
-		self.write_str(";")
+		self.bracketed_with(false, " = ", ";", f)
+	}
+
+	fn attr<K: fmt::Display, V: Writeable>(&mut self, k: &K, v: &V) -> Result<()> {
+		self.bracket_attr(k, |c| v.write_to(c))
 	}
 
 	fn list_item<V: Writeable>(&mut self, v: &V) -> Result<()> {
@@ -498,8 +500,16 @@ impl<S: AsSpec> Writeable for Lock<S> {
 
 		c.bracket_attrs(|c| {
 			c.attr(&"context", context)?;
-			c.attr(&"specs", specs)?;
-			Ok(())
+			// Ideally we could implement Writeable<S: AsSpec> and then use the BTreeMap impl,
+			// but rust won't let us
+			c.bracket_attr(&"specs", |c| {
+				c.bracket_attrs(|c| {
+					for (name, spec) in specs {
+						c.attr(name, spec.as_spec_ref())?;
+					}
+					Ok(())
+				})
+			})
 		})
 	}
 }

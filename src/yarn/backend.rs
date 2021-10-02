@@ -31,7 +31,7 @@ impl Backend for YarnLock {
 		let contents = std::fs::read_to_string(src.lock_path())?;
 		let mut lockfile: YarnLockFile = serde_yaml::from_str(&contents)?;
 		lockfile.fixup_keys()?;
-		
+
 		let all_keys: Vec<Key> = lockfile.0.specs.keys().map(|key| key.to_owned()).collect();
 		lockfile.0.context.root = Root::Virtual(all_keys);
 		lockfile.populate_sources().await?;
@@ -119,7 +119,9 @@ impl AsSpec for YarnSpec {
 			optional_deps: HashSet::new(),
 		}
 	}
-	fn as_spec_ref(&self) -> &Spec { &self.spec }
+	fn as_spec_ref(&self) -> &Spec {
+		&self.spec
+	}
 	fn as_spec_mut(&mut self) -> &mut Spec {
 		&mut self.spec
 	}

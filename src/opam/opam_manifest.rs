@@ -1,8 +1,8 @@
 use crate::opam::build::*;
 use crate::opam::eval::*;
+use crate::opam::opam2nix::{Command, SelectedPackage};
 use crate::opam::parser;
 use crate::opam::parser::*;
-use crate::opam::opam2nix::{Command, SelectedPackage};
 use anyhow::*;
 
 // OPAM file as serialized by opam2nix extract (JSON)

@@ -316,18 +316,16 @@ impl SrcDigest<'_> {
 
 				Expr::fun_call(
 					Expr::Literal("pkgs.fetchFromGitHub".to_owned()),
-					vec!(Expr::attr_set(attrs))
+					vec![Expr::attr_set(attrs)],
 				)
 			}
-			Src::Archive(url) => {
-				Expr::fun_call(
-					Expr::Literal("pkgs.fetchurl".to_owned()),
-					vec!(Expr::attr_set(vec![
-						("url", Expr::str(url.0.clone())),
-						("sha256", Expr::str(digest.to_string())),
-					]))
-				)
-			}
+			Src::Archive(url) => Expr::fun_call(
+				Expr::Literal("pkgs.fetchurl".to_owned()),
+				vec![Expr::attr_set(vec![
+					("url", Expr::str(url.0.clone())),
+					("sha256", Expr::str(digest.to_string())),
+				])],
+			),
 			Src::None => Expr::Null, // TODO better error reporting, assert?
 		}
 	}
@@ -378,8 +376,12 @@ impl AsSpec for Spec {
 	fn wrap(spec: Spec) -> Self {
 		spec
 	}
-	fn as_spec_ref(&self) -> &Spec { self }
-	fn as_spec_mut(&mut self) -> &mut Spec { self }
+	fn as_spec_ref(&self) -> &Spec {
+		self
+	}
+	fn as_spec_mut(&mut self) -> &mut Spec {
+		self
+	}
 }
 
 #[derive(Debug, Clone)]

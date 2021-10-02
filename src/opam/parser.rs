@@ -1,6 +1,6 @@
-use crate::opam::eval::{Eval, NixCtx};
 use crate::expr::{Expr, StringComponentOf};
 pub use crate::nom_util::*;
+use crate::opam::eval::{Eval, NixCtx};
 use anyhow::*;
 
 // <bool>          ::= true | false

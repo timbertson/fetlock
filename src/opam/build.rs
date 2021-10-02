@@ -2,8 +2,8 @@
 // whether that be `esy`, `opam` or `npm`
 
 use crate::opam::eval::{Eval, NixCtx};
-use crate::opam::parser::Value;
 use crate::opam::opam2nix::Depexts;
+use crate::opam::parser::Value;
 use crate::{Expr, StringComponent};
 use anyhow::*;
 use log::*;
@@ -189,12 +189,19 @@ impl NixBuild {
 
 		if !depexts.is_empty() {
 			let Depexts { required, optional } = depexts;
-			map.insert("depexts".to_owned(), Expr::List(
-				required.into_iter().map(|d| Expr::Literal(format!("pkgs.{}", d)))
-				.chain(
-					optional.into_iter().map(|d| Expr::Literal(format!("pkgs.{} or null", d)))
-				)
-				.collect())
+			map.insert(
+				"depexts".to_owned(),
+				Expr::List(
+					required
+						.into_iter()
+						.map(|d| Expr::Literal(format!("pkgs.{}", d)))
+						.chain(
+							optional
+								.into_iter()
+								.map(|d| Expr::Literal(format!("pkgs.{} or null", d))),
+						)
+						.collect(),
+				),
 			);
 		}
 

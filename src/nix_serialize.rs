@@ -228,7 +228,11 @@ impl<W: Write> WriteContext<'_, W> {
 		self.bracketed_with(true, "[", "]", f)
 	}
 
-	fn bracket_attr<K: fmt::Display>(&mut self, k: &K, f: impl FnOnce(&mut WriteContext<W>) -> Result<()>) -> Result<()> {
+	fn bracket_attr<K: fmt::Display>(
+		&mut self,
+		k: &K,
+		f: impl FnOnce(&mut WriteContext<W>) -> Result<()>,
+	) -> Result<()> {
 		lazy_static! {
 			static ref VALID_IDENTIFIER: Regex = Regex::new(r"^[a-zA-Z_][-a-zA-Z_0-9]*$").unwrap();
 		}

@@ -57,12 +57,7 @@ impl CliOpts {
 			"AUTHOR/REPO",
 		);
 
-		opts.optopt(
-			"",
-			"ocaml-version",
-			"Required for opam",
-			"VERSION",
-		);
+		opts.optopt("", "ocaml-version", "Required for opam", "VERSION");
 
 		let matches = opts.parse(&argv[1..])?;
 		if matches.opt_present("h") {

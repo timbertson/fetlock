@@ -1,17 +1,17 @@
 // opam backend. Note that opam doesn't have a builtin lock file,
 // so we lean on `opam2nix extract` to solve
-use log::*;
-use std::collections::{BTreeMap, HashMap};
-use futures::join;
 use crate::cache;
+use crate::cache::CachedRepo;
 use crate::opam::build::PkgType;
 use crate::opam::eval;
 use crate::opam::opam2nix;
-use crate::cache::CachedRepo;
 use crate::opam::opam_manifest::OpamJson;
 use crate::*;
 use anyhow::*;
 use async_trait::async_trait;
+use futures::join;
+use log::*;
+use std::collections::{BTreeMap, HashMap};
 
 #[derive(Clone, Debug)]
 pub struct OpamSpec {
@@ -40,7 +40,7 @@ impl Backend for OpamLock {
 	type Spec = OpamSpec;
 
 	async fn load(src: &LocalSrc, opts: CliOpts) -> Result<Self> {
-		use opam2nix::{SolveSpec, OpamSource, Repository, Request, SelectedPackage};
+		use opam2nix::{OpamSource, Repository, Request, SelectedPackage, SolveSpec};
 		let opam_path = src.lock_path();
 
 		let filename = opam_path
@@ -58,19 +58,19 @@ impl Backend for OpamLock {
 
 		let mut lock: Lock<OpamSpec> = Lock::<OpamSpec>::new(LockContext::new(lock::Type::Opam));
 
-		lock.context.extra.insert("ocamlPackages".to_owned(),
-			Expr::Literal(
-				match &opts.ocaml_version {
-					None => "pkgs.ocaml-ng.ocamlPackages_latest".to_owned(),
-					Some(version) => {
-						let mut parts = version.split(".").into_iter();
-						let (major, minor) = parts.next().and_then(|major| parts.next().map(|minor|
-						(major,minor)))
-							.ok_or(anyhow!("Invalid ocaml version (expected major.minor*)"))?;
-						format!("pkgs.ocaml-ng.ocamlPackages_{}_{}", major, minor)
-					}
+		lock.context.extra.insert(
+			"ocamlPackages".to_owned(),
+			Expr::Literal(match &opts.ocaml_version {
+				None => "pkgs.ocaml-ng.ocamlPackages_latest".to_owned(),
+				Some(version) => {
+					let mut parts = version.split(".").into_iter();
+					let (major, minor) = parts
+						.next()
+						.and_then(|major| parts.next().map(|minor| (major, minor)))
+						.ok_or(anyhow!("Invalid ocaml version (expected major.minor*)"))?;
+					format!("pkgs.ocaml-ng.ocamlPackages_{}_{}", major, minor)
 				}
-			)
+			}),
 		);
 
 		let opam_repo_git = GithubRepo {
@@ -80,11 +80,11 @@ impl Backend for OpamLock {
 
 		let opam_repo = CachedRepo::cache(&opts, &opam_repo_git).await?;
 
-		let specs = vec!(SolveSpec {
+		let specs = vec![SolveSpec {
 			name: package_name_str.to_owned(),
 			constraints: None,
 			definition: Some(OpamSource::Path(opam_path)),
-		});
+		}];
 
 		let request = Request {
 			ocaml_version: opts.ocaml_version,
@@ -96,13 +96,11 @@ impl Backend for OpamLock {
 			spec: Some(specs),
 		};
 
-		let (solution, repo_digest) = join!(
-			opam2nix::solve(&request),
-			opam_repo.digest()
-		);
+		let (solution, repo_digest) = join!(opam2nix::solve(&request), opam_repo.digest());
 		let mut solution = solution?;
 		let mut repositories = BTreeMap::new();
-		repositories.insert("opam".to_owned(),
+		repositories.insert(
+			"opam".to_owned(),
 			OpamRepository {
 				src: Src::Github(Github {
 					repo: opam_repo_git,
@@ -110,18 +108,25 @@ impl Backend for OpamLock {
 					fetch_submodules: false,
 				}),
 				digest: repo_digest?,
-			}.as_expr()
+			}
+			.as_expr(),
 		);
 
-		lock.context.extra.insert("repositories".to_owned(), Expr::AttrSet(repositories));
+		lock.context
+			.extra
+			.insert("repositories".to_owned(), Expr::AttrSet(repositories));
 
 		lock.set_root(Root::Package(package_name));
 
-		let installed: HashMap<Name, eval::Pkg> = solution.0.iter().map(|(name, selection)| {
-			let key = Key::new(name.to_owned()); // opam keys are simply names
-			let name = Name(name.to_owned());
-			(name.clone(), eval::Pkg { name, key })
-		}).collect();
+		let installed: HashMap<Name, eval::Pkg> = solution
+			.0
+			.iter()
+			.map(|(name, selection)| {
+				let key = Key::new(name.to_owned()); // opam keys are simply names
+				let name = Name(name.to_owned());
+				(name.clone(), eval::Pkg { name, key })
+			})
+			.collect();
 
 		let mut repository_caches = HashMap::new();
 		repository_caches.insert("opam".to_owned(), &opam_repo);
@@ -156,14 +161,24 @@ impl Backend for OpamLock {
 
 			spec.add_deps(&mut depends);
 			if let Some(repository) = repository {
-				let cache = repository_caches.get(&repository).ok_or(anyhow!("opam2nix returned unknown repository"))?;
+				let cache = repository_caches
+					.get(&repository)
+					.ok_or(anyhow!("opam2nix returned unknown repository"))?;
 				let files_rel = format!("packages/{}/{}.{}/files", &name_str, &name_str, &version);
 				let local_path = cache.path.join(&files_rel);
 				if local_path.exists() {
-					debug!("Adding files path {:?} from repository `{}`", &files_rel, repository);
+					debug!(
+						"Adding files path {:?} from repository `{}`",
+						&files_rel, repository
+					);
 					let hash = cache::nix_digest_of_path(local_path).await?;
-					spec.extra.insert("files".to_owned(), cache::subtree_expr(
-						Expr::Literal(format!("final.repositories.{}", repository)), files_rel, &hash)
+					spec.extra.insert(
+						"files".to_owned(),
+						cache::subtree_expr(
+							Expr::Literal(format!("final.repositories.{}", repository)),
+							files_rel,
+							&hash,
+						),
 					);
 				}
 			}
@@ -192,7 +207,9 @@ impl AsSpec for OpamSpec {
 	fn wrap(spec: Spec) -> Self {
 		todo!()
 	}
-	fn as_spec_ref(&self) -> &Spec { &self.spec }
+	fn as_spec_ref(&self) -> &Spec {
+		&self.spec
+	}
 	fn as_spec_mut(&mut self) -> &mut Spec {
 		&mut self.spec
 	}

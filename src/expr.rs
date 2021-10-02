@@ -120,10 +120,12 @@ impl Expr {
 	}
 
 	pub fn attr_set<'a>(attrs: Vec<(&'a str, Expr)>) -> Expr {
-		Expr::AttrSet(attrs
-			.into_iter()
-			.map(|(k,v)| (k.to_owned(), v))
-			.collect::<BTreeMap<String, Expr>>())
+		Expr::AttrSet(
+			attrs
+				.into_iter()
+				.map(|(k, v)| (k.to_owned(), v))
+				.collect::<BTreeMap<String, Expr>>(),
+		)
 	}
 
 	pub fn is_list(&self) -> bool {

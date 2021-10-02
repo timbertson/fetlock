@@ -116,12 +116,8 @@ pub async fn solve(request: &Request) -> Result<Solution> {
 	if log_enabled!(log::Level::Debug) {
 		command.env("OPAM2NIX_VERBOSE", "1");
 	}
-	let contents = cmd::run_stdout(
-		"opam2nix extract",
-		Some(&serialized_request),
-		&mut command,
-	)
-	.await?;
+	let contents =
+		cmd::run_stdout("opam2nix extract", Some(&serialized_request), &mut command).await?;
 	debug!("response: {}", &contents);
 	Ok(serde_json::from_str(&contents)?)
 }

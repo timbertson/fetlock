@@ -1,12 +1,12 @@
 // esy.lock backend
 
-use crate::opam::build::PkgType;
-use crate::opam::eval::Pkg;
-use crate::opam::{eval, opam_manifest};
-use crate::esy::{esy_manifest};
+use crate::esy::esy_manifest;
 use crate::esy::esy_manifest::Manifest;
 use crate::fetch;
+use crate::opam::build::PkgType;
+use crate::opam::eval::Pkg;
 use crate::opam::opam2nix;
+use crate::opam::{eval, opam_manifest};
 use crate::stream_util::*;
 use crate::string_util::*;
 use crate::*;
@@ -138,24 +138,37 @@ impl EsyLock {
 			PkgType::Opam => {
 				match esy_spec.meta.manifest_path.clone() {
 					// all opams must have an explicit manifest
-					None => return Err(anyhow!(format!("Opam package does not contain an explicit manifest: {:?}", &esy_spec))),
+					None => {
+						return Err(anyhow!(format!(
+							"Opam package does not contain an explicit manifest: {:?}",
+							&esy_spec
+						)))
+					}
 
 					Some(manifest_path) => Some(match manifest_path {
 						ManifestPath::Local(rel_path) => {
 							let opam_path_rel = PathBuf::from(rel_path);
 							let files_path_rel = opam_path_rel.with_file_name("files");
 							let files_path_abs = src.root.join(&files_path_rel);
-							debug!("Checking files path {:?} for esy spec {:?}", files_path_abs, &esy_spec);
+							debug!(
+								"Checking files path {:?} for esy spec {:?}",
+								files_path_abs, &esy_spec
+							);
 							if files_path_abs.exists() {
 								debug!("Adding files path {:?}", files_path_abs);
 								let hash = cache::nix_digest_of_path(files_path_abs).await?;
-								esy_spec.spec.extra.insert("files".to_owned(), cache::subtree_expr(
-									Expr::Literal("final.rootAttrs.src".to_owned()),
-									files_path_rel.to_string_lossy().to_string(),
-									&hash)
+								esy_spec.spec.extra.insert(
+									"files".to_owned(),
+									cache::subtree_expr(
+										Expr::Literal("final.rootAttrs.src".to_owned()),
+										files_path_rel.to_string_lossy().to_string(),
+										&hash,
+									),
 								);
 							}
-							Manifest::Path(src.root.join(opam_path_rel).to_string_lossy().to_string())
+							Manifest::Path(
+								src.root.join(opam_path_rel).to_string_lossy().to_string(),
+							)
 						}
 						ManifestPath::Remote(_) => {
 							let checkout = Self::extract(realised_src, esy_spec).await?;
@@ -498,8 +511,12 @@ impl AsSpec for EsySpec {
 			meta: EsyMeta::empty(),
 		}
 	}
-	fn as_spec_ref(&self) -> &Spec { &self.spec }
-	fn as_spec_mut(&mut self) -> &mut Spec { &mut self.spec }
+	fn as_spec_ref(&self) -> &Spec {
+		&self.spec
+	}
+	fn as_spec_mut(&mut self) -> &mut Spec {
+		&mut self.spec
+	}
 }
 
 struct EsySpecVisitor;

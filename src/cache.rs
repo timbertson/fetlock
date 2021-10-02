@@ -1,14 +1,14 @@
 use crate::cmd;
 use crate::memoize::Memoize;
 use crate::CliOpts;
-use crate::{GitUrl, Sha256, Src, Expr};
+use crate::{Expr, GitUrl, Sha256, Src};
 use anyhow::*;
 use futures::future::FutureExt;
 use log::*;
+use std::collections::BTreeMap;
 use std::fs;
 use std::fs::*;
 use std::path::*;
-use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::time::SystemTime;
 use tokio::process::Command;
@@ -186,11 +186,16 @@ pub async fn nix_digest_of_git_repo<P: AsRef<Path>>(path: P, rev: String) -> Res
 }
 
 pub fn subtree_expr(base: Expr, rel_path: String, hash: &Sha256) -> Expr {
-	Expr::fun_call(Expr::Literal("final.subtree".to_owned()), vec!(
-		Expr::AttrSet(vec![
-			("base".to_owned(), base),
-			("path".to_owned(), Expr::str(rel_path)),
-			("hash".to_owned(), Expr::str(hash.sri_string())),
-		].into_iter().collect::<BTreeMap<String,Expr>>())
-	))
+	Expr::fun_call(
+		Expr::Literal("final.subtree".to_owned()),
+		vec![Expr::AttrSet(
+			vec![
+				("base".to_owned(), base),
+				("path".to_owned(), Expr::str(rel_path)),
+				("hash".to_owned(), Expr::str(hash.sri_string())),
+			]
+			.into_iter()
+			.collect::<BTreeMap<String, Expr>>(),
+		)],
+	)
 }

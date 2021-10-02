@@ -29,3 +29,4 @@ pub mod bundler;
 pub mod esy;
 pub mod opam;
 pub mod yarn;
+pub mod cargo;

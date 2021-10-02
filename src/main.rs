@@ -27,6 +27,7 @@ pub async fn main() -> Result<()> {
 		lock::Type::Opam => process::<crate::opam::OpamLock>(opts).await,
 		lock::Type::Yarn => process::<crate::yarn::YarnLock>(opts).await,
 		lock::Type::Bundler => process::<crate::bundler::BundlerLock>(opts).await,
+		lock::Type::Cargo => process::<crate::cargo::CargoLock>(opts).await,
 	}
 }
 

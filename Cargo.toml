@@ -29,3 +29,5 @@ lazy_static = "1"
 env_logger = "0.7"
 nom = "6"
 fs2 = "0.4"
+cargo_metadata = "0.14"
+# crates-index = { version = "0.17", features = ["vendored-openssl"] }

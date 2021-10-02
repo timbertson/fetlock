@@ -81,6 +81,7 @@ impl CliOpts {
 			"opam" => lock::Type::Opam,
 			"yarn" => lock::Type::Yarn,
 			"bundler" => lock::Type::Bundler,
+			"cargo" => lock::Type::Cargo,
 			other => return Err(anyhow!("Unknown type: {}", other)),
 		};
 		let repo_freshness_days = matches

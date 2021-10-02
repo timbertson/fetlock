@@ -64,7 +64,7 @@ impl Backend for BundlerLock {
 			} = spec;
 			let mut spec = PartialSpec::empty();
 			let gem_url = format!("{}downloads/{}-{}.gem", &repository, &name, &version);
-			spec.set_src(Src::Archive(Url::new(gem_url)));
+			spec.set_src(Src::Archive(Archive::new(gem_url)));
 			spec.id.set_name(name.clone());
 			spec.id.set_version(version);
 			spec.add_deps(&mut dependencies);

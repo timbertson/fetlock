@@ -14,6 +14,7 @@ pub enum Type {
 	Opam,
 	Yarn,
 	Bundler,
+	Cargo,
 }
 
 impl fmt::Display for Type {
@@ -24,6 +25,7 @@ impl fmt::Display for Type {
 			Opam => "opam",
 			Yarn => "yarn",
 			Bundler => "bundler",
+			Cargo => "cargo",
 		})
 	}
 }
@@ -53,6 +55,14 @@ impl Borrow<str> for Version {
 impl Key {
 	pub fn new(raw: String) -> Key {
 		Key(raw)
+	}
+
+	pub fn from_kv(name: &str, version: &str) -> Key {
+		Self::new(format!("{}@{}", name, version))
+	}
+
+	pub fn from_id(id: &Id) -> Key {
+		Self::from_kv(&id.name, &id.version)
 	}
 
 	pub fn as_str(&self) -> &str {
@@ -216,9 +226,21 @@ impl Url {
 }
 
 #[derive(Debug, Clone)]
+pub struct Archive {
+	pub name: Option<String>,
+	pub url: Url,
+}
+
+impl Archive {
+	pub fn new(s: String) -> Self {
+		Self { name: None, url: Url::new(s) }
+	}
+}
+
+#[derive(Debug, Clone)]
 pub enum Src {
 	Github(Github),
-	Archive(Url),
+	Archive(Archive),
 	None,
 }
 
@@ -232,8 +254,8 @@ impl Src {
 
 	pub fn extension(&self) -> Option<&str> {
 		match self {
-			Src::Archive(url) => {
-				let mut it = url.0.rsplit("/").next().expect("empty split").rsplit(".");
+			Src::Archive(archive) => {
+				let mut it = archive.url.0.rsplit("/").next().expect("empty split").rsplit(".");
 				let ext_or_filename = it.next();
 				if let Some(filename) = it.next() {
 					ext_or_filename
@@ -319,13 +341,21 @@ impl SrcDigest<'_> {
 					vec![Expr::attr_set(attrs)],
 				)
 			}
-			Src::Archive(url) => Expr::fun_call(
-				Expr::Literal("pkgs.fetchurl".to_owned()),
-				vec![Expr::attr_set(vec![
-					("url", Expr::str(url.0.clone())),
+			Src::Archive(archive) => {
+				let Archive { url, name } = archive;
+				let mut attrs = vec![
+					("url", Expr::str(url.0.to_owned())),
 					("sha256", Expr::str(digest.to_string())),
-				])],
-			),
+				];
+				if let Some(name) = name {
+					attrs.push(("name", Expr::str(name.to_owned())));
+				}
+
+				Expr::fun_call(
+					Expr::Literal("pkgs.fetchurl".to_owned()),
+					vec![Expr::attr_set(attrs)],
+				)
+			},
 			Src::None => Expr::Null, // TODO better error reporting, assert?
 		}
 	}

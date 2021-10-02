@@ -97,7 +97,7 @@ impl YarnSpec {
 				.await?;
 			let listing: PackageListing = serde_json::from_str(&body)?;
 			debug!("package listing for {:?}: {:?}", self.spec.id, listing);
-			self.spec.src = Src::Archive(Url::new(listing.dist.tarball));
+			self.spec.src = Src::Archive(Archive::new(listing.dist.tarball));
 			Ok(())
 		})()
 		.await;
@@ -305,7 +305,7 @@ impl<'de> Visitor<'de> for YarnSpecVisitor {
 
 		let mut optional_deps = HashSet::new();
 		for (k, v) in dependencies.unwrap_or_default().iter() {
-			let key = Key::new(format!("{}@{}", k, v));
+			let key = Key::from_kv(k, v);
 			if dependencies_meta.get(k).and_then(|m| m.optional) == Some(true) {
 				optional_deps.insert(key.clone());
 			}

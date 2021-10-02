@@ -155,7 +155,7 @@ impl Backend for OpamLock {
 			spec.id.set_name(name_str.clone());
 			spec.id.set_version(version.clone());
 			spec.set_src(match src {
-				Some(src) => Src::Archive(Url::new(src.url.clone())),
+				Some(src) => Src::Archive(Archive::new(src.url.clone())),
 				None => Src::None,
 			});
 

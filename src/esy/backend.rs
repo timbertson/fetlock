@@ -694,7 +694,7 @@ impl EsySrcInfoVisitor {
 				// TODO handle (optional?) digest after hash
 				// TODO handle (optional) manifest
 				Ok(EsySrcInfo {
-					src: EsySrc::Remote(Src::Archive(Url::new(url))),
+					src: EsySrc::Remote(Src::Archive(Archive::new(url))),
 					manifest: None,
 					opam: None,
 				})

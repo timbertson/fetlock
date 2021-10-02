@@ -2,7 +2,7 @@
 use crate::*;
 use anyhow::*;
 use async_trait::async_trait;
-use cargo_metadata::{MetadataCommand, DependencyKind};
+use cargo_metadata::{DependencyKind, MetadataCommand};
 
 #[derive(Clone, Debug)]
 pub struct CargoLock(Lock<Spec>);
@@ -24,9 +24,11 @@ impl Backend for CargoLock {
 		// let index = crates_index::Index::new(&crates_repo.path);
 
 		let mut lock: Lock<Spec> = Lock::<Spec>::new(LockContext::new(lock::Type::Cargo));
-		let root = meta.root_package().ok_or_else(||anyhow!("Cargo metadata has no root package"))?;
+		let root = meta
+			.root_package()
+			.ok_or_else(|| anyhow!("Cargo metadata has no root package"))?;
 		lock.set_root(Root::Package(Key::new(root.name.to_owned())));
-		
+
 		for package in meta.packages {
 			let mut partial = PartialSpec::empty();
 			let key = Key::new(package.name.to_owned());
@@ -34,18 +36,21 @@ impl Backend for CargoLock {
 				None => partial.set_src(Src::None),
 				Some(_) => partial.set_src(Src::Archive(Archive {
 					name: Some("crate.tar.gz".to_owned()),
-					url: Url::new(format!("https://crates.io/api/v1/crates/{}/{}/download", &package.name, &package.version)),
+					url: Url::new(format!(
+						"https://crates.io/api/v1/crates/{}/{}/download",
+						&package.name, &package.version
+					)),
 				})),
 			}
 			partial.id.set_name(package.name);
 			partial.id.set_version(package.version.to_string());
 			for dep in package.dependencies {
 				if dep.kind == DependencyKind::Development {
-					continue
+					continue;
 				}
 				partial.add_dep(Key::new(dep.name.to_owned()));
 			}
-			
+
 			let spec = partial.build()?;
 			lock.add_impl(key, spec)
 		}

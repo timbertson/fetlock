@@ -233,7 +233,10 @@ pub struct Archive {
 
 impl Archive {
 	pub fn new(s: String) -> Self {
-		Self { name: None, url: Url::new(s) }
+		Self {
+			name: None,
+			url: Url::new(s),
+		}
 	}
 }
 
@@ -255,7 +258,13 @@ impl Src {
 	pub fn extension(&self) -> Option<&str> {
 		match self {
 			Src::Archive(archive) => {
-				let mut it = archive.url.0.rsplit("/").next().expect("empty split").rsplit(".");
+				let mut it = archive
+					.url
+					.0
+					.rsplit("/")
+					.next()
+					.expect("empty split")
+					.rsplit(".");
 				let ext_or_filename = it.next();
 				if let Some(filename) = it.next() {
 					ext_or_filename
@@ -355,7 +364,7 @@ impl SrcDigest<'_> {
 					Expr::Literal("pkgs.fetchurl".to_owned()),
 					vec![Expr::attr_set(attrs)],
 				)
-			},
+			}
 			Src::None => Expr::Null, // TODO better error reporting, assert?
 		}
 	}

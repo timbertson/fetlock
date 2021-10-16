@@ -5,7 +5,7 @@ with prev.pkgs.lib;
   depKeys,
   src ? prev.emptyDrv,
 }@spec: final.buildRubyGem {
-  inherit pname version depKeys src;
+  inherit pname version src;
   gemName = pname;
   
   propagatedBuildInputs = (map final.getDrv (filter (k: k != "bundler") depKeys));

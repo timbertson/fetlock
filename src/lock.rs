@@ -70,6 +70,18 @@ impl Key {
 	}
 }
 
+impl From<&str> for Key {
+	fn from(k: &str) -> Self {
+		Self::new(k.to_owned())
+	}
+}
+
+impl From<&String> for Key {
+	fn from(k: &String) -> Self {
+		Self::new(k.to_owned())
+	}
+}
+
 impl fmt::Display for Key {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		fmt::Display::fmt(&self.0, f)

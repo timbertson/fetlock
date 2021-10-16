@@ -1,19 +1,90 @@
 // cargo backend
 use crate::*;
 use anyhow::*;
-use log::*;
 use std::collections::HashMap;
 use async_trait::async_trait;
-use cargo_metadata::{DependencyKind, MetadataCommand};
+use cargo_metadata::{DependencyKind, MetadataCommand, Package, Node};
 
 #[derive(Clone, Debug)]
 pub struct CargoLock(Lock<Spec>);
 
 impl CargoLock {
-}
+	fn package_spec(package: &Package, nodes: &HashMap<Key, Node>) -> Result<(Key, Spec)> {
+		// code / concepts cribbed from https://github.com/kolloch/crate2nix/blob/4ea73d6a96f9dcf5cab70e454e39b33ca0bbaccb/crate2nix/src/resolve.rs
+		let key = Key::from(&package.id.repr);
+		let node = nodes.get(&key).ok_or_else(||
+			anyhow!("Resolution metadata missing for package {:?}", &key))?;
 
-pub struct CrateMeta {
-	features: Vec<String>,
+		let mut partial = PartialSpec::empty();
+		match package.source {
+			None => partial.set_src(Src::None),
+			Some(_) => partial.set_src(Src::Archive(Archive {
+				name: Some("crate.tar.gz".to_owned()),
+				url: Url::new(format!(
+					"https://crates.io/api/v1/crates/{}/{}/download",
+					&package.name, &package.version
+				)),
+			})),
+		}
+		partial.id.set_name(package.name.to_string());
+		partial.id.set_version(package.version.to_string());
+		partial.extra.insert("edition".to_owned(), Expr::str(package.edition.to_owned()));
+
+		// note: package.dependencies is the spec, we can't tie it back to concrete pacakges.
+		// we need to use the actual resolved deps for this package
+		let mut build_deps = Vec::new();
+		for dep in &node.deps {
+			let key = || Key::from(&dep.pkg.repr);
+			for dep_kind in &dep.dep_kinds {
+				// TODO filter on k.target?
+				match dep_kind.kind {
+					DependencyKind::Normal => partial.add_dep(key()),
+					DependencyKind::Build => build_deps.push(key()),
+					DependencyKind::Unknown => partial.add_dep(key()),
+					DependencyKind::Development => (),
+				}
+			}
+		}
+
+		let mut proc_macro = false;
+		for target in &package.targets {
+			// TODO how do we know what people actually depend on?
+			// All of them?
+			if target.kind.iter().any(|k| k == "lib") {
+				// TODO is there a better way to get the base dir, or src_path relative to it?
+				let base_path = package.manifest_path.parent().ok_or_else(||anyhow!("empy path"))?;
+				let src_rel = target.src_path.strip_prefix(base_path)?;
+				if src_rel != "src/lib.rs" {
+					partial.extra.insert("libPath".to_owned(), Expr::str(src_rel.to_string()));
+				}
+			}
+
+			if target.kind.iter().any(|k| k == "proc-macro") {
+				proc_macro = true
+			}
+		}
+
+		if !node.features.is_empty() {
+			partial.extra.insert("features".to_owned(),
+				Expr::List(node.features.iter().map(|f|
+					Expr::str(f.to_owned())
+				).collect())
+			);
+		}
+		if !build_deps.is_empty() {
+			partial.extra.insert("buildDepKeys".to_owned(),
+				Expr::List(build_deps.into_iter().map(|k|
+					Expr::str(k.into_string())
+				).collect())
+			);
+		}
+		if proc_macro {
+			partial.extra.insert("procMacro".to_owned(), Expr::Bool(true));
+		}
+
+		let spec = partial.build()?;
+		Ok((key, spec))
+	}
 }
 
 #[async_trait(?Send)]
@@ -36,53 +107,8 @@ impl Backend for CargoLock {
 		}
 		
 		for package in meta.packages {
-			let key = Key::from(&package.id.repr);
-			let node = nodes.get(&key).ok_or_else(||
-				anyhow!("Resolution metadata missing for package {:?}", &key))?;
-
-			let mut partial = PartialSpec::empty();
-			match package.source {
-				None => partial.set_src(Src::None),
-				Some(_) => partial.set_src(Src::Archive(Archive {
-					name: Some("crate.tar.gz".to_owned()),
-					url: Url::new(format!(
-						"https://crates.io/api/v1/crates/{}/{}/download",
-						&package.name, &package.version
-					)),
-				})),
-			}
-			partial.id.set_name(package.name);
-			partial.id.set_version(package.version.to_string());
-			partial.extra.insert("edition".to_owned(), Expr::str(package.edition.to_owned()));
-			if !node.features.is_empty() {
-				partial.extra.insert("features".to_owned(),
-					Expr::List(node.features.iter().map(|f|
-						Expr::str(f.to_owned())
-					).collect())
-				);
-			}
-			
-			// note: package.dependencies is the spec, we can't tie it back to concrete pacakges.
-			// we need to use the actual resolved deps for this package
-			for dep in &node.deps {
-				let required = dep.dep_kinds.iter().any(|k| {
-					// TODO filter on k.target?
-					match k.kind {
-						DependencyKind::Normal => true,
-						DependencyKind::Build => true,
-						DependencyKind::Unknown => true,
-						DependencyKind::Development => false,
-					}
-				});
-				if !required {
-					debug!("skipping development dependency {:?} -> {:?}", &key, &dep.pkg);
-					continue;
-				}
-				let dep_key = Key::from(&dep.pkg.repr);
-				partial.add_dep(dep_key);
-			}
-
-			let spec = partial.build()?;
+			let (key, spec) = Self::package_spec(&package, &nodes)
+				.with_context(||format!("Processing package {:?}", &package))?;
 			lock.add_impl(key, spec)
 		}
 

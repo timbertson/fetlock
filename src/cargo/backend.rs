@@ -1,15 +1,27 @@
 // cargo backend
 use crate::*;
 use anyhow::*;
+use log::*;
 use std::collections::HashMap;
+use std::process::Command;
+use std::env;
+use std::str::FromStr;
+use platforms::platform;
 use async_trait::async_trait;
 use cargo_metadata::{DependencyKind, MetadataCommand, Package, Node};
+use cargo_platform::Cfg;
 
 #[derive(Clone, Debug)]
 pub struct CargoLock(Lock<Spec>);
 
+#[derive(Debug)]
+struct Platform {
+	platform: &'static platform::Platform,
+	cfgs: Vec<Cfg>,
+}
+
 impl CargoLock {
-	fn package_spec(package: &Package, nodes: &HashMap<Key, Node>) -> Result<(Key, Spec)> {
+	fn package_spec(package: &Package, nodes: &HashMap<Key, Node>, platform: &Platform) -> Result<(Key, Spec)> {
 		// code / concepts cribbed from https://github.com/kolloch/crate2nix/blob/4ea73d6a96f9dcf5cab70e454e39b33ca0bbaccb/crate2nix/src/resolve.rs
 		let key = Key::from(&package.id.repr);
 		let node = nodes.get(&key).ok_or_else(||
@@ -36,7 +48,12 @@ impl CargoLock {
 		for dep in &node.deps {
 			let key = || Key::from(&dep.pkg.repr);
 			for dep_kind in &dep.dep_kinds {
-				// TODO filter on k.target?
+				if let Some(platform_filter) = &dep_kind.target {
+					if !platform_filter.matches(platform.platform.target_triple, &platform.cfgs) {
+						debug!("Ignoring dependency for target platform {:?} (current: {:?})", platform_filter, platform);
+						continue
+					}
+				}
 				match dep_kind.kind {
 					DependencyKind::Normal => partial.add_dep(key()),
 					DependencyKind::Build => build_deps.push(key()),
@@ -85,6 +102,27 @@ impl CargoLock {
 		let spec = partial.build()?;
 		Ok((key, spec))
 	}
+	
+	fn current_platform() -> Result<Platform> {
+		let platform = platform::Platform::guess_current().ok_or_else(||anyhow!("Unknown platform"))?;
+		let output = Command::new(env::var("RUSTC").as_ref().map(|s| &**s).unwrap_or("rustc"))
+			.arg("--target")
+			.arg(platform.target_triple)
+			.args(&["--print", "cfg"])
+			.output()?;
+
+		if !output.status.success() {
+			return Err(anyhow!("`rustc --print cfg` failed: {}", String::from_utf8(output.stderr)?));
+		}
+
+		let cfg_str = String::from_utf8(output.stdout)?;
+		let mut cfgs = vec!();
+		for line in cfg_str.lines() {
+			cfgs.push(Cfg::from_str(line)?);
+		}
+
+		Ok(Platform { cfgs, platform })
+	}
 }
 
 #[async_trait(?Send)]
@@ -106,8 +144,9 @@ impl Backend for CargoLock {
 			nodes.insert(Key::from(&node.id.repr), node.clone());
 		}
 		
+		let platform = Self::current_platform()?;
 		for package in meta.packages {
-			let (key, spec) = Self::package_spec(&package, &nodes)
+			let (key, spec) = Self::package_spec(&package, &nodes, &platform)
 				.with_context(||format!("Processing package {:?}", &package))?;
 			lock.add_impl(key, spec)
 		}

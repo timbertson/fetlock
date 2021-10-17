@@ -30,4 +30,6 @@ env_logger = "0.7"
 nom = "6"
 fs2 = "0.4"
 cargo_metadata = "0.14"
+cargo-platform = "0.1"
+platforms = "1"
 # crates-index = { version = "0.17", features = ["vendored-openssl"] }

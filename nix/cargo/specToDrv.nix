@@ -8,10 +8,13 @@ with prev.pkgs.lib;
   buildDepKeys ? [],
   features ? [],
   src ? prev.emptyDrv,
+  buildSrc ? null,
   procMacro ? false,
-}@spec: final.buildRustCrate{
+}@spec: final.buildRustCrate ({
   inherit pname version src features edition libPath procMacro;
   crateName = pname;
   dependencies = (map final.getDrv depKeys);
   buildDependencies = (map final.getDrv buildDepKeys);
 }
+  // (if buildSrc == null then {} else { build = buildSrc; })
+)

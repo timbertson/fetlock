@@ -5,6 +5,7 @@ use log::*;
 use std::collections::HashMap;
 use std::process::Command;
 use std::env;
+use std::path::Path;
 use std::str::FromStr;
 use platforms::platform;
 use async_trait::async_trait;
@@ -21,6 +22,10 @@ struct Platform {
 }
 
 impl CargoLock {
+	fn relative_to<'s, B: AsRef<Path>, S: 's + AsRef<Path>>(base: B, sub: &'s S) -> Result<&'s str> {
+		Ok(sub.as_ref().strip_prefix(base.as_ref())?.to_str().ok_or_else(||anyhow!("invalid path"))?)
+	}
+
 	fn package_spec(package: &Package, nodes: &HashMap<Key, Node>, platform: &Platform) -> Result<(Key, Spec)> {
 		// code / concepts cribbed from https://github.com/kolloch/crate2nix/blob/4ea73d6a96f9dcf5cab70e454e39b33ca0bbaccb/crate2nix/src/resolve.rs
 		let key = Key::from(&package.id.repr);
@@ -63,17 +68,22 @@ impl CargoLock {
 			}
 		}
 
+		let base_path = package.manifest_path.parent().ok_or_else(||anyhow!("empy path"))?;
 		let mut proc_macro = false;
+		let mut build_target = None;
 		for target in &package.targets {
 			// TODO how do we know what people actually depend on?
 			// All of them?
 			if target.kind.iter().any(|k| k == "lib") {
 				// TODO is there a better way to get the base dir, or src_path relative to it?
-				let base_path = package.manifest_path.parent().ok_or_else(||anyhow!("empy path"))?;
-				let src_rel = target.src_path.strip_prefix(base_path)?;
+				let src_rel = Self::relative_to(base_path, &target.src_path)?;
 				if src_rel != "src/lib.rs" {
 					partial.extra.insert("libPath".to_owned(), Expr::str(src_rel.to_string()));
 				}
+			}
+
+			if target.kind.iter().any(|k| k == "custom-build") {
+				build_target = Some(target);
 			}
 
 			if target.kind.iter().any(|k| k == "proc-macro") {
@@ -94,6 +104,9 @@ impl CargoLock {
 					Expr::str(k.into_string())
 				).collect())
 			);
+		}
+		if let Some(build_target) = build_target {
+			partial.extra.insert("buildSrc".to_owned(), Expr::str(Self::relative_to(base_path, &build_target.src_path)?.to_owned()));
 		}
 		if proc_macro {
 			partial.extra.insert("procMacro".to_owned(), Expr::Bool(true));

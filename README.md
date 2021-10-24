@@ -6,11 +6,13 @@ Fetlock is a _unified tool_ for converting various lockfiles into `nix` expressi
 
 ## Currently supported backends:
 
- - [esy][]: supported, lots of overrides needed currently
+ - [bundler][] (rubygems):
+ - [cargo][] (rust): supported, you can build `fetlock` itself!
+ - [esy][] (reason / ocaml): supported (requires opam2nix), lots of overrides needed currently
+ - [opam][] (ocaml): supported (requires opam2nix)
  - [yarn][] (nodejs): rudimentary support for v2 lockfiles
    - no `bin` wrappers
    - no `install` script / native compilation support
- - [bundler][] (rubygems):
 
 ---
 
@@ -43,7 +45,7 @@ But, being a single tool, they can lean on common functionality:
  - specifying package & configuration overrides
  - consistent nix API for importing the generated expressions
 
-The benefit for _developers_ is that adding a new language backend should be easier than writing a new tool, particularly if the language isn't doing anything particularly novel.
+The benefit for fetlock _contriubtors_ is that adding a new language backend should be easier than writing a new tool, particularly if the language isn't doing anything particularly novel.
 
 And for _users_, there's a single tool with consistent behaviour and functionality, rather than each language having its own unique usage, features and quirks.
 
@@ -61,9 +63,15 @@ And for _users_, there's a single tool with consistent behaviour and functionali
 
 **Language-specific features:** If a feature is very particular to one ecosystem, it's harder to justify.
 
-**Working on anything other than lock files**: Some tools work on a raw dependency specification, resolving dependencies for you. That's a complex, language-specific job, so `fetlock` requires that you already have a lock file.
+**Working on anything other than lockfile inputs**: Package managers do a lot of work to produce a lock file, and fetlock has no intention of reimplementing that.
 
 **Replacement for language-specific package managers**: since `fetlock` works on lock files, you still need the invidual package managers to create this lock file, and they likely provide a better development experience.
+
+## "Maybe one day":
+
+I'm not ruling these out, but I've made no attempt at them so far:
+
+**Cross-platform builds**: I've never needed this myself, and I have no idea how hard it is.
 
 ## Why the name?
 

@@ -5,7 +5,7 @@ with prev.pkgs.lib;
   depKeys,
   edition,
   libPath ? "",
-  binPath ? "",
+  crateBin ? null,
   buildDepKeys ? [],
   features ? [],
   src ? prev.emptyDrv,
@@ -19,4 +19,5 @@ with prev.pkgs.lib;
   buildDependencies = (map final.getDrv buildDepKeys);
 }
   // (if buildSrc == null then {} else { build = buildSrc; })
+  // (if crateBin == null then {} else { inherit crateBin; })
 )

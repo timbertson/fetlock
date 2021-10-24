@@ -101,6 +101,7 @@ impl CargoLock {
 		let base_path = package.manifest_path.parent().ok_or_else(||anyhow!("empy path"))?;
 		let mut proc_macro = false;
 		let mut build_target = None;
+		let mut crate_bin = Vec::new();
 		for target in &package.targets {
 
 			// TODO is there a better way to get the base dir, or src_path relative to it?
@@ -113,7 +114,12 @@ impl CargoLock {
 			}
 
 			if target.kind.iter().any(|k| k == "bin") {
-				partial.extra.insert("binPath".to_owned(), Expr::str(src_rel.to_string()));
+				crate_bin.push(Expr::AttrSet(
+					vec!(
+						("name".to_owned(), Expr::str(target.name.to_owned())),
+						("path".to_owned(), Expr::str(src_rel.to_string())),
+					).into_iter().collect()
+				))
 			}
 
 			if target.kind.iter().any(|k| k == "custom-build") {
@@ -131,6 +137,9 @@ impl CargoLock {
 					Expr::str(f.to_owned())
 				).collect())
 			);
+		}
+		if !crate_bin.is_empty() {
+			partial.extra.insert("crateBin".to_owned(), Expr::List(crate_bin));
 		}
 		if !build_deps.is_empty() {
 			partial.extra.insert("buildDepKeys".to_owned(),

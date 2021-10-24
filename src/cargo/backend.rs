@@ -9,7 +9,7 @@ use std::path::Path;
 use std::str::FromStr;
 use platforms::platform;
 use async_trait::async_trait;
-use cargo_metadata::{DependencyKind, MetadataCommand, Package, Node};
+use cargo_metadata::{DependencyKind, MetadataCommand, Package, Node, PackageId};
 use cargo_platform::Cfg;
 
 #[derive(Clone, Debug)]
@@ -18,6 +18,17 @@ pub struct CargoLock(Lock<Spec>);
 struct CargoMeta<'a> {
 	package: &'a Package,
 	node: &'a Node,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct CargoKey(Key);
+impl CargoKey {
+	fn from(id: &PackageId) -> Self {
+		// cargo keys take the format `name version (repo-info)`. The repo-info is noisy (contains local paths) and
+		// generally shouldn't be important.
+		let significant_parts = id.repr.split(' ').take_while(|part| !part.starts_with('(')).collect::<Vec<&str>>().join(" ");
+		Self(Key::new(significant_parts))
+	}
 }
 
 #[derive(Debug)]
@@ -31,10 +42,10 @@ impl CargoLock {
 		Ok(sub.as_ref().strip_prefix(base.as_ref())?.to_str().ok_or_else(||anyhow!("invalid path"))?)
 	}
 
-	fn package_spec(meta: &CargoMeta, packages: &HashMap<Key, CargoMeta>, platform: &Platform) -> Result<(Key, Spec)> {
+	fn package_spec(meta: &CargoMeta, packages: &HashMap<CargoKey, CargoMeta>, platform: &Platform) -> Result<(CargoKey, Spec)> {
 		let CargoMeta { package, node } = meta;
 		// code / concepts cribbed from https://github.com/kolloch/crate2nix/blob/4ea73d6a96f9dcf5cab70e454e39b33ca0bbaccb/crate2nix/src/resolve.rs
-		let key = Key::from(&package.id.repr);
+		let key = CargoKey::from(&package.id);
 
 		let mut partial = PartialSpec::empty();
 		match package.source {
@@ -58,7 +69,7 @@ impl CargoLock {
 		let mut build_deps = Vec::new();
 		for dep in &node.deps {
 			// TODO implement crate renames
-			let key = Key::from(&dep.pkg.repr);
+			let key = CargoKey::from(&dep.pkg);
 			let dep_meta = packages.get(&key).ok_or_else(||
 				anyhow!("Resolution package missing for dependency {:?}", &key))?;
 
@@ -79,9 +90,9 @@ impl CargoLock {
 					}
 				}
 				match dep_kind.kind {
-					DependencyKind::Normal => partial.add_dep(key.clone()),
-					DependencyKind::Build => build_deps.push(key.clone()),
-					DependencyKind::Unknown => partial.add_dep(key.clone()),
+					DependencyKind::Normal => partial.add_dep(key.clone().0),
+					DependencyKind::Build => build_deps.push(key.clone().0),
+					DependencyKind::Unknown => partial.add_dep(key.clone().0),
 					DependencyKind::Development => (),
 				}
 			}
@@ -187,15 +198,15 @@ impl Backend for CargoLock {
 		let mut lock: Lock<Spec> = Lock::<Spec>::new(LockContext::new(lock::Type::Cargo));
 		let resolve = meta.resolve.ok_or_else(||anyhow!("Cargo metadata did not include resolution information"))?;
 		let root = resolve.root.ok_or_else(|| anyhow!("Cargo metadata has no root package"))?;
-		lock.set_root(Root::Package(Key::from(&root.repr)));
+		lock.set_root(Root::Package(CargoKey::from(&root).0));
 
-		let nodes: HashMap<Key, &Node> = resolve.nodes.iter().map(|node| (Key::from(&node.id.repr), node)).collect();
+		let nodes: HashMap<CargoKey, &Node> = resolve.nodes.iter().map(|node| (CargoKey::from(&node.id), node)).collect();
 		let metas = {
-			let mut map: HashMap<Key, CargoMeta<'_>> = HashMap::new();
+			let mut map: HashMap<CargoKey, CargoMeta<'_>> = HashMap::new();
 			for package in meta.packages.iter() {
-				let key = Key::from(&package.id.repr);
+				let key = CargoKey::from(&package.id);
 				let node = nodes.get(&key).ok_or_else(|| anyhow!("Resolution node missing for package {:?}", &key))?;
-				map.insert(Key::from(&package.id.repr), CargoMeta { package, node });
+				map.insert(CargoKey::from(&package.id), CargoMeta { package, node });
 			}
 			map
 		};
@@ -204,7 +215,7 @@ impl Backend for CargoLock {
 		for meta in metas.values() {
 			let (key, spec) = Self::package_spec(&meta, &metas, &platform)
 				.with_context(||format!("Processing package {:?}", &meta.package))?;
-			lock.add_impl(key, spec)
+			lock.add_impl(key.0, spec)
 		}
 
 		Ok(CargoLock(lock))

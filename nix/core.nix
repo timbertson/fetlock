@@ -46,6 +46,7 @@ let
 								);
 						in (fallback self) // {
 							inherit pkgs getDrv;
+
 							emptyDrv = stdenv.mkDerivation {
 								name = "empty-drv";
 								phases = "buildPhase fixupPhase";
@@ -135,6 +136,18 @@ let
 							# (spec is the fetlock concept, i.e. the representation in lock.nix)
 							overrideSpec = attrs:
 								overrideOnly attrs (fn: drv: drv.overrideSpec fn);
+
+							# Derivations to be used with nix-shell (not nix-build):
+							# lockShell makes the lock tool available (e.g. cargo, bundler, etc)
+							# updateLock actually writes the lockfile (locally).
+							# Both of these should be used with nix-shell, not nix-build
+							lockShell = self.pkgs.mkShell {
+								packages = [ self.lockTool ];
+							};
+							updateLock = self.pkgs.mkShell {
+								packages = [ self.lockTool ];
+								shellHook = "$lockCommand; exit";
+							};
 						};
 
 					sourceOverlay = import lock; # TODO allow literal?

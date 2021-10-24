@@ -4,7 +4,8 @@ let
   core = pkgs.callPackage ../core.nix {};
   base = final: prev: {
     specToDrv = import ./specToDrv.nix final prev;
-    buildRustCrate = pkgs.buildRustCrate;
+    lockTool = final.pkgs.cargo;
+    lockCommand = "cargo generate-lockfile";
   };
 in core.makeAPI {
   overlays = [ base ];

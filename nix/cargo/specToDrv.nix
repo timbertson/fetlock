@@ -5,13 +5,15 @@ with prev.pkgs.lib;
   depKeys,
   edition,
   libPath ? "",
+  binPath ? "",
   buildDepKeys ? [],
   features ? [],
   src ? prev.emptyDrv,
   buildSrc ? null,
   procMacro ? false,
-}@spec: final.buildRustCrate ({
-  inherit pname version src features edition libPath procMacro;
+  crateRenames ? {},
+}@spec: final.pkgs.buildRustCrate ({
+  inherit pname version src features edition libPath procMacro crateRenames;
   crateName = pname;
   dependencies = (map final.getDrv depKeys);
   buildDependencies = (map final.getDrv buildDepKeys);

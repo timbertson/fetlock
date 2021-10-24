@@ -4,12 +4,12 @@
 
 Fetlock is a _unified tool_ for converting various lockfiles into `nix` expressions, plus a common `nix` API for building and tweaking the generated expressions.
 
-## Currently supported backends:
+## Available backends:
 
- - [bundler][] (rubygems):
- - [cargo][] (rust): supported, you can build `fetlock` itself!
- - [esy][] (reason / ocaml): supported (requires opam2nix), lots of overrides needed currently
- - [opam][] (ocaml): supported (requires opam2nix)
+ - [bundler][] (rubygems)
+ - [cargo][] (rust): used to build `fetlock` itself
+ - [esy][] (reason / ocaml): requires [opam2nix][], lots of overrides needed currently
+ - [opam][] (ocaml): requires [opam2nix][]
  - [yarn][] (nodejs): rudimentary support for v2 lockfiles
    - no `bin` wrappers
    - no `install` script / native compilation support
@@ -77,11 +77,11 @@ I'm not ruling these out, but I've made no attempt at them so far:
 
 It **fet**ches **lock**file implementations. Also a fetlock is a flexible muscle found on horses and other quadrupeds.
 
-## Why did you start this?
+## Why did you build this?
 
-I've built one such tool, [opam2nix][]. It takes [opam][] packages and generates nix expressions. I suspect this is one of the more complex tools, because opam packages are crazy expressive.
+I've built one such tool before, [opam2nix][]. It takes [opam][] packages and generates nix expressions. I suspect this is one of the more complex tools, because opam packages are crazy expressive.
 
-Even so, `opam2nix` is not brilliant. It works well enough, but the nix API can be cumbersome and it's hard to tweak the solver's behaviour. I'd like to improve that, but the thought of reimplementing this advanced functionality into every such tool is exhausting. I've _also_ used many other tools (`bundix`, `node2nix`, etc) and found _them_ lacking.
+Even so, `opam2nix` is not brilliant. It works well enough, but the nix API can be cumbersome and it doesn't support things like development / test dependencies. I'd like to improve that, but the thought of reimplementing this advanced functionality into every such tool is exhausting. I've _also_ used many other tools (`bundix`, `node2nix`, etc) and found _them_ lacking.
 
 In parallel, I've also wanted to build [esy][] packages with nix. I could bolt that onto `opam2nix` since they're both implemented in OCaml, but that doesn't feel right. If I'm going to build another tool, I might as well build The Last One I'll Ever Need To Build.
 
@@ -89,14 +89,12 @@ In parallel, I've also wanted to build [esy][] packages with nix. I could bolt t
 
 ...I suppose so? I'm terribly lazy, so that doesn't sound like fun. But I have a hunch that the guts of many of these tools aren't that different, and could benefit from a suite of shared functionality.
 
-_If_ this turns out to work well for a few backends, perhaps it'll gain some traction and others might help add backends.
-
-## Can this actually work?
-
-I don't think I'll know until I implement a few very different backends, so stay tuned!
+_If_ this turns out to work well for a few backends, perhaps it'll gain some traction and others might help ensure it works with all the crazy edge cases out there. It's likely that some of the backends receive a lot more attention than others, but I hope to keep each backend at least working for some nontrivial example program.
 
 [nix]: https://nixos.org/
 [opam2nix]: https://github.com/timbertson/opam2nix
 [opam]: https://opam.ocaml.org/
 [esy]: https://esy.sh/
 [yarn]: https://yarnpkg.com/
+[bundler]: https://bundler.io/
+[cargo]: https://crates.io/

@@ -14,6 +14,48 @@ Fetlock is a _unified tool_ for converting various lockfiles into `nix` expressi
    - no `bin` wrappers
    - no `install` script / native compilation support
 
+## General usage:
+
+The general workflow is:
+
+### Write `fetlock.nix`:
+
+This imports the nix code from the master branch for ease of demonstration, you should pin the revision as appropriate:
+
+```
+# fetlock.nix
+import (builtins.fetchTarball "https://github.com/timbertson/opam2nix/archive/v1.tar.gz") {}
+```
+
+### Get into a development shell:
+
+This is a convenience to get shell both `fetlock` and the backend-appropriate tooling available on $PATH.
+
+```
+$ nix-shell -A cargo.shell fetlock.nix
+```
+
+### Generate `lock.nix`
+
+```
+$ fetlock --type cargo -o lock.nix Cargo.lock
+```
+
+### Use the lock.nix to build a full nix expression
+
+```
+# default.nix
+let
+  fetlock = import ./fetlock.nix;
+  selection = fetlock.cargo.load ./lock.nix;
+in
+selection.root
+```
+
+Fingers crossed, this derivation will build your whole project. If there are issues, you may need to add package-specific overrides to tweak things (e.g. adding missing dependencies which aren't captured by the language-specific package manager).
+
+See the `examples/` directory for more examples.
+
 ---
 
 ## The problem

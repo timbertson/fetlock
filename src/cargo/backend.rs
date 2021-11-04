@@ -3,9 +3,9 @@ use crate::*;
 use anyhow::*;
 use log::*;
 use std::collections::HashMap;
-use std::process::Command;
+use tokio::process::Command;
 use std::env;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use platforms::platform;
 use async_trait::async_trait;
@@ -173,19 +173,14 @@ impl CargoLock {
 		Ok((key, spec))
 	}
 	
-	fn current_platform() -> Result<Platform> {
+	async fn current_platform() -> Result<Platform> {
 		let platform = platform::Platform::guess_current().ok_or_else(||anyhow!("Unknown platform"))?;
-		let output = Command::new(env::var("RUSTC").as_ref().map(|s| &**s).unwrap_or("rustc"))
+		let cfg_str = cmd::run_stdout("rustc --print cfg", None, Command::new(env::var("RUSTC").as_ref().map(|s| &**s).unwrap_or("rustc"))
 			.arg("--target")
 			.arg(platform.target_triple)
 			.args(&["--print", "cfg"])
-			.output()?;
+		).await?;
 
-		if !output.status.success() {
-			return Err(anyhow!("`rustc --print cfg` failed: {}", String::from_utf8(output.stderr)?));
-		}
-
-		let cfg_str = String::from_utf8(output.stdout)?;
 		let mut cfgs = vec!();
 		for line in cfg_str.lines() {
 			cfgs.push(Cfg::from_str(line)?);
@@ -220,7 +215,7 @@ impl Backend for CargoLock {
 			map
 		};
 
-		let platform = Self::current_platform()?;
+		let platform = Self::current_platform().await?;
 		for meta in metas.values() {
 			let (key, spec) = Self::package_spec(&meta, &metas, &platform)
 				.with_context(||format!("Processing package {:?}", &meta.package))?;
@@ -236,5 +231,9 @@ impl Backend for CargoLock {
 
 	async fn finalize(mut self) -> Result<Lock<Self::Spec>> {
 		Ok(self.0)
+	}
+	
+	async fn update_lockfile<'a>(root: &'a PathBuf, rel: &'a str) -> Result<()> {
+		cmd::exec(Command::new("cargo").arg("generate-lockfile")).await
 	}
 }

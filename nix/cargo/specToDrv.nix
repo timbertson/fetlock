@@ -17,6 +17,7 @@ with prev.pkgs.lib;
   crateName = pname;
   dependencies = (map final.getDrv depKeys);
   buildDependencies = (map final.getDrv buildDepKeys);
+  passthru = final.mkPassthru spec;
 }
   // (if buildSrc == null then {} else { build = buildSrc; })
   // (if crateBin == null then {} else { inherit crateBin; })

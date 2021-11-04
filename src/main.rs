@@ -33,6 +33,22 @@ pub async fn main() -> Result<()> {
 
 async fn process<B: Backend + fmt::Debug>(mut opts: CliOpts) -> Result<()> {
 	B::init_lock_src(&mut opts.lock_src)?;
+	
+	if opts.update {
+		debug!("Updating lockfile {:?}", &opts.lock_src);
+		let LockSrc { root, relative, .. } = &opts.lock_src;
+		if let LockRoot::Path(p) = root {
+			B::update_lockfile(p, relative).await?;
+		} else {
+			return Err(anyhow!("--update requires a local lock path"));
+		}
+	}
+
+	if opts.no_nix {
+		debug!("--no-nix passed, exiting");
+		return Ok(());
+	}
+
 	info!("loading {:?}", &opts.lock_src);
 	let lock_src = opts.lock_src.resolve().await?;
 	let mut lock = B::load(&lock_src, opts.clone())

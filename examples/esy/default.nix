@@ -3,11 +3,10 @@ with pkgs;
 let
   osx = darwin.apple_sdk.frameworks;
   ifDarwin = deps: if stdenv.isDarwin then deps else [];
-  esy = (callPackage ../../nix/esy {});
-  yarn = (callPackage ../../nix/yarn {});
-  yarnSelection = yarn.load ../yarn/lock.nix {};
+  fetlock = callPackage ../../nix {};
+  yarnSelection = fetlock.yarn.load ../yarn/lock.nix {};
   
-  selection = esy.load ./lock.nix {
+  selection = fetlock.esy.load ./lock.nix {
     pkgOverrides = self:
       let
         fixupLibPath = name: o: stdenv.mkDerivation (self.specToAttrs (o.spec // {
@@ -149,6 +148,4 @@ let
     ];
   };
 in
-selection.root.overrideAttrs (o: {
-  passthru = selection.drvsByName;
-})
+selection.root

@@ -1,7 +1,7 @@
+{ core }:
 { pkgs, stdenv, lib }:
 with lib;
 let
-  core = pkgs.callPackage ../core.nix {};
   ocamlCommon = pkgs.callPackage ./ocamlCommon.nix {};
 
   base = final: prev: {

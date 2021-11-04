@@ -1,7 +1,7 @@
+{ core }:
 { pkgs, stdenv, lib }:
 with lib;
 let
-  core = pkgs.callPackage ../core.nix {};
   base = final: prev: {
     specToDrv = import ./specToDrv.nix final prev;
     buildRubyGem = pkgs.buildRubyGem; # TODO override ruby etc

@@ -2,6 +2,7 @@
 use crate::lock::{AsSpec, Lock, PartialSpec};
 use crate::lock_src::{LocalSrc, LockSrc};
 use crate::CliOpts;
+use std::path::PathBuf;
 use anyhow::*;
 use async_trait::async_trait;
 
@@ -34,4 +35,12 @@ pub trait Backend: Sized + std::fmt::Debug {
 	// (e.g. realising store paths and downloading
 	// additional metadata from the internet)
 	async fn finalize(self) -> Result<Lock<Self::Spec>>;
+
+	// Run whatever commands are required to update the lockfile based on
+	// the current specification. This assumes all necessary developer tooling
+	// is available on $PATH
+	async fn update_lockfile<'a>(root: &'a PathBuf, rel: &'a str) -> Result<()> {
+		// TODO remove default impl
+		Err(anyhow!("--update is not implemented for this backend"))
+	}
 }

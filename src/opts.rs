@@ -12,6 +12,9 @@ pub struct CliOpts {
 	pub src: Option<GithubSrc>,
 	pub repo_freshness_days: u32,
 	pub ocaml_version: Option<String>,
+	// TODO make a better ADT which encapsulates modes
+	pub update: bool,
+	pub no_nix: bool,
 }
 
 fn usage<T>(program: &str, opts: Options) -> Result<T> {
@@ -59,6 +62,9 @@ impl CliOpts {
 
 		opts.optopt("", "ocaml-version", "Required for opam", "VERSION");
 
+		opts.optflag("", "update", "Update underlying lockfile from version specifications (using language-specific tooling)");
+		opts.optflag("", "no-nix", "Don't generate a nix lock expression (useful with --update)");
+
 		let matches = opts.parse(&argv[1..])?;
 		if matches.opt_present("h") {
 			return usage(&program, opts);
@@ -93,6 +99,8 @@ impl CliOpts {
 		let src = matches.opt_str("src");
 		let src = src.as_deref().map(GithubSrc::parse).transpose()?;
 		let ocaml_version = matches.opt_str("ocaml-version");
+		let update = matches.opt_present("update");
+		let no_nix = matches.opt_present("no-nix");
 
 		let lock_rel = matches.free.into_iter().next();
 		let lock_src = LockSrc::parse(lock_type, lock_src.as_deref(), lock_rel)?;
@@ -101,6 +109,8 @@ impl CliOpts {
 			lock_src,
 			src,
 			repo_freshness_days,
+			update,
+			no_nix,
 			ocaml_version,
 		})
 	}

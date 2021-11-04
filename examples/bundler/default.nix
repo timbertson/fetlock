@@ -1,8 +1,8 @@
-{ pkgs ? import <nixpkgs> {}, packageOverrides ? self: []}:
+{ pkgs ? import <nixpkgs> {}}:
 with pkgs;
 let
-  bundler = (callPackage ../../nix/bundler {});
-  selection = bundler.load ./lock.nix {
+  fetlock = (callPackage ../../nix {});
+  selection = fetlock.bundler.load ./lock.nix {
     pkgOverrides = self: [
       (self.overrideAttrs {
         nokogiri = o: {
@@ -12,7 +12,4 @@ let
     ];
   };
 in
-with lib;
-selection.drvsByName.rails.overrideAttrs (o: {
-  passthru = selection.drvsByName;
-})
+selection.drvsByName.rails

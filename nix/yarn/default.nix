@@ -1,7 +1,7 @@
+{ core }:
 { pkgs, stdenv, lib }:
 with lib;
 let
-  core = pkgs.callPackage ../core.nix {};
   base = final: prev: {
     specToAttrs = import ./specToAttrs.nix final prev;
   };

@@ -1,0 +1,4 @@
+#!bash -eu
+gup --always
+gup -u ../examples/cargo/result ./cargo-lock
+[ -x ../examples/cargo/result/bin/fetlock ]

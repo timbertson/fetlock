@@ -1,0 +1,7 @@
+#!bash -eu
+gup --always
+here="$(pwd)"
+mkdir "$1"
+cp ../Cargo.* "$1/"
+cd "$1"
+nix-shell --show-trace -A cargo.updateLock "$here/.."

@@ -1,0 +1,20 @@
+{
+  "sources": {
+    "nix-wrangle": {
+      "fetch": {
+        "owner": "timbertson",
+        "repo": "nix-wrangle",
+        "rev": "25625d48f91785715dc62d7d90e44777839fa03d",
+        "sha256": "0haglgcn7lk80qn5lablcf5amqn107nql8h30vrb2rfw3m4a6xy8"
+      },
+      "nix": "nix",
+      "owner": "timbertson",
+      "ref": "v1",
+      "repo": "nix-wrangle",
+      "type": "github"
+    }
+  },
+  "wrangle": {
+    "apiversion": 1
+  }
+}

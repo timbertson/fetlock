@@ -43,9 +43,9 @@ async fn process<B: Backend + fmt::Debug>(mut opts: CliOpts) -> Result<()> {
 			return Err(anyhow!("--update requires a local lock path"));
 		}
 	}
-
+	
 	if opts.no_nix {
-		debug!("--no-nix passed, exiting");
+		debug!("--no-nix; exiting");
 		return Ok(());
 	}
 

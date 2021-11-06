@@ -140,24 +140,23 @@ let
 					overrideSpec = attrs:
 						overrideOnly attrs (fn: drv: drv.overrideSpec fn);
 
-					# Derivations to be used with nix-shell (not nix-build):
 					# shell makes the lock tool available (e.g. cargo, bundler, etc)
-					# updateLock actually writes the lockfile (locally).
-					# Both of these should be used with nix-shell, not nix-build
+					# This should be used with nix-shell, not nix-build
 					shell = self.pkgs.mkShell {
 						# TODO include fetlock path too
 						packages = self.lockDependencies ++ [ fetlock ];
-					};
-					updateLock = self.pkgs.mkShell {
-						packages = self.lockDependencies ++ [ fetlock ];
-						# TODO thread through `-t` and lock path?
-						# TODO should this produce the nix expression too?
 						shellHook = ''
-							set -x
-							fetlock --no-nix --update
-							set +x
-							echo >&2 'Lock updated; exiting nix-shell'
-							exit
+							function log_exit {
+								st=$?
+								if [ $st -eq 0 ]; then
+									desc="successfully"
+								else
+									desc="with error status $st"
+								fi
+								echo >&2 "nix-shell exited $desc"
+								exit $st
+							}
+							trap log_exit EXIT
 						'';
 					};
 				}
@@ -205,7 +204,7 @@ let
 		in
 		{
 			inherit load;
-			inherit (bootstrap) shell updateLock;
+			inherit (bootstrap) shell;
 		}
 	);
 in

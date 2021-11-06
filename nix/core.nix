@@ -77,6 +77,7 @@ let
 						
 					mkPassthru = spec: {
 						inherit spec;
+						inherit (self) drvsByName;
 						overrideSpec = fn: self.specToDrv (fn spec);
 					};
 					

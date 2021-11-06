@@ -11,6 +11,7 @@ use serde::Deserialize;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
+use std::fs;
 
 #[derive(Clone, Debug)]
 pub struct YarnLock {
@@ -28,12 +29,25 @@ impl Backend for YarnLock {
 	}
 
 	async fn load(src: &LocalSrc, opts: CliOpts) -> Result<Self> {
-		let contents = std::fs::read_to_string(src.lock_path())?;
-		let mut lockfile: YarnLockFile = serde_yaml::from_str(&contents)?;
+		let lock_path = src.lock_path();
+
+		let mut package_json_path = lock_path.clone();
+		package_json_path.set_file_name("package.json");
+		let json_contents = fs::read_to_string(package_json_path)?;
+		let package_json: PackageJSON = serde_json::from_str(&json_contents)?;
+
+		let yaml_contents = fs::read_to_string(lock_path)?;
+		let mut lockfile: YarnLockFile = serde_yaml::from_str(&yaml_contents)?;
 		lockfile.fixup_keys()?;
 
-		let all_keys: Vec<Key> = lockfile.0.specs.keys().map(|key| key.to_owned()).collect();
-		lockfile.0.context.root = Root::Virtual(all_keys);
+		let root_key = lockfile.0.specs.iter().find_map(|(key, yarn_spec)|
+			if yarn_spec.spec.id.name == package_json.name {
+				Some(key)
+			} else {
+				None
+			}
+		).ok_or_else(|| anyhow!("Can't find lock entry for root package: {}", &package_json.name))?;
+		lockfile.0.context.root = Root::Package(root_key.to_owned());
 		lockfile.populate_sources().await?;
 		Ok(YarnLock { lockfile, opts })
 	}
@@ -56,6 +70,11 @@ struct PackageDist {
 #[derive(Debug, Clone, Deserialize)]
 struct PackageListing {
 	dist: PackageDist,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct PackageJSON {
+	name: String,
 }
 
 #[derive(Debug, Clone)]

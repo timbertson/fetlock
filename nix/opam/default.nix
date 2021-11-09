@@ -4,12 +4,15 @@
 { pkgs, stdenv, lib }:
 with lib;
 let
-  ocamlCommon = pkgs.callPackage ../esy/ocamlCommon.nix {};
+	ocamlCommon = pkgs.callPackage ../esy/ocamlCommon.nix {};
 	overlay = final: prev: {
 		repositories = final.context.repositories;
+		
+		# not strictly needed, but useful
+		lockDependencies = [ pkgs.opam ];
 	};
 
 in core.makeAPI {
-  pkgOverrides = self: (ocamlCommon.overrides self) ++ (import ./overrides.nix self);
-  overlays = [ ocamlCommon.overlay overlay ];
+	pkgOverrides = self: (ocamlCommon.overrides self) ++ (import ./overrides.nix self);
+	overlays = [ ocamlCommon.overlay overlay ];
 }

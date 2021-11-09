@@ -1,4 +1,4 @@
-{ pkgs, src }: with pkgs;
+{ pkgs, src, opam2nix }: with pkgs;
 # Note: building this derivation requires ./lock.nix,
 # which is generated with fetlock itself.
 # ../shell.nix can be used to bootstrap & build fetlock
@@ -28,10 +28,19 @@ let
 	selection = bootstrap.cargo.load ./lock.nix {
 		pkgOverrides = self: [
 			(self.overrideAttrs {
-				fetlock = o: {
+				fetlock = o: ({
 					inherit src;
-					nativeBuildInputs = (o.nativeBuildInputs or []) ++ (if stdenv.isDarwin then [ osx.Security ] else []);
-				};
+					nativeBuildInputs = (o.nativeBuildInputs or [])
+						++ [ makeWrapper ]
+						++ (if stdenv.isDarwin then [ osx.Security ] else []);
+				}
+					// (if opam2nix == null then {} else {
+						preFixup = (o.preFixup or "") + ''
+							wrapProgram $out/bin/fetlock \
+								--prefix PATH : ${opam2nix}/bin
+						'';
+					})
+				);
 			})
 		];
 	};

@@ -4,4 +4,4 @@ here="$(pwd)"
 mkdir "$1"
 cp ../Cargo.* "$1/"
 cd "$1"
-nix-shell --show-trace -A cargo.shell "$here/.." --run 'fetlock --update --no-nix -t cargo Cargo.toml'
+nix-shell --pure --show-trace -A cargo.shell "$here/.." --run 'fetlock --update --no-nix -t cargo Cargo.toml'

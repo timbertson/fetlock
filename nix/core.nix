@@ -145,10 +145,11 @@ let
 					# This should be used with nix-shell, not nix-build
 					shell = self.pkgs.mkShell {
 						# TODO include fetlock path too
-						packages = self.lockDependencies ++ [ fetlock ];
+						packages = self.lockDependencies ++ [ fetlock pkgs.nix ];
 						shellHook = ''
 							function log_exit {
 								st=$?
+								set +x
 								if [ $st -eq 0 ]; then
 									desc="successfully"
 								else

@@ -12,8 +12,8 @@ in
       opam = (pkgs.fetchFromGitHub {
         owner = "ocaml";
         repo = "opam-repository";
-        rev = "f918cee7613ed7ac4139eac736f72054e718acef";
-        sha256 = "0f3lvyzcb737flw8adsz9g7z4l85ibrq3y0bbkap8rprd895yp1y";
+        rev = "d814acf43af6b577737a332637d2b36a3d51be60";
+        sha256 = "08mkymnvm1kysm8wi6yqsfc091lzfsvpjy31h83xr56i8j0sgsmq";
       });
     };
   };
@@ -141,15 +141,15 @@ in
     };
     cppo = {
       pname = "cppo";
-      version = "1.6.7";
+      version = "1.6.8";
       depKeys = [
         ("base-unix")
         ("dune")
         ("ocaml")
       ];
       src = (pkgs.fetchurl {
-        sha256 = "17ajdzrnmnyfig3s6hinb56mcmhywbssxhsq32dz0v90dhz3wmfv";
-        url = "https://github.com/ocaml-community/cppo/releases/download/v1.6.7/cppo-v1.6.7.tbz";
+        sha256 = "0lxy4xkkkwgs1cj6d9lyzsqi9f6fc9r6cir5imi7yjqrpd86s1by";
+        url = "https://github.com/ocaml-community/cppo/archive/v1.6.8.tar.gz";
       });
       build = {
         buildPhase = "dune build -p cppo -j $NIX_BUILD_CORES";
@@ -176,15 +176,15 @@ in
     };
     dune = {
       pname = "dune";
-      version = "2.9.0";
+      version = "2.9.1";
       depKeys = [
         ("base-threads")
         ("base-unix")
         ("ocaml")
       ];
       src = (pkgs.fetchurl {
-        sha256 = "07m476kgagpd6kzm3jq30yfxqspr2hychah0xfqs14z82zxpq8dv";
-        url = "https://github.com/ocaml/dune/releases/download/2.9.0/dune-2.9.0.tbz";
+        sha256 = "09lzq04b642iy0ljp59p32lgk3q8iphjh8fkdp69q29l5frgwx5k";
+        url = "https://github.com/ocaml/dune/releases/download/2.9.1/dune-2.9.1.tbz";
       });
       build = {
         buildPhase = ''
@@ -197,7 +197,7 @@ in
     };
     dune-configurator = {
       pname = "dune-configurator";
-      version = "2.9.0";
+      version = "2.9.1";
       depKeys = [
         ("csexp")
         ("dune")
@@ -205,8 +205,8 @@ in
         ("result")
       ];
       src = (pkgs.fetchurl {
-        sha256 = "07m476kgagpd6kzm3jq30yfxqspr2hychah0xfqs14z82zxpq8dv";
-        url = "https://github.com/ocaml/dune/releases/download/2.9.0/dune-2.9.0.tbz";
+        sha256 = "09lzq04b642iy0ljp59p32lgk3q8iphjh8fkdp69q29l5frgwx5k";
+        url = "https://github.com/ocaml/dune/releases/download/2.9.1/dune-2.9.1.tbz";
       });
       build = {
         buildPhase = "dune build -p dune-configurator -j $NIX_BUILD_CORES @install";
@@ -227,6 +227,27 @@ in
       });
       build = {
         buildPhase = "dune build -p easy-format -j $NIX_BUILD_CORES";
+        installPhase = "";
+        mode = "opam";
+      };
+    };
+    fmt = {
+      pname = "fmt";
+      version = "0.9.0";
+      depKeys = [
+        ("base-unix")
+        ("cmdliner")
+        ("ocaml")
+        ("ocamlbuild")
+        ("ocamlfind")
+        ("topkg")
+      ];
+      src = (pkgs.fetchurl {
+        sha256 = "0q8j2in2473xh7k4hfgnppv9qy77f2ih89yp6yhpbp92ba021yzi";
+        url = "https://erratique.ch/software/fmt/releases/fmt-0.9.0.tbz";
+      });
+      build = {
+        buildPhase = "ocaml pkg/pkg.ml build --dev-pkg false --with-base-unix true --with-cmdliner true";
         installPhase = "";
         mode = "opam";
       };
@@ -253,7 +274,7 @@ in
     };
     js_of_ocaml = {
       pname = "js_of_ocaml";
-      version = "3.10.0";
+      version = "3.11.0";
       depKeys = [
         ("dune")
         ("js_of_ocaml-compiler")
@@ -262,8 +283,8 @@ in
         ("uchar")
       ];
       src = (pkgs.fetchurl {
-        sha256 = "09k19bygxl766dmshrp5df3i99jfm8bmamb4jggm62p3hg19bzkv";
-        url = "https://github.com/ocsigen/js_of_ocaml/releases/download/3.10.0/js_of_ocaml-3.10.0.tbz";
+        sha256 = "0flws9mw0yjfw4d8d3y3k408mivy2xgky70xk1br3iqs4zksz38m";
+        url = "https://github.com/ocsigen/js_of_ocaml/releases/download/3.11.0/js_of_ocaml-3.11.0.tbz";
       });
       build = {
         buildPhase = "dune build -p js_of_ocaml -j $NIX_BUILD_CORES @install";
@@ -295,7 +316,7 @@ in
     };
     js_of_ocaml-lwt = {
       pname = "js_of_ocaml-lwt";
-      version = "3.10.0";
+      version = "3.11.0";
       depKeys = [
         ("dune")
         ("js_of_ocaml")
@@ -304,8 +325,8 @@ in
         ("ocaml")
       ];
       src = (pkgs.fetchurl {
-        sha256 = "09k19bygxl766dmshrp5df3i99jfm8bmamb4jggm62p3hg19bzkv";
-        url = "https://github.com/ocsigen/js_of_ocaml/releases/download/3.10.0/js_of_ocaml-3.10.0.tbz";
+        sha256 = "0flws9mw0yjfw4d8d3y3k408mivy2xgky70xk1br3iqs4zksz38m";
+        url = "https://github.com/ocsigen/js_of_ocaml/releases/download/3.11.0/js_of_ocaml-3.11.0.tbz";
       });
       build = {
         buildPhase = "dune build -p js_of_ocaml-lwt -j $NIX_BUILD_CORES @install";
@@ -315,7 +336,7 @@ in
     };
     js_of_ocaml-ppx = {
       pname = "js_of_ocaml-ppx";
-      version = "3.10.0";
+      version = "3.11.0";
       depKeys = [
         ("dune")
         ("js_of_ocaml")
@@ -323,8 +344,8 @@ in
         ("ppxlib")
       ];
       src = (pkgs.fetchurl {
-        sha256 = "09k19bygxl766dmshrp5df3i99jfm8bmamb4jggm62p3hg19bzkv";
-        url = "https://github.com/ocsigen/js_of_ocaml/releases/download/3.10.0/js_of_ocaml-3.10.0.tbz";
+        sha256 = "0flws9mw0yjfw4d8d3y3k408mivy2xgky70xk1br3iqs4zksz38m";
+        url = "https://github.com/ocsigen/js_of_ocaml/releases/download/3.11.0/js_of_ocaml-3.11.0.tbz";
       });
       build = {
         buildPhase = "dune build -p js_of_ocaml-ppx -j $NIX_BUILD_CORES @install";
@@ -338,6 +359,7 @@ in
       depKeys = [
         ("base-threads")
         ("cmdliner")
+        ("fmt")
         ("js_of_ocaml")
         ("lwt")
         ("ocaml")
@@ -350,7 +372,7 @@ in
         url = "https://erratique.ch/software/logs/releases/logs-0.7.0.tbz";
       });
       build = {
-        buildPhase = "ocaml pkg/pkg.ml build --pinned false --with-js_of_ocaml true --with-fmt false --with-cmdliner true --with-lwt true --with-base-threads true";
+        buildPhase = "ocaml pkg/pkg.ml build --pinned false --with-js_of_ocaml true --with-fmt true --with-cmdliner true --with-lwt true --with-base-threads true";
         installPhase = "";
         mode = "opam";
       };
@@ -510,6 +532,23 @@ in
         path = "packages/ocaml-config/ocaml-config.2/files";
       });
     };
+    ocaml-migrate-parsetree = {
+      pname = "ocaml-migrate-parsetree";
+      version = "2.2.0";
+      depKeys = [
+        ("dune")
+        ("ocaml")
+      ];
+      src = (pkgs.fetchurl {
+        sha256 = "188v3z09bg4gyv80c138fa3a3j2w54w5gc4r1ajw7klr70yqz9mj";
+        url = "https://github.com/ocaml-ppx/ocaml-migrate-parsetree/releases/download/v2.2.0/ocaml-migrate-parsetree-v2.2.0.tbz";
+      });
+      build = {
+        buildPhase = "dune build -p ocaml-migrate-parsetree -j $NIX_BUILD_CORES";
+        installPhase = "";
+        mode = "opam";
+      };
+    };
     ocaml-options-vanilla = {
       pname = "ocaml-options-vanilla";
       version = "1";
@@ -584,23 +623,47 @@ in
     };
     odoc = {
       pname = "odoc";
-      version = "1.5.3";
+      version = "2.0.0";
       depKeys = [
         ("astring")
         ("cmdliner")
         ("cppo")
         ("dune")
+        ("fmt")
         ("fpath")
+        ("logs")
         ("ocaml")
+        ("ocaml-migrate-parsetree")
+        ("odoc-parser")
+        ("re")
         ("result")
         ("tyxml")
       ];
       src = (pkgs.fetchurl {
-        sha256 = "0idzidmz7y10xkwcf4aih0mdvkipxk1gzi4anhnbbi2q2s0nzdzj";
-        url = "https://github.com/ocaml/odoc/releases/download/1.5.3/odoc-1.5.3.tbz";
+        sha256 = "01yh1h9cigcljp6gkb6ab2ba5ivw8ps438xgk04bkd0qzwmfnccc";
+        url = "https://github.com/ocaml/odoc/releases/download/2.0.0/odoc-2.0.0.tbz";
       });
       build = {
         buildPhase = "dune build -p odoc -j $NIX_BUILD_CORES";
+        installPhase = "";
+        mode = "opam";
+      };
+    };
+    odoc-parser = {
+      pname = "odoc-parser";
+      version = "0.9.0";
+      depKeys = [
+        ("astring")
+        ("dune")
+        ("ocaml")
+        ("result")
+      ];
+      src = (pkgs.fetchurl {
+        sha256 = "0ydxy2sj2w9i4vvyjnxplgmp5gbkp5ilnv36pvk4vgrrmldss3fz";
+        url = "https://github.com/ocaml-doc/odoc-parser/releases/download/0.9.0/odoc-parser-0.9.0.tbz";
+      });
+      build = {
+        buildPhase = "dune build -p odoc-parser -j $NIX_BUILD_CORES @install";
         installPhase = "";
         mode = "opam";
       };
@@ -645,15 +708,15 @@ in
     };
     re = {
       pname = "re";
-      version = "1.9.0";
+      version = "1.10.3";
       depKeys = [
         ("dune")
         ("ocaml")
         ("seq")
       ];
       src = (pkgs.fetchurl {
-        sha256 = "1gas4ky49zgxph3870nffzkr6y41kkpqp4nj38pz1gh49zcf12aj";
-        url = "https://github.com/ocaml/ocaml-re/releases/download/1.9.0/re-1.9.0.tbz";
+        sha256 = "1fqfg609996bgxr14yyfxhvl6hm9c1j0mm2xjdjigqrzgyb4crc4";
+        url = "https://github.com/ocaml/ocaml-re/releases/download/1.10.3/re-1.10.3.tbz";
       });
       build = {
         buildPhase = "dune build -p re -j $NIX_BUILD_CORES";
@@ -731,15 +794,15 @@ in
     };
     topkg = {
       pname = "topkg";
-      version = "1.0.3";
+      version = "1.0.4";
       depKeys = [
         ("ocaml")
         ("ocamlbuild")
         ("ocamlfind")
       ];
       src = (pkgs.fetchurl {
-        sha256 = "0b77gsz9bqby8v77kfi4lans47x9p2lmzanzwins5r29maphb8y6";
-        url = "http://erratique.ch/software/topkg/releases/topkg-1.0.3.tbz";
+        sha256 = "1kzw5cxkizcvh4rgzwgpjlj9hfxfk6yr686bxx6wrbsfs8as371k";
+        url = "https://erratique.ch/software/topkg/releases/topkg-1.0.4.tbz";
       });
       build = {
         buildPhase = "ocaml pkg/pkg.ml build --pkg-name topkg --dev-pkg false";

@@ -5,6 +5,7 @@ let
   base = final: prev: {
     specToDrv = import ./specToDrv.nix final prev;
     buildRubyGem = pkgs.buildRubyGem; # TODO override ruby etc
+    lockDependencies = [ pkgs.bundler ];
   };
   injectRuby = ruby: final: prev: { inherit ruby; };
 

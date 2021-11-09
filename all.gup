@@ -1,2 +1,7 @@
 #!bash -eu
-gup -u bin nix/lock.nix test/all
+gup -u \
+	bin \
+	nix/lock.nix \
+	test/all \
+	tools/esy-lock.nix \
+	;

@@ -12,6 +12,19 @@
       "ref": "v1",
       "repo": "nix-wrangle",
       "type": "github"
+    },
+    "opam2nix": {
+      "fetch": {
+        "owner": "timbertson",
+        "repo": "opam2nix",
+        "rev": "8008c825463ede00bb352e4197050d7797b391b4",
+        "sha256": "1jadhxb07452sv3p4z8xwxm1gk5lh5ndaf4h2dicvjv30rfp9apd"
+      },
+      "nix": "default.nix",
+      "owner": "timbertson",
+      "ref": "v1",
+      "repo": "opam2nix",
+      "type": "github"
     }
   },
   "wrangle": {

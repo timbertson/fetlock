@@ -3,8 +3,15 @@
 with lib;
 let
   ocamlCommon = pkgs.callPackage ./ocamlCommon.nix {};
+  
+  # esy is itself packaged with yarn, so we can use fetlock's yarn backend
+  # to make it available in `fetlock.esy.shell`
+  yarnApi = pkgs.callPackage (import ../yarn { inherit core; }) {};
+  esySelection = yarnApi.load ../../tools/esy-lock.nix {};
 
   base = final: prev: {
+    lockDependencies = [ esySelection.root ];
+
     # esy expects `linux` / `windows` anything else probably won't work
     os = stdenv.buildPlatform.parsed.kernel.name;
 
@@ -44,8 +51,10 @@ let
       preInstallHooks+=(writeEnvSetupHook)
     '';
   };
+  
+  api = core.makeAPI {
+    pkgOverrides = self: (ocamlCommon.overrides self) ++ (import ./overrides.nix self);
+    overlays = [ ocamlCommon.overlay base ];
+  };
 
-in core.makeAPI {
-  pkgOverrides = self: (ocamlCommon.overrides self) ++ (import ./overrides.nix self);
-  overlays = [ ocamlCommon.overlay base ];
-}
+in api

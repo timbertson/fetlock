@@ -12,7 +12,6 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::fs;
-use std::mem::take;
 
 #[derive(Clone, Debug)]
 pub struct YarnLock {
@@ -230,27 +229,18 @@ impl YarnLockFile {
 	fn visit_cyclic_dependencies(&mut self, seen: &mut Vec<Key>, key: &Key) {
 		// Yarn allows a -> b -> a.
 		// We can't represent this as nix `buildInputs` due to infinite recursion.
-		// But we can let b use the path to `a` before `a` is built, since all `b`
-		// needs is a symlink to `a`, and (assuming the entire derivation is built)
-		// the path will work at runtime.
-		// We do this by moving some `depKeys` into an extra `cyclicDepKeys` attribute
+		// So we just drop the first circular dependency links we find.
+		// TODO: does this actually work out in practice?
 
-		if let Some(mut yarn_spec) = self.0.specs.get_mut(key) {
-			// first, drop all cyclic deps
-			let dep_keys = take(&mut yarn_spec.spec.dep_keys);
-			let (cyclic_deps, recurse_deps): (Vec<Key>, Vec<Key>) = dep_keys.into_iter().partition(|dep_key| {
-				seen.contains(&dep_key)
+		if let Some(yarn_spec) = self.0.specs.get_mut(key) {
+			// First, drop cyclic deps
+			yarn_spec.spec.dep_keys.retain(|dep_key| {
+				!seen.contains(&dep_key)
 			});
-			if !cyclic_deps.is_empty() {
-				yarn_spec.spec.extra.insert(
-					"cyclicDepKeys".to_owned(),
-					Expr::List(cyclic_deps.into_iter().map(|k| Expr::str(k.into_string())).collect())
-				);
-			}
-			yarn_spec.spec.dep_keys = recurse_deps.clone();
+			let recurse_deps = yarn_spec.spec.dep_keys.clone();
 			drop(yarn_spec);
 
-			// Then (in a second pass), recurse into dependencies. This must be done after
+			// In a second pass, recurse into dependencies. This must be done after
 			// dropping `yarn_spec` because that's behind our mutable self reference
 			for dep_key in recurse_deps.into_iter() {
 				seen.push(dep_key.clone());

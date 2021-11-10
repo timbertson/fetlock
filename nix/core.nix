@@ -9,6 +9,7 @@ let
 			overlays,
 			userArgs ? args: args, # massage user API into core API
 			pkgOverrides ? noOverrides,
+			apiPassthru ? {},
 		}:
 		let
 			# prevent shadowing later:
@@ -207,7 +208,7 @@ let
 		{
 			inherit load;
 			inherit (bootstrap) shell;
-		}
+		} // apiPassthru
 	);
 in
 {

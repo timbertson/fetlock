@@ -1,7 +1,0 @@
-#!bash -eux
-git clone --recurse-submodules git://github.com/esy/esy.git "$1"
-here="$(pwd)"
-cd "$1"
-git reset --hard b664ca114e783266968ee4cef55e597287715fa7
-nix-shell --pure --show-trace -A yarn.shell "$here/../nix" --run "set -x; \
-	yarn set version berry && yarn install --mode update-lockfile"

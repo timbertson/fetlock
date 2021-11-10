@@ -40,5 +40,5 @@ in
     cp -r --no-preserve=mode ./. $out/${nodeSuffix}/${pkgname}
   '';
 
-  buildInputs = [ final.nodejs ]; # ++ (map final.getDrv depKeys);
+  buildInputs = [ final.nodejs ];
 }

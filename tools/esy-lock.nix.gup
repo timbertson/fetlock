@@ -1,6 +1,0 @@
-#!bash -eu
-gup --always
-gup -u esy-src
-nix-shell --show-trace -A yarn.shell ../nix --run "set -x; fetlock -o '$1' \
-  -t yarn \
-  esy-src/yarn.lock"

@@ -1,14 +1,15 @@
 #!bash -eu
+gup --always
 function test_shell {
 	backend="$1"
 	command="$2"
 	set -x
-	nix-shell --pure --show-trace --arg enableOcaml true -A "$backend" ../nix --run "$command"
+	nix-shell --pure --show-trace --arg enableOcaml true -A "$backend.shell" ../nix --run "$command"
 	set +x
 }
 
+test_shell esy 'esy --version'
 test_shell bundler 'bundler --version'
 test_shell cargo 'cargo --version'
-test_shell esy 'esy --version'
 test_shell opam 'opam --version'
 test_shell yarn 'yarn --version'

@@ -698,7 +698,7 @@ in
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = (pkgs.fetchurl {
-        sha256 = "02xyn3wfcmz8if72y5pscy2imsnxv6s0fb0fvigjjdnknnd32wk9";
+        sha256 = "1aw4vaqcgnys1da433b9z15i7mrr140816n9w7v6vm948wazg2yx";
         url = "https://gitlab.inria.fr/fpottier/fix/repository/20201120/archive.tar.gz";
       });
       build = {
@@ -1019,7 +1019,7 @@ in
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = (pkgs.fetchurl {
-        sha256 = "05fpg5c83a6q0q12kd2ll069pg80yd91s4rzx3742ard3l2aml8z";
+        sha256 = "0h7d13sq4nhkc9z43js1krrn01p6q6x3r2b8jkmd6njvykr6hxzf";
         url = "https://gitlab.inria.fr/fpottier/menhir/repository/20201216/archive.tar.gz";
       });
       build = {
@@ -1037,7 +1037,7 @@ in
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = (pkgs.fetchurl {
-        sha256 = "05fpg5c83a6q0q12kd2ll069pg80yd91s4rzx3742ard3l2aml8z";
+        sha256 = "0h7d13sq4nhkc9z43js1krrn01p6q6x3r2b8jkmd6njvykr6hxzf";
         url = "https://gitlab.inria.fr/fpottier/menhir/repository/20201216/archive.tar.gz";
       });
       build = {
@@ -1055,7 +1055,7 @@ in
         ("@esy-ocaml/substs@0.0.1@d41d8cd9")
       ];
       src = (pkgs.fetchurl {
-        sha256 = "05fpg5c83a6q0q12kd2ll069pg80yd91s4rzx3742ard3l2aml8z";
+        sha256 = "0h7d13sq4nhkc9z43js1krrn01p6q6x3r2b8jkmd6njvykr6hxzf";
         url = "https://gitlab.inria.fr/fpottier/menhir/repository/20201216/archive.tar.gz";
       });
       build = {

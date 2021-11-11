@@ -1,0 +1,4 @@
+#!bash -eu
+gup --u package.json
+yarn install --mode update-lockfile
+gup --leave

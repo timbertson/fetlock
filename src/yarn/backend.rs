@@ -49,8 +49,17 @@ impl Backend for YarnLock {
 		).ok_or_else(|| anyhow!("Can't find lock entry for root package: {}", &package_json.name))?
 		.to_owned();
 
-		lockfile.mark_cyclic_dependencies(&root_key);
+		let mut cyclic_deps = HashSet::new();
+		lockfile.mark_cyclic_dependencies(&root_key, &mut cyclic_deps);
+		let mut cyclic_deps_sorted: Vec<Key> = cyclic_deps.into_iter().collect();
+		cyclic_deps_sorted.sort_unstable();
+		lockfile.0.context.extra.insert(
+			"cyclicDeps".to_owned(),
+			Expr::List(cyclic_deps_sorted.into_iter().map(|k| Expr::str(k.to_string())).collect())
+		);
+
 		lockfile.0.context.root = Root::Package(root_key);
+
 		lockfile.populate_sources().await?;
 		Ok(YarnLock { lockfile, opts })
 	}
@@ -221,22 +230,33 @@ impl YarnLockFile {
 		foreach_unordered(10, stream, |spec| spec.populate_src()).await
 	}
 
-	fn mark_cyclic_dependencies(&mut self, root: &Key) {
+	fn mark_cyclic_dependencies(&mut self, root: &Key, cyclic_deps: &mut HashSet<Key>) {
 		let mut seen = Vec::new();
-		self.visit_cyclic_dependencies(&mut seen, root)
+		self.visit_cyclic_dependencies(&mut seen, cyclic_deps, root)
 	}
 
-	fn visit_cyclic_dependencies(&mut self, seen: &mut Vec<Key>, key: &Key) {
-		// Yarn allows a -> b -> a.
+	fn visit_cyclic_dependencies(&mut self, seen: &mut Vec<Key>, cyclic_deps: &mut HashSet<Key>, key: &Key) {
+		// Yarn allows a -> b -> c -> a.
 		// We can't represent this as nix `buildInputs` due to infinite recursion.
-		// So we just drop the first circular dependency links we find.
-		// TODO: does this actually work out in practice?
+		// So we cut each at the first circular dependency we find (i.e. c -> a).
+		// In order for c to be able to require(a), we add each dropped
+		// dependency to the toplevel NODE_PATH (by using wrapProgram on everything
+		// in bin/ of the root package).
+		// This makes `a` globally available as a fallback, since NODE_PATH is
+		// searched after checking node_modules.
+		// Fingers crossed we never need two different versions of `a`.
 
 		if let Some(yarn_spec) = self.0.specs.get_mut(key) {
-			// First, drop cyclic deps
+			// First, drop cyclic deps (registering them at the toplevel)
 			yarn_spec.spec.dep_keys.retain(|dep_key| {
-				!seen.contains(&dep_key)
+				if seen.contains(dep_key) {
+					cyclic_deps.insert(dep_key.to_owned());
+					false
+				} else {
+					true
+				}
 			});
+
 			let recurse_deps = yarn_spec.spec.dep_keys.clone();
 			drop(yarn_spec);
 
@@ -244,7 +264,7 @@ impl YarnLockFile {
 			// dropping `yarn_spec` because that's behind our mutable self reference
 			for dep_key in recurse_deps.into_iter() {
 				seen.push(dep_key.clone());
-				self.visit_cyclic_dependencies(seen, &dep_key);
+				self.visit_cyclic_dependencies(seen, cyclic_deps, &dep_key);
 				seen.pop();
 			}
 		}

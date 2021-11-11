@@ -1,3 +1,5 @@
 #!bash -eu
 gup --always
-gup -u cargo shells ../examples/all
+# traverse all targets in directories
+find . -mindepth 2 -name all.gup | sort | sed -e 's/\.gup$//' | xargs gup -u
+gup -u shells ../examples/all

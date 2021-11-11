@@ -3,6 +3,7 @@
 with lib;
 let
 	noOverrides = (self: []);
+	
 	makeAPI = (
 		{
 			# args passed in by frontend (internal)
@@ -45,6 +46,24 @@ let
 							)
 							else drv
 						);
+
+					shellDeps = self.lockDependencies ++ [ fetlock pkgs.nix ];
+					commonShellHook = ''
+						${self.shellHook or ""}
+						function log_exit {
+							st=$?
+							set +x
+							if [ $st -eq 0 ]; then
+								desc="successfully"
+							else
+								desc="with error status $st"
+							fi
+							echo >&2 "nix-shell exited $desc"
+							exit $st
+						}
+						trap log_exit EXIT
+					'';
+
 				in {
 					inherit pkgs getDrv;
 
@@ -73,7 +92,12 @@ let
 					
 					# apply frontend build function to all specs
 					drvs = mapAttrs
-						(key: v: self.specToDrv ({inherit key; } // v))
+						(key: v:
+							let overrides = { inherit key; } //
+								# convenient override for root src
+								(if self.rootSrc != null && key == rootKey then { src = self.rootSrc; } else {});
+							in
+							self.specToDrv (v // overrides))
 						self.specs;
 						
 					mkPassthru = spec: {
@@ -145,21 +169,13 @@ let
 					# shell makes the lock tool available (e.g. cargo, bundler, etc)
 					# This should be used with nix-shell, not nix-build
 					shell = self.pkgs.mkShell {
-						# TODO include fetlock path too
-						packages = self.lockDependencies ++ [ fetlock pkgs.nix ];
-						shellHook = ''
-							function log_exit {
-								st=$?
-								set +x
-								if [ $st -eq 0 ]; then
-									desc="successfully"
-								else
-									desc="with error status $st"
-								fi
-								echo >&2 "nix-shell exited $desc"
-								exit $st
-							}
-							trap log_exit EXIT
+						packages = shellDeps;
+						shellHook = commonShellHook;
+					};
+					updateLock = self.pkgs.mkShell {
+						packages = shellDeps;
+						shellHook = commonShellHook + ''
+							updateLock && exit 0
 						'';
 					};
 				}
@@ -172,11 +188,13 @@ let
 					# args returned by userArgs (core API)
 					overlays ? [],
 					pkgOverrides ? noOverrides,
+					src ? null, # override root src
 				}:
 				# with builtins;
 				# with pkgs;
 				let
 					sourceOverlay = import lock; # TODO allow literal?
+					rootSrcOverlay = final: prev: { rootSrc = src; };
 					
 					# applies all overrides to drvs. Note that overrides is a slightly simpler,
 					# package-specific API compared to a full overlay
@@ -196,7 +214,7 @@ let
 						};
 				in
 				compose {
-					earlyOverlays = [ sourceOverlay ];
+					earlyOverlays = [ sourceOverlay rootSrcOverlay ];
 					lateOverlays = overlays ++ [ overrideOverlay ];
 				}
 			);
@@ -207,7 +225,7 @@ let
 		in
 		{
 			inherit load;
-			inherit (bootstrap) shell;
+			inherit (bootstrap) shell updateLock;
 		} // apiPassthru
 	);
 in

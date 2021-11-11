@@ -7,6 +7,8 @@ in
     type = "yarn";
     version = "1";
     root = "onivim2-node@.";
+    cyclicDeps = [
+    ];
   };
   specs = {
     "@npmcli/move-file@1.1.2" = {

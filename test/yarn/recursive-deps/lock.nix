@@ -7,9 +7,6 @@ in
     type = "yarn";
     version = "1";
     root = "recursive-deps-test@.";
-    cyclicDeps = [
-      ("babel-core@6.26.3")
-    ];
   };
   specs = {
     "ansi-regex@2.1.1" = {
@@ -554,6 +551,13 @@ in
       pname = "recursive-deps-test";
       version = "0.0.0-use.local";
       depKeys = [
+        ("babel-core@6.26.3")
+        ("babel-register@6.26.0")
+      ];
+      bin = {
+        main = "main.js";
+      };
+      nodePathDeps = [
         ("babel-core@6.26.3")
       ];
       pkgname = "recursive-deps-test";

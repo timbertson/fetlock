@@ -2,4 +2,4 @@
 gup --always
 gup -u lock.nix
 nix-build --out-link "$1"
-"$1"/bin/recursive-deps-test
+"$1"/bin/main

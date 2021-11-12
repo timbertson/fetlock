@@ -92,7 +92,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"babel-register@npm:^6.26.0":
+"babel-register@npm:6.26.0, babel-register@npm:^6.26.0":
   version: 6.26.0
   resolution: "babel-register@npm:6.26.0"
   dependencies:
@@ -412,8 +412,9 @@ __metadata:
   resolution: "recursive-deps-test@workspace:."
   dependencies:
     babel-core: 6.26.3
+    babel-register: 6.26.0
   bin:
-    recursive-deps-test: ./main.js
+    main: main.js
   languageName: unknown
   linkType: soft
 

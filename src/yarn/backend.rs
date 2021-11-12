@@ -6,12 +6,14 @@ use crate::*;
 use anyhow::*;
 use async_trait::async_trait;
 use log::*;
+use serde::de;
 use serde::de::*;
 use serde::Deserialize;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::fs;
+use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
 pub struct YarnLock {
@@ -53,17 +55,32 @@ impl Backend for YarnLock {
 		lockfile.mark_cyclic_dependencies(&root_key, &mut cyclic_deps);
 		let mut cyclic_deps_sorted: Vec<Key> = cyclic_deps.into_iter().collect();
 		cyclic_deps_sorted.sort_unstable();
-		lockfile.0.context.extra.insert(
-			"cyclicDeps".to_owned(),
+
+		let root_spec = lockfile.0.specs.get_mut(&root_key).unwrap();
+		root_spec.spec.extra.insert(
+			"nodePathDeps".to_owned(),
 			Expr::List(cyclic_deps_sorted.into_iter().map(|k| Expr::str(k.to_string())).collect())
 		);
 
-		lockfile.0.context.root = Root::Package(root_key);
+		lockfile.0.context.root = Root::Package(root_key.clone());
 
 		lockfile.populate_sources().await?;
+
+		let mut sources = fetch::realise_sources(lockfile.0.specs.iter().map(|(k,v)| (k, &v.spec))).await?;
+		sources.insert(root_key, src.root.clone());
+		for (key, path) in sources {
+			let spec = lockfile.0.specs.get_mut(&key).ok_or_else(||
+				anyhow!("extracted source is not in specs: {:?}", key)
+			)?;
+
+			for err in spec.load_manifest(path).err().iter() {
+				warn!("Failed to lock package.json from {}: {:?}", key, err)
+			}
+		}
+		
 		Ok(YarnLock { lockfile, opts })
 	}
-
+	
 	fn lock_mut(&mut self) -> &mut Lock<Self::Spec> {
 		&mut self.lockfile.0
 	}
@@ -87,6 +104,42 @@ struct PackageListing {
 #[derive(Clone, Debug, serde::Deserialize)]
 pub struct PackageJSON {
 	name: String,
+
+	#[serde(default)]
+	#[serde(deserialize_with = "deserialize_bin")]
+	bin: BTreeMap<String, String>,
+}
+
+// bin can be "foo" which is a shorthand for { "foo": "foo" }
+fn deserialize_bin<'de, D>(de: D) -> Result<BTreeMap<String, String>, D::Error> where D: Deserializer<'de> {
+	struct BinVisitor;
+	impl<'de> Visitor<'de> for BinVisitor {
+			type Value = BTreeMap<String, String>;
+
+			fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+				formatter.write_str("string or map[String, String]")
+			}
+
+			fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+			where E: de::Error,
+			{
+				let mut bin = BTreeMap::new();
+				bin.insert(value.to_owned(), value.to_owned());
+				Ok(bin)
+			}
+
+			fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+			where
+				A: MapAccess<'de>,
+			{
+				let mut bin = BTreeMap::new();
+				while let Some((key, value)) = map.next_entry::<Cow<'de, str>, Cow<'de, str>>()? {
+					bin.insert(key.to_string(), value.to_string());
+				}
+				Ok(bin)
+			}
+	}
+	de.deserialize_any(BinVisitor)
 }
 
 #[derive(Debug, Clone)]
@@ -133,6 +186,24 @@ impl YarnSpec {
 		})()
 		.await;
 		result.with_context(|| desc)
+	}
+
+	fn load_manifest(&mut self, extract: PathBuf) -> Result<()> {
+		let json_path = extract.join("package.json");
+		let json_contents = fs::read_to_string(&json_path)?;
+		let package_json: PackageJSON = serde_json::from_str(&json_contents)?;
+		if !package_json.bin.is_empty() {
+			self.spec.extra.insert(
+				"bin".to_owned(),
+				Expr::AttrSet(
+					package_json.bin
+						.into_iter()
+						.map(|(k,v)| (k, Expr::str(v)))
+						.collect()
+				)
+			);
+		}
+		Ok(())
 	}
 }
 

@@ -1,7 +1,10 @@
 {
 	"name": "recursive-deps-test",
-	"bin": "./main.js",
+	"bin": {
+		"main": "main.js"
+	},
 	"dependencies": {
-		"babel-core": "6.26.3"
+		"babel-core": "6.26.3",
+		"babel-register": "6.26.0"
 	}
 }

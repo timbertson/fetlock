@@ -15,11 +15,28 @@ let
         '';
     in
     concatStringsSep "\n" (map linkModule keys);
+
+  installBins = { pkgname, specs, nodePathDeps }:
+    let
+      makeWrapperArgs = map (dep: "--prefix NODE_PATH : ${final.getDrv dep}/${nodeSuffix}") nodePathDeps;
+      installBin = name: path: ''
+        echo "Installing $out/bin/${name}"
+        chmod +x "$out/${nodeSuffix}/${pkgname}/${path}"
+        ln -s "../${nodeSuffix}/${pkgname}/${path}" "$out/bin/${name}"
+        ${if nodePathDeps == [] then "" else ''
+          echo "Wrapping $out/bin/${name}"
+          wrapProgram $out/bin/${name} ${concatStringsSep " " makeWrapperArgs}
+        '' }
+      '';
+    in
+    concatStringsSep "\n" (["mkdir -p $out/bin"] ++ (mapAttrsToList installBin specs));
 in
 {
   key, pname, version,
   depKeys,
   src ? prev.emptyDrv,
+  bin ? null,
+  nodePathDeps ? null,
   pkgname,
 }@spec: {
   inherit pname version depKeys src;
@@ -38,7 +55,8 @@ in
   installPhase = ''
     mkdir -p $out/${nodeSuffix}/${pkgname}
     cp -r --no-preserve=mode ./. $out/${nodeSuffix}/${pkgname}
+    ${if bin == null then "" else installBins { inherit pkgname nodePathDeps; specs = bin; }}
   '';
 
-  buildInputs = [ final.nodejs ];
+  buildInputs = [ final.nodejs final.pkgs.makeWrapper ];
 }

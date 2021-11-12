@@ -3,5 +3,4 @@ gup -u \
 	bin \
 	nix/lock.nix \
 	test/all \
-	tools/esy-lock.nix \
 	;

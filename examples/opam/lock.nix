@@ -12,8 +12,8 @@ in
       opam = (pkgs.fetchFromGitHub {
         owner = "ocaml";
         repo = "opam-repository";
-        rev = "d814acf43af6b577737a332637d2b36a3d51be60";
-        sha256 = "08mkymnvm1kysm8wi6yqsfc091lzfsvpjy31h83xr56i8j0sgsmq";
+        rev = "7247859e29f0504a1b76156edce6e930303568bb";
+        sha256 = "00cpvv0p4ril3hdfwnsvccj0kgb9vwm5hcf9jw20xh47y9hgn03j";
       });
     };
   };
@@ -604,7 +604,7 @@ in
     };
     ocplib-endian = {
       pname = "ocplib-endian";
-      version = "1.1";
+      version = "1.2";
       depKeys = [
         ("base-bytes")
         ("cppo")
@@ -612,8 +612,8 @@ in
         ("ocaml")
       ];
       src = (pkgs.fetchurl {
-        sha256 = "0qy5q7p11gxi5anhvi8jj6mr80ml0ih8lax5k579rsr2hsp3sns5";
-        url = "https://github.com/OCamlPro/ocplib-endian/archive/1.1.tar.gz";
+        sha256 = "085kskr0cxcnv2d62n3jq1r273p7giisy56zfl26mm7amvl79blp";
+        url = "https://github.com/OCamlPro/ocplib-endian/archive/refs/tags/1.2.tar.gz";
       });
       build = {
         buildPhase = "dune build -p ocplib-endian -j $NIX_BUILD_CORES @install";

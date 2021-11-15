@@ -1,3 +1,3 @@
 #!bash -eu
 gup -u ../../../bin yarn.lock
-../../../bin/fetlock -t yarn -o "$1" yarn.lock
+../../../bin/fetlock -o "$1"

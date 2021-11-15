@@ -7,8 +7,6 @@ in
     type = "yarn";
     version = "1";
     root = "onivim2-node@.";
-    cyclicDeps = [
-    ];
   };
   specs = {
     "@npmcli/move-file@1.1.2" = {
@@ -1070,6 +1068,8 @@ in
         ("sudo-prompt@9.2.1")
         ("typescript@3.9.9")
         ("yauzl@2.10.0")
+      ];
+      nodePathDeps = [
       ];
       pkgname = "onivim2-node";
     };

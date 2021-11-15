@@ -523,7 +523,7 @@ mod tests {
 			DepResolution {
 				name: "foo".to_owned(),
 				key: Key::new("foo@1.2.3".to_owned()),
-				registry: "npm".to_owned(),
+				registry: Some("npm".to_owned()),
 			}
 		);
 
@@ -532,7 +532,7 @@ mod tests {
 			DepResolution {
 				name: "@org/pkg".to_owned(),
 				key: Key::new("@org/pkg@1.2.3".to_owned()),
-				registry: "npm".to_owned(),
+				registry: Some("npm".to_owned()),
 			}
 		);
 

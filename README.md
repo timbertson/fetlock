@@ -14,11 +14,13 @@ Fetlock is a _unified tool_ for converting various lockfiles into `nix` expressi
    - no `bin` wrappers
    - no `install` script / native compilation support
 
-## General usage:
+## Workflow
 
 The general workflow is:
 
 ### Write `fetlock.nix`:
+
+(TODO: automate `fetlock init`)
 
 This imports the nix code from the master branch for ease of demonstration, you should pin the revision as appropriate:
 
@@ -29,6 +31,8 @@ import (builtins.fetchTarball "https://github.com/timbertson/opam2nix/archive/v1
 
 ### Get into a development shell:
 
+(TODO: `fetlock shell -t cargo`)
+
 This is a convenience to get shell both `fetlock` and the backend-appropriate tooling available on $PATH.
 
 ```
@@ -37,11 +41,15 @@ $ nix-shell -A cargo.shell fetlock.nix
 
 ### Generate `lock.nix`
 
+(TODO: default -o to nix/lock.nix)
+
 ```
 $ fetlock --type cargo -o lock.nix Cargo.lock
 ```
 
 ### Use the lock.nix to build a full nix expression
+
+(TODO: part of `fetlock init`)
 
 ```
 # default.nix
@@ -56,7 +64,31 @@ Fingers crossed, this derivation will build your whole project. If there are iss
 
 See the `examples/` directory for more examples.
 
+### Updating dependencies
+
+You can of course use your regular tooling to update your lockfile, and then regenerate `lock.nix` as above. But `fetlock` also provides convenience commands so that you don't have to install those development tools yourself.
+
+(TODO: implement this)
+If you run `fetlock update`, it'll invoke the appropriate command within a nix-shell that has the appropriate development tooling available, as well as updating `lock.nix`. So after that, a `nix-shell` will drop you into a shell with any changed dependencies available.
+(TODO: --lockfile-only)
+
 ---
+
+## Specifying a source
+
+A source can be either local or remote. (TODO: automatically set `src` to fetchgit or ./. if within the store)
+
+A local source is simply the path to the project directory.
+
+A remote source is a github author/project, plus an (optional) relative path to the project directory.
+
+Most backends have a hardcoded lock filename (think `yarn.lock` or `Cargo.lock`). For backends with arbitrary lockfile names, you can pass in the `--file` option to specify the lockfile name.
+
+## Specifying a lock type
+
+Typically, fetlock can autodetect the type. If you don't pass `--type` or `--file`, it'll look for known lock types in your project directory. If it can't find one (or finds multiple), you'll need to either pass `--type` or `--file` (lockfiles typically have an unambiguous mapping to a backend).
+
+--
 
 ## The problem
 

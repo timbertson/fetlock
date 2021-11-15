@@ -8,7 +8,7 @@ use std::fmt;
 use std::fmt::Debug;
 use std::iter::Iterator;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
 	Esy,
 	Opam,

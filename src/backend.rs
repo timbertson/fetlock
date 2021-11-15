@@ -1,6 +1,6 @@
 // common interface followed by all backends
 use crate::lock::{AsSpec, Lock, PartialSpec};
-use crate::lock_src::{LocalSrc, LockSrc};
+use crate::lock_src::LocalSrc;
 use crate::CliOpts;
 use std::path::PathBuf;
 use anyhow::*;
@@ -18,11 +18,6 @@ pub trait Backend: Sized + std::fmt::Debug {
 	// requires for all packages)
 	fn virtual_root(spec: &mut PartialSpec) {}
 
-	// Optionally override how a lock src is initialized
-	fn init_lock_src(src: &mut LockSrc) -> Result<()> {
-		Ok(())
-	}
-
 	// Parse file, populate a lock structure
 	// async because some implementations will need
 	// to download metadata from a registry
@@ -39,7 +34,7 @@ pub trait Backend: Sized + std::fmt::Debug {
 	// Run whatever commands are required to update the lockfile based on
 	// the current specification. This assumes all necessary developer tooling
 	// is available on $PATH
-	async fn update_lockfile<'a>(root: &'a PathBuf, rel: &'a str) -> Result<()> {
+	async fn update_lockfile<'a>(root: &'a PathBuf, rel: &'a Option<String>) -> Result<()> {
 		// TODO remove default impl
 		Err(anyhow!("--update is not implemented for this backend"))
 	}

@@ -20,7 +20,9 @@ pub struct CliOpts {
 fn usage<T>(program: &str, opts: Options) -> Result<T> {
 	let brief = format!(
 		"\
-Usage: {} LOCKFILE [options]
+Usage: {} [OPTIONS] [project-path]
+
+The default project-path is the current directory.
 ",
 		program
 	);
@@ -40,7 +42,14 @@ impl CliOpts {
 			"specify lock type (default: autodetected)",
 			"TYPE",
 		);
+		opts.optopt(
+			"l",
+			"lockfile",
+			"specify lockfile name (default: per-backend default)",
+			"FILENAME",
+		);
 		opts.optopt("o", "out", "output file (default: stdout)", "PATH");
+
 		opts.optopt(
 			"",
 			"clone-freshness",
@@ -50,13 +59,13 @@ impl CliOpts {
 		opts.optopt(
 			"",
 			"from",
-			"create a lockfile directly from on a github repository (author/repo)",
+			"load a lockfile directly from a github repository (author/repo)",
 			"AUTHOR/REPO",
 		);
 		opts.optopt(
 			"",
 			"src",
-			"set src to a github repository (author/repo)",
+			"set root package src attribute to a github repository (author/repo)",
 			"AUTHOR/REPO",
 		);
 
@@ -71,39 +80,47 @@ impl CliOpts {
 		}
 		debug!("parsing opts: {:?}", &matches);
 
-		if matches.free.len() != 1 {
+		if matches.free.len() > 1 {
 			return Err(anyhow!(
-				"Expected exactly one argument, got: {:?}",
+				"Expected at most one argument, got: {:?}",
 				matches.free
 			));
 		}
 		let out_path = matches.opt_str("out");
-		let lock_type = match matches
-			.opt_str("type")
-			.unwrap_or_else(|| "AUTODETECT_NOT_IMPLEMENTED".to_owned())
-			.as_str()
-		{
-			"esy" => lock::Type::Esy,
-			"opam" => lock::Type::Opam,
-			"yarn" => lock::Type::Yarn,
-			"bundler" => lock::Type::Bundler,
-			"cargo" => lock::Type::Cargo,
-			other => return Err(anyhow!("Unknown type: {}", other)),
+		let lock_type = if let Some(type_str) = matches.opt_str("type") {
+			Some(match type_str.as_str() {
+				"esy" => lock::Type::Esy,
+				"opam" => lock::Type::Opam,
+				"yarn" => lock::Type::Yarn,
+				"bundler" => lock::Type::Bundler,
+				"cargo" => lock::Type::Cargo,
+				other => return Err(anyhow!("Unknown type: {}", other)),
+			})
+		} else {
+			// autodetect
+			None
 		};
 		let repo_freshness_days = matches
 			.opt_str("clone-freshness")
 			.map(|s| str::parse(&s))
 			.transpose()?
 			.unwrap_or(1);
-		let lock_src = matches.opt_str("from");
+		let remote_repo = matches.opt_str("from");
 		let src = matches.opt_str("src");
 		let src = src.as_deref().map(GithubSrc::parse).transpose()?;
 		let ocaml_version = matches.opt_str("ocaml-version");
 		let update = matches.opt_present("update");
 		let no_nix = matches.opt_present("no-nix");
+		let lock_filename = matches.opt_str("lockfile");
 
-		let lock_rel = matches.free.into_iter().next();
-		let lock_src = LockSrc::parse(lock_type, lock_src.as_deref(), lock_rel)?;
+		// Components of the path:
+		let lock_root = matches.free.into_iter().next();
+		let lock_src = LockSrc::parse(LockSrcOpts {
+			lock_type,
+			repo: remote_repo,
+			lock_root,
+			lockfile: lock_filename,
+		})?;
 		Ok(CliOpts {
 			out_path,
 			lock_src,

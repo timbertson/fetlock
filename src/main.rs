@@ -4,6 +4,7 @@ use std::fmt;
 use std::io::stdout;
 use std::io::Write;
 use std::writeln;
+use std::collections::HashSet;
 
 use crate::fetch;
 use crate::lock;
@@ -19,10 +20,16 @@ pub async fn main() -> Result<()> {
 			writeln!(buf, "{}: {}", level, record.args())
 		})
 		.init();
-	let opts = CliOpts::from_argv()?;
+	let mut opts = CliOpts::from_argv()?;
 	debug!("parsed options: {:?}", opts);
 
-	match opts.lock_src.lock_type {
+	let lock_type = if let Some(t) = opts.lock_src.lock_type {
+		t
+	} else {
+		detect_type(&mut opts.lock_src).await?
+	};
+
+	match lock_type {
 		lock::Type::Esy => process::<crate::esy::EsyLock>(opts).await,
 		lock::Type::Opam => process::<crate::opam::OpamLock>(opts).await,
 		lock::Type::Yarn => process::<crate::yarn::YarnLock>(opts).await,
@@ -31,14 +38,61 @@ pub async fn main() -> Result<()> {
 	}
 }
 
-async fn process<B: Backend + fmt::Debug>(mut opts: CliOpts) -> Result<()> {
-	B::init_lock_src(&mut opts.lock_src)?;
-	
+fn type_from(filename: &str) -> Option<(lock::Type, &str)> {
+	// Note that we can infer a lock file which may not exist (yet),
+	// based on a spec file
+	if filename == "package.json" {
+		Some((lock::Type::Yarn, "yarn.lock"))
+	} else if filename == "Cargo.toml" || filename == "Cargo.lock" {
+		Some((lock::Type::Cargo, "Cargo.lock"))
+	} else if filename == "Gemfile" || filename == "Gemfile.lock" {
+		Some((lock::Type::Bundler, "Gemfile.lock"))
+	} else if filename.ends_with(".opam") || filename == "opam" {
+		Some((lock::Type::Opam, filename))
+	} else if filename.ends_with("esy.lock") {
+		// TODO is there a default name?
+		Some((lock::Type::Esy, filename))
+	} else {
+		None
+	}
+}
+
+async fn detect_type(src: &mut LockSrc) -> Result<lock::Type> {
+	let detected = if let Some(lockfile) = src.lockfile.as_ref() {
+		debug!("detecting based on lockfile name: {:?}", lockfile);
+		type_from(lockfile).map(|(t, _)| t)
+	} else {
+		// detect based on file presence
+		let local_src = src.resolve().await?;
+		let root = local_src.lock_path();
+		debug!("detecting based on contents of path {:?}", &root);
+		
+		let types: HashSet<(lock::Type, String)> = root.read_dir()?.flat_map(|ent|
+			ent.ok().and_then(|ent| ent.file_name().to_str().and_then(|f|
+				type_from(f).map(|(t, f)| (t, f.to_owned()))
+			))
+		).collect();
+
+		if types.len() > 1 {
+			return Err(anyhow!("Ambiguous lock type found ({:?})\nYou must specify `--lockfile` or `--type`", &types));
+		}
+		if let Some((t, lockfile)) = types.into_iter().next() {
+			src.lockfile = Some(lockfile);
+			Some(t)
+		} else {
+			None
+		}
+	};
+
+	detected.ok_or_else(|| anyhow!("Couldn't autodetect lock type, use --type/-t"))
+}
+
+async fn process<B: Backend + fmt::Debug>(opts: CliOpts) -> Result<()> {
 	if opts.update {
 		debug!("Updating lockfile {:?}", &opts.lock_src);
-		let LockSrc { root, relative, .. } = &opts.lock_src;
-		if let LockRoot::Path(p) = root {
-			B::update_lockfile(p, relative).await?;
+		if let LockRoot::Path(p) = opts.lock_src.root() {
+			let local_src = opts.lock_src.resolve().await?;
+			B::update_lockfile(&local_src.root, &local_src.relative).await?;
 		} else {
 			return Err(anyhow!("--update requires a local lock path"));
 		}

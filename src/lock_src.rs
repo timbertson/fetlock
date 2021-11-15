@@ -12,14 +12,28 @@ pub enum LockRoot {
 
 #[derive(Debug, Clone)]
 pub struct LockSrc {
-	pub lock_type: lock::Type,
-	pub root: LockRoot,
-	pub relative: String,
+	pub lock_type: Option<lock::Type>,
+	root: LockRoot,
+	relative: Option<String>,
+	pub lockfile: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LockSrcOpts {
+	pub lock_type: Option<lock::Type>,
+	pub repo: Option<String>,
+	pub lock_root: Option<String>,
+	pub lockfile: Option<String>,
 }
 
 impl LockSrc {
 	pub async fn resolve(&self) -> Result<LocalSrc> {
-		let relative = self.relative.clone();
+		let relative = match (&self.relative, &self.lockfile) {
+			(Some(rel), Some(lock)) => Some(format!("{}/{}", rel, lock)),
+			(Some(rel), None) => Some(rel.clone()),
+			(None, Some(lock)) => Some(lock.clone()),
+			(None, None) => None,
+		};
 		match &self.root {
 			LockRoot::Path(p) => Ok(LocalSrc::path(p.clone(), relative)),
 			LockRoot::Github(gh) => {
@@ -27,6 +41,10 @@ impl LockSrc {
 				LocalSrc::fetch_src(src, relative).await
 			}
 		}
+	}
+	
+	pub fn root(&self) -> &LockRoot {
+		&self.root
 	}
 }
 
@@ -59,12 +77,12 @@ impl GithubSrc {
 #[derive(Debug, Clone)]
 pub struct LocalSrc {
 	pub root: PathBuf,
-	relative: String,
+	pub relative: Option<String>,
 	pub src_digest: Option<(Src, Sha256)>,
 }
 
 impl LocalSrc {
-	fn path(root: PathBuf, relative: String) -> Self {
+	fn path(root: PathBuf, relative: Option<String>) -> Self {
 		Self {
 			root,
 			relative,
@@ -72,7 +90,7 @@ impl LocalSrc {
 		}
 	}
 
-	async fn fetch_src(src: Src, relative: String) -> Result<Self> {
+	async fn fetch_src(src: Src, relative: Option<String>) -> Result<Self> {
 		let digest = fetch::calculate_digest(&src).await?;
 		let root = fetch::realise_source(SrcDigest {
 			src: &src,
@@ -88,40 +106,31 @@ impl LocalSrc {
 
 	pub fn lock_path(&self) -> PathBuf {
 		// TODO cache once at construction
-		self.root.join(&self.relative)
+		if let Some(rel) = &self.relative {
+			self.root.join(rel)
+		} else {
+			self.root.clone()
+		}
 	}
 }
 
 impl LockSrc {
-	pub fn parse(
-		lock_type: lock::Type,
-		repo: Option<&str>,
-		relative: Option<String>,
-	) -> Result<LockSrc> {
-		debug!("parsing lock src:: {:?} {:?}", &repo, &relative);
-		let root: Option<Result<LockRoot>> =
-			repo.map(|repo| Ok(LockRoot::Github(GithubSrc::parse(repo)?)));
-		let root = root.transpose()?;
-		let (root, relative): (LockRoot, String) = match (root, relative) {
-			(_, None) => Err(anyhow!("path required")), // TODO guess relative from type
-			(Some(root), Some(relative)) => Ok((root, relative)),
-			(None, Some(relative)) => {
-				// just a path, treat the parent directory as the repo
-				let p = Path::new(&relative);
-				Ok((
-					LockRoot::Path(p.parent().unwrap_or(Path::new(".")).to_owned()),
-					p.file_name()
-						.ok_or(anyhow!("lock path must be a file"))?
-						.to_str()
-						.unwrap()
-						.to_owned(),
-				))
-			}
-		}?;
+	pub fn parse(opts: LockSrcOpts) -> Result<LockSrc> {
+		debug!("parsing lock src:: {:?}", &opts);
+		let LockSrcOpts { repo, lock_type, lock_root, lockfile } = opts;
+		let repo_root: Option<Result<LockRoot>> =
+			repo.map(|repo| Ok(LockRoot::Github(GithubSrc::parse(&repo)?)));
+		let repo_root = repo_root.transpose()?;
+		let (root, relative): (LockRoot, Option<String>) = match (repo_root, lock_root) {
+			(None, None) => (LockRoot::Path(PathBuf::from(".")), None),
+			(Some(root), relative) => (root, relative),
+			(None, Some(local_root)) => (LockRoot::Path(PathBuf::from(local_root)), None),
+		};
 		Ok(LockSrc {
 			lock_type,
 			root,
 			relative,
+			lockfile,
 		})
 	}
 }

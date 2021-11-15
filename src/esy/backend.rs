@@ -264,36 +264,25 @@ impl EsyLock {
 impl Backend for EsyLock {
 	type Spec = EsySpec;
 
-	fn init_lock_src(src: &mut LockSrc) -> Result<()> {
-		// We expect the user to pass in the lockfile _directory_,
-		// the primary file is `index.json` within it.
-		match &mut src.root {
-			LockRoot::Github(gh) => {
-				src.relative = format!("{}/index.json", src.relative);
-			}
-			LockRoot::Path(local_path) => {
-				// For a local path we want to make src root the parent of
-				// the lock dir, because that's where all relative manifest
-				// paths are resolved against.
-				let invalid_lock = || anyhow!("Invalid lock dir: {:?}", &local_path);
-				let lock_dir_name = local_path
-					.file_name()
-					.and_then(|p| p.to_str())
-					.ok_or_else(invalid_lock)?;
-				let repo_root_path = local_path.parent().ok_or_else(invalid_lock)?;
-				src.relative = format!("{}/{}/index.json", src.relative, lock_dir_name);
-				*local_path = repo_root_path.to_owned();
-			}
-		}
-		Ok(())
-	}
-
-	async fn load(src: &LocalSrc, opts: CliOpts) -> Result<Self> {
+	async fn load(src_dir: &LocalSrc, opts: CliOpts) -> Result<Self> {
 		let context = LockContext::new(lock::Type::Esy);
-		let contents = std::fs::read_to_string(src.lock_path())?;
+
+		// relative paths obtained from esy.lock contain the path to index.json,
+		// so for convenience that's the internal path we use too, despite the fact that
+		// fetlock uses the containing directory
+		let LocalSrc { root, relative: relative_dir, src_digest: _ } = src_dir;
+		let relative_file = format!("{}/index.json",
+			relative_dir.as_ref().ok_or_else(||anyhow!("lockfile path required"))?);
+		let src_file = LocalSrc {
+			root: root.clone(),
+			relative: Some(relative_file),
+			src_digest: None,
+		};
+
+		let contents = std::fs::read_to_string(src_file.lock_path())?;
 		let lockfile: EsyLockFile = serde_json::from_str(&contents)?;
 		Ok(EsyLock {
-			src: src.clone(),
+			src: src_file.clone(),
 			opts,
 			lockfile,
 		})

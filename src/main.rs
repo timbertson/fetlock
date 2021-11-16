@@ -1,7 +1,8 @@
 use anyhow::*;
 use log::*;
 use std::fmt;
-use std::io::stdout;
+use std::fs;
+use std::path::PathBuf;
 use std::io::Write;
 use std::writeln;
 use std::collections::HashSet;
@@ -28,7 +29,7 @@ pub async fn main() -> Result<()> {
 	} else {
 		detect_type(&mut opts.lock_src).await?
 	};
-
+	
 	match lock_type {
 		lock::Type::Esy => process::<crate::esy::EsyLock>(opts).await,
 		lock::Type::Opam => process::<crate::opam::OpamLock>(opts).await,
@@ -135,7 +136,7 @@ async fn process<B: Backend + fmt::Debug>(opts: CliOpts) -> Result<()> {
 		.get_mut(&root_key)
 		.ok_or_else(|| anyhow!("root spec ({}) is not defined", root_key))?;
 
-	// src comes from an explicit `src`, or `lock_src` if it's remote
+	// src comes from an explicit `src`, or `lock_src`.
 	let src_digest = if let Some(gh) = opts.src {
 		let src = gh.resolve().await?;
 		let digest = fetch::calculate_digest(&src).await?;
@@ -152,13 +153,21 @@ async fn process<B: Backend + fmt::Debug>(opts: CliOpts) -> Result<()> {
 	fetch::populate_source_digests(lock_mut).await?;
 	let lock = lock.finalize().await?;
 
-	match opts.out_path {
-		None => WriteContext::sink(stdout(), |mut c| lock.write_to(&mut c)),
-		Some(path) => {
-			info!("Writing {}", path);
-			crate::fs::write_atomically(path, |out_file| {
-				WriteContext::sink(out_file, |mut c| lock.write_to(&mut c))
-			})
-		}
-	}
+	let out_path = match opts.out_path {
+		Some(out_path) => PathBuf::from(out_path),
+		None => {
+			// special case: when file path not provided, we will autocreate `project/nix` and write `lock.nix` within it
+			let dir = if let LockRoot::Path(p) = opts.lock_src.root() {
+				p.join("nix")
+			} else {
+				PathBuf::from("nix")
+			};
+			fs::create_dir_all(&dir)?;
+			dir.join("lock.nix")
+		},
+	};
+	info!("Writing {:?}", out_path);
+	crate::fs::write_atomically(out_path, |out_file| {
+		WriteContext::sink(out_file, |mut c| lock.write_to(&mut c))
+	})
 }

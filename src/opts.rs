@@ -57,16 +57,23 @@ impl CliOpts {
 			"DAYS",
 		);
 		opts.optopt(
-			"",
-			"from",
+			"g",
+			"github",
 			"load a lockfile directly from a github repository (author/repo)",
 			"AUTHOR/REPO",
 		);
+		// TODO let user specify e.g. `../.` as a path
 		opts.optopt(
 			"",
 			"src",
-			"set root package src attribute to a github repository (author/repo)",
+			"set root package src attribute to a github repository (author/repo), typically useful when using a local lockfile for an online project",
 			"AUTHOR/REPO",
+		);
+		opts.optopt(
+			"p",
+			"path",
+			"project path (directory containing lockfile)",
+			"PATH",
 		);
 
 		opts.optopt("", "ocaml-version", "Required for opam", "VERSION");
@@ -82,7 +89,7 @@ impl CliOpts {
 
 		if matches.free.len() > 1 {
 			return Err(anyhow!(
-				"Expected at most one argument, got: {:?}",
+				"Unexpected argument: {:?}",
 				matches.free
 			));
 		}
@@ -105,16 +112,15 @@ impl CliOpts {
 			.map(|s| str::parse(&s))
 			.transpose()?
 			.unwrap_or(1);
-		let remote_repo = matches.opt_str("from");
+		let remote_repo = matches.opt_str("github");
 		let src = matches.opt_str("src");
 		let src = src.as_deref().map(GithubSrc::parse).transpose()?;
 		let ocaml_version = matches.opt_str("ocaml-version");
 		let update = matches.opt_present("update");
 		let no_nix = matches.opt_present("no-nix");
 		let lock_filename = matches.opt_str("lockfile");
+		let lock_root = matches.opt_str("path");
 
-		// Components of the path:
-		let lock_root = matches.free.into_iter().next();
 		let lock_src = LockSrc::parse(LockSrcOpts {
 			lock_type,
 			repo: remote_repo,

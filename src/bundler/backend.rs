@@ -31,7 +31,7 @@ pub struct BundlerLock(Lock<Spec>);
 impl Backend for BundlerLock {
 	type Spec = Spec;
 
-	async fn load(src: &LocalSrc, opts: CliOpts) -> Result<Self> {
+	async fn load(src: &LocalSrc, opts: &WriteOpts) -> Result<Self> {
 		// TODO we need both the lockfile and the Gemfile,
 		// the CLIopts include only the lockfile
 		let lock_path = src.lock_path();

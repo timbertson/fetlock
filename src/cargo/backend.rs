@@ -194,7 +194,7 @@ impl CargoLock {
 impl Backend for CargoLock {
 	type Spec = Spec;
 
-	async fn load(src: &LocalSrc, opts: CliOpts) -> Result<Self> {
+	async fn load(src: &LocalSrc, opts: &WriteOpts) -> Result<Self> {
 		let mut cmd = MetadataCommand::new();
 		
 		// we have a lockfile but cargo_metadata expects Cargo.toml, which should be a sibling

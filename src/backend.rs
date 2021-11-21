@@ -1,7 +1,7 @@
 // common interface followed by all backends
 use crate::lock::{AsSpec, Lock, PartialSpec};
 use crate::lock_src::LocalSrc;
-use crate::CliOpts;
+use crate::WriteOpts;
 use std::path::PathBuf;
 use anyhow::*;
 use async_trait::async_trait;
@@ -21,7 +21,7 @@ pub trait Backend: Sized + std::fmt::Debug {
 	// Parse file, populate a lock structure
 	// async because some implementations will need
 	// to download metadata from a registry
-	async fn load(src: &LocalSrc, opts: CliOpts) -> Result<Self>;
+	async fn load(src: &LocalSrc, opts: &WriteOpts) -> Result<Self>;
 
 	// access the underlying specs mutably (for populating source digests)
 	fn lock_mut<'a>(&'a mut self) -> &mut Lock<Self::Spec>;

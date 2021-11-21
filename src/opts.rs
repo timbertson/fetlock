@@ -1,101 +1,225 @@
 use crate::lock;
 use crate::lock_src::*;
 use anyhow::*;
-use getopts::Options;
 use log::*;
-use std::env;
+use std::collections::HashSet;
+use clap::Parser;
 
+mod raw {
+	use clap::{Parser, AppSettings};
+
+#[derive(Parser, Debug, Default, PartialEq, Eq)]
+	pub struct CommonOpts {
+		#[clap(short='t', long="type", about="specify lock type (default: autodetected)")]
+		pub lock_type: Option<String>,
+
+		#[clap(short='p', long, about="project path (directory containing lockfile; default is the current directory)")]
+		pub path: Option<String>,
+	}
+
+#[derive(Parser, Debug, Default, PartialEq, Eq)]
+	pub struct CommonWriteOpts {
+		#[clap(short, long="out", about="Nix lock expression location (default nix/lock.nix)")]
+		pub out_path: Option<String>,
+
+		#[clap(short='l', long, about="lockfile name (default: per-backend default)")]
+		pub lockfile: Option<String>,
+
+		// TODO let user specify e.g. `../.` as a path
+		#[clap(long, about="set root package src attribute to a github repository (author/repo), typically useful when using a local lockfile for an online project")]
+		pub src: Option<String>,
+
+		#[clap(long="clone-freshness", about="maximum age (in days) for cloned repos")]
+		pub clone_freshness_days: Option<u32>,
+
+		#[clap(long="ocaml-version", about="required for opam backend")]
+		pub ocaml_version: Option<String>,
+	}
+
+#[derive(Parser, Debug, Default, PartialEq, Eq)]
+	pub struct WriteOpts {
+		#[clap(flatten)]
+		pub common: CommonOpts,
+
+		#[clap(flatten)]
+		pub common_write: CommonWriteOpts,
+
+		#[clap(long, about="load a lockfile directly from a github repository (author/repo)")]
+		pub github: Option<String>,
+	}
+
+#[derive(Parser, Debug)]
+	pub struct UpdateOpts {
+		#[clap(flatten)]
+		pub common: CommonOpts,
+
+		#[clap(flatten)]
+		pub common_write: CommonWriteOpts,
+
+		#[clap(long="no-nix", about="Only update lockfile, don't generate a nix lock expression")]
+		pub no_nix: bool,
+	}
+
+#[derive(Parser, Debug)]
+	pub struct InitOpts {
+		#[clap(flatten)]
+		pub common: CommonOpts,
+
+		#[clap(long)]
+		pub force: bool,
+	}
+
+#[derive(Parser, Debug)]
+#[clap(setting = AppSettings::InferSubcommands, about="If no subcommand is given, `write` is assumed")]
+	pub struct Opts {
+		#[clap(subcommand)]
+		pub cmd: Option<Command>,
+
+		#[clap(flatten)]
+		pub implicit_write_opts: WriteOpts,
+		
+		#[clap(short, long, parse(from_occurrences))]
+		pub verbosity: i32,
+
+		#[clap(short, long, parse(from_occurrences))]
+		pub quietness: i32,
+	}
+
+#[derive(Parser, Debug)]
+	pub enum Command {
+		#[clap(about="Write a .nix lock expression from a (possibly-remote) lockfile")]
+		Write(WriteOpts),
+
+		#[clap(about="Update local lockfile based on package specification (and write nix expression)")]
+		Update(UpdateOpts),
+
+		#[clap(about="Create boilerplate nix expressions for a local project")]
+		Init(InitOpts),
+	}
+}
+
+// Canonicalized / resolved version of raw opts
 #[derive(Debug, Clone)]
 pub struct CliOpts {
-	pub out_path: Option<String>,
+	pub lock_type: lock::Type,
 	pub lock_src: LockSrc,
-	pub src: Option<GithubSrc>,
-	pub repo_freshness_days: u32,
-	pub ocaml_version: Option<String>,
-	// TODO make a better ADT which encapsulates modes
-	pub update: bool,
+	pub cmd: Command,
+}
+
+#[derive(Debug, Clone)]
+pub enum Command {
+	Write(WriteOpts),
+	Update(UpdateOpts),
+	Init(InitOpts),
+}
+
+#[derive(Debug, Clone)]
+pub struct InitOpts {
+	pub force: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct UpdateOpts {
+	pub common_write: WriteOpts,
 	pub no_nix: bool,
 }
 
-fn usage<T>(program: &str, opts: Options) -> Result<T> {
-	let brief = format!(
-		"\
-Usage: {} [OPTIONS] [project-path]
-
-The default project-path is the current directory.
-",
-		program
-	);
-	Err(anyhow!("{}", opts.usage(&brief)))
+#[derive(Debug, Clone)]
+pub struct WriteOpts {
+	pub out_path: Option<String>,
+	pub src: Option<GithubSrc>,
+	pub clone_freshness_days: u32,
+	pub ocaml_version: Option<String>,
 }
 
 impl CliOpts {
-	pub fn from_argv() -> Result<CliOpts> {
-		let argv: Vec<String> = env::args().collect();
-		let program = argv[0].clone();
+	pub fn from_argv() -> raw::Opts {
+		let opts = raw::Opts::parse();
+		debug!("parsed opts: {:?}", opts);
+		opts
+	}
 
-		let mut opts = Options::new();
-		opts.optflag("h", "help", "print this help menu");
-		opts.optopt(
-			"t",
-			"type",
-			"specify lock type (default: autodetected)",
-			"TYPE",
-		);
-		opts.optopt(
-			"l",
-			"lockfile",
-			"specify lockfile name (default: per-backend default)",
-			"FILENAME",
-		);
-		opts.optopt("o", "out", "output file (default: stdout)", "PATH");
+	pub async fn resolve(raw: raw::Opts) -> Result<CliOpts> {
+		let raw::Opts { cmd, implicit_write_opts, .. } = raw;
+		let cmd = if let Some(cmd) = cmd {
+			let default : raw::WriteOpts = Default::default();
+			if implicit_write_opts != default {
+				return Err(anyhow!("When specifying a command name, it must preceed all arguments"))
+			}
+			cmd
+		} else {
+			raw::Command::Write(implicit_write_opts)
+		};
+		
+		let common = match &cmd {
+			raw::Command::Init(c) => &c.common,
+			raw::Command::Write(c) => &c.common,
+			raw::Command::Update(c) => &c.common,
+		};
 
-		opts.optopt(
-			"",
-			"clone-freshness",
-			"maximum age (in days) for cloned repos",
-			"DAYS",
-		);
-		opts.optopt(
-			"g",
-			"github",
-			"load a lockfile directly from a github repository (author/repo)",
-			"AUTHOR/REPO",
-		);
-		// TODO let user specify e.g. `../.` as a path
-		opts.optopt(
-			"",
-			"src",
-			"set root package src attribute to a github repository (author/repo), typically useful when using a local lockfile for an online project",
-			"AUTHOR/REPO",
-		);
-		opts.optopt(
-			"p",
-			"path",
-			"project path (directory containing lockfile)",
-			"PATH",
-		);
-
-		opts.optopt("", "ocaml-version", "Required for opam", "VERSION");
-
-		opts.optflag("", "update", "Update underlying lockfile from version specifications (using language-specific tooling)");
-		opts.optflag("", "no-nix", "Don't generate a nix lock expression (useful with --update)");
-
-		let matches = opts.parse(&argv[1..])?;
-		if matches.opt_present("h") {
-			return usage(&program, opts);
+		match cmd {
+			raw::Command::Init(c) => {
+				let raw::InitOpts { force, common } = c;
+				let raw::CommonOpts { lock_type, path } = common;
+				let mut lock_src = LockSrc::parse(LockSrcOpts {
+					lock_type: None,
+					repo: None,
+					lock_root: path,
+					lockfile: None,
+				})?;
+				let lock_type = Self::resolve_type(&mut lock_src, lock_type.as_ref()).await?;
+				Ok(CliOpts {
+					lock_type,
+					lock_src,
+					cmd: Command::Init(InitOpts { force }),
+				})
+			},
+			raw::Command::Write(c) => Self::resolve_write_opts(c).await,
+			raw::Command::Update(c) => {
+				// update is just write with a few extra details:
+				let raw::UpdateOpts { common, common_write, no_nix } = c;
+				let CliOpts { lock_type, lock_src, cmd } = Self::resolve_write_opts(raw::WriteOpts {
+					common, common_write, github: None
+				}).await?;
+				match cmd {
+					Command::Write(common_write) => Ok(CliOpts {
+						lock_type,
+						lock_src,
+						cmd: Command::Update(UpdateOpts { common_write, no_nix }),
+					}),
+					_ => panic!("impossible"),
+				}
+			},
 		}
-		debug!("parsing opts: {:?}", &matches);
-
-		if matches.free.len() > 1 {
-			return Err(anyhow!(
-				"Unexpected argument: {:?}",
-				matches.free
-			));
-		}
-		let out_path = matches.opt_str("out");
-		let lock_type = if let Some(type_str) = matches.opt_str("type") {
-			Some(match type_str.as_str() {
+	}
+	
+	async fn resolve_write_opts(opts: raw::WriteOpts) -> Result<CliOpts> {
+		let raw::WriteOpts { common, common_write, github } = opts;
+		let raw::CommonOpts { lock_type, path } = common;
+		let raw::CommonWriteOpts { out_path, lockfile, src, clone_freshness_days, ocaml_version } = common_write;
+		let src = src.as_deref().map(GithubSrc::parse).transpose()?;
+		let mut lock_src = LockSrc::parse(LockSrcOpts {
+			lock_type: None, // TODO remove
+			repo: github,
+			lock_root: path,
+			lockfile: lockfile,
+		})?;
+		let lock_type = Self::resolve_type(&mut lock_src, lock_type.as_ref()).await?;
+		Ok(CliOpts {
+			lock_type,
+			lock_src,
+			cmd: Command::Write(WriteOpts {
+				out_path,
+				src,
+				clone_freshness_days: clone_freshness_days.unwrap_or(1),
+				ocaml_version
+			}),
+		})
+	}
+	
+	async fn resolve_type(lock_src: &mut LockSrc, type_str: Option<&String>) -> Result<lock::Type> {
+		if let Some(type_str) = type_str {
+			Ok(match type_str.as_str() {
 				"esy" => lock::Type::Esy,
 				"opam" => lock::Type::Opam,
 				"yarn" => lock::Type::Yarn,
@@ -104,37 +228,57 @@ impl CliOpts {
 				other => return Err(anyhow!("Unknown type: {}", other)),
 			})
 		} else {
-			// autodetect
-			None
-		};
-		let repo_freshness_days = matches
-			.opt_str("clone-freshness")
-			.map(|s| str::parse(&s))
-			.transpose()?
-			.unwrap_or(1);
-		let remote_repo = matches.opt_str("github");
-		let src = matches.opt_str("src");
-		let src = src.as_deref().map(GithubSrc::parse).transpose()?;
-		let ocaml_version = matches.opt_str("ocaml-version");
-		let update = matches.opt_present("update");
-		let no_nix = matches.opt_present("no-nix");
-		let lock_filename = matches.opt_str("lockfile");
-		let lock_root = matches.opt_str("path");
+			Self::detect_type(lock_src).await
+		}
+	}
 
-		let lock_src = LockSrc::parse(LockSrcOpts {
-			lock_type,
-			repo: remote_repo,
-			lock_root,
-			lockfile: lock_filename,
-		})?;
-		Ok(CliOpts {
-			out_path,
-			lock_src,
-			src,
-			repo_freshness_days,
-			update,
-			no_nix,
-			ocaml_version,
-		})
+	fn type_from(filename: &str) -> Option<(lock::Type, &str)> {
+		// Note that we can infer a lock file which may not exist (yet),
+		// based on a spec file
+		if filename == "package.json" {
+			Some((lock::Type::Yarn, "yarn.lock"))
+		} else if filename == "Cargo.toml" || filename == "Cargo.lock" {
+			Some((lock::Type::Cargo, "Cargo.lock"))
+		} else if filename == "Gemfile" || filename == "Gemfile.lock" {
+			Some((lock::Type::Bundler, "Gemfile.lock"))
+		} else if filename.ends_with(".opam") || filename == "opam" {
+			Some((lock::Type::Opam, filename))
+		} else if filename.ends_with("esy.lock") {
+			// TODO is there a default name?
+			Some((lock::Type::Esy, filename))
+		} else {
+			None
+		}
+	}
+
+	async fn detect_type(src: &mut LockSrc) -> Result<lock::Type> {
+		let detected = if let Some(lockfile) = src.lockfile.as_ref() {
+			debug!("detecting based on lockfile name: {:?}", lockfile);
+			Self::type_from(lockfile).map(|(t, _)| t)
+		} else {
+			// detect based on file presence
+			let local_src = src.resolve().await?;
+			let root = local_src.lock_path();
+			debug!("detecting based on contents of path {:?}", &root);
+			
+			let types: HashSet<(lock::Type, String)> = root.read_dir()?.flat_map(|ent|
+				ent.ok().and_then(|ent| ent.file_name().to_str().and_then(|f|
+					Self::type_from(f).map(|(t, f)| (t, f.to_owned()))
+				))
+			).collect();
+
+			if types.len() > 1 {
+				return Err(anyhow!("Ambiguous lock type found ({:?})\nYou must specify `--lockfile` or `--type`", &types));
+			}
+			if let Some((t, lockfile)) = types.into_iter().next() {
+				src.lockfile = Some(lockfile);
+				Some(t)
+			} else {
+				None
+			}
+		};
+
+		detected.ok_or_else(|| anyhow!("Couldn't autodetect lock type, use --type/-t"))
 	}
 }
+

@@ -15,6 +15,7 @@ mod opts;
 mod stream_util;
 mod string_util;
 pub use opts::CliOpts;
+pub use opts::WriteOpts;
 pub mod err;
 pub mod fetch;
 pub mod fs;

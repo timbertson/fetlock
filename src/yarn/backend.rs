@@ -18,7 +18,6 @@ use std::path::PathBuf;
 #[derive(Clone, Debug)]
 pub struct YarnLock {
 	lockfile: YarnLockFile,
-	opts: CliOpts,
 }
 
 #[async_trait(?Send)]
@@ -30,7 +29,7 @@ impl Backend for YarnLock {
 			.insert("pkgname".to_owned(), Expr::str("virtual-root".to_owned()));
 	}
 
-	async fn load(src: &LocalSrc, opts: CliOpts) -> Result<Self> {
+	async fn load(src: &LocalSrc, opts: &WriteOpts) -> Result<Self> {
 		let lock_path = src.lock_path();
 
 		let mut package_json_path = lock_path.clone();
@@ -78,7 +77,7 @@ impl Backend for YarnLock {
 			}
 		}
 		
-		Ok(YarnLock { lockfile, opts })
+		Ok(YarnLock { lockfile })
 	}
 	
 	fn lock_mut(&mut self) -> &mut Lock<Self::Spec> {

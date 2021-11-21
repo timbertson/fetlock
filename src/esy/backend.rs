@@ -23,7 +23,6 @@ use std::path::*;
 #[derive(Clone, Debug)]
 pub struct EsyLock {
 	src: LocalSrc,
-	opts: CliOpts,
 	lockfile: EsyLockFile,
 }
 
@@ -264,7 +263,7 @@ impl EsyLock {
 impl Backend for EsyLock {
 	type Spec = EsySpec;
 
-	async fn load(src_dir: &LocalSrc, opts: CliOpts) -> Result<Self> {
+	async fn load(src_dir: &LocalSrc, opts: &WriteOpts) -> Result<Self> {
 		let context = LockContext::new(lock::Type::Esy);
 
 		// relative paths obtained from esy.lock contain the path to index.json,
@@ -283,7 +282,6 @@ impl Backend for EsyLock {
 		let lockfile: EsyLockFile = serde_json::from_str(&contents)?;
 		Ok(EsyLock {
 			src: src_file.clone(),
-			opts,
 			lockfile,
 		})
 	}

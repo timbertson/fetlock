@@ -1,6 +1,6 @@
 use crate::cmd;
+use crate::WriteOpts;
 use crate::memoize::Memoize;
-use crate::CliOpts;
 use crate::{Expr, GitUrl, Sha256, Src};
 use anyhow::*;
 use futures::future::FutureExt;
@@ -45,7 +45,7 @@ pub struct CachedRepo {
 }
 
 impl CachedRepo {
-	pub async fn cache<G: GitUrl>(opts: &CliOpts, src: &G) -> Result<CachedRepo> {
+	pub async fn cache<G: GitUrl>(opts: &WriteOpts, src: &G) -> Result<CachedRepo> {
 		use fs2::FileExt;
 		let mut path = cache_root();
 		path.push("git");
@@ -85,7 +85,7 @@ impl CachedRepo {
 				.or_else(|_| now.duration_since(SystemTime::UNIX_EPOCH))?;
 			let fetch_ref = "fetlock-fetched";
 			let age_in_days = age.as_secs() / SECONDS_PER_DAY;
-			if age.as_secs() > (u64::from(opts.repo_freshness_days) * SECONDS_PER_DAY) {
+			if age.as_secs() > (u64::from(opts.clone_freshness_days) * SECONDS_PER_DAY) {
 				info!("updating {} (age={} days)", &url, age_in_days);
 				cmd::exec(
 					Command::new("git")

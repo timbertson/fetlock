@@ -39,7 +39,7 @@ pub struct OpamLock {
 impl Backend for OpamLock {
 	type Spec = OpamSpec;
 
-	async fn load(src: &LocalSrc, opts: CliOpts) -> Result<Self> {
+	async fn load(src: &LocalSrc, opts: &WriteOpts) -> Result<Self> {
 		use opam2nix::{OpamSource, Repository, Request, SelectedPackage, SolveSpec};
 		let opam_path = src.lock_path();
 
@@ -87,7 +87,7 @@ impl Backend for OpamLock {
 		}];
 
 		let request = Request {
-			ocaml_version: opts.ocaml_version,
+			ocaml_version: opts.ocaml_version.clone(),
 			repositories: vec![Repository {
 				id: "opam".to_owned(),
 				path: opam_repo.path.clone(),

@@ -38,7 +38,7 @@ pub async fn main() -> Result<()> {
 
 async fn process<B: Backend + fmt::Debug>(opts: CliOpts) -> Result<()> {
 	match &opts.cmd {
-		opts::Command::Init(init_opts) => todo!(),
+		opts::Command::Init(init_opts) => init::<B>(&opts, &init_opts).await,
 		opts::Command::Update(update_opts) => update::<B>(&opts, update_opts).await,
 		opts::Command::Write(write_opts) => write::<B>(&opts, &write_opts).await,
 	}
@@ -115,17 +115,91 @@ async fn write<B: Backend + fmt::Debug>(opts: &CliOpts, write_opts: &WriteOpts) 
 
 async fn update<B: Backend + fmt::Debug>(opts: &CliOpts, update_opts: &opts::UpdateOpts) -> Result<()> {
 	debug!("Updating lockfile {:?}", &opts.lock_src);
-	if let LockRoot::Path(p) = opts.lock_src.root() {
-		let local_src = opts.lock_src.resolve().await?;
-		B::update_lockfile(&local_src.root, &local_src.relative).await?;
-	} else {
-		return Err(anyhow!("--update requires a local lock path"));
-	}
+	let local_src = require_local_src(opts).await?;
+	B::update_lockfile(&local_src.root, &local_src.relative).await?;
 	
 	if update_opts.no_nix {
 		debug!("--no-nix; exiting");
 		Ok(())
 	} else {
 		write::<B>(opts, &update_opts.common_write).await
+	}
+}
+
+async fn init<B: Backend + fmt::Debug>(opts: &CliOpts, init_opts: &opts::InitOpts) -> Result<()> {
+	debug!("Initializing {:?}", &opts.lock_src);
+	
+	let root = match opts.lock_src.root() {
+		LockRoot::Path(p) => {
+			let base = PathBuf::from(p);
+			match &opts.lock_src.relative {
+				Some(rel) => base.join(rel),
+				None => base,
+			}
+		},
+		_ => PathBuf::from("."),
+	};
+	
+	write_init_file(&init_opts, &root, "default.nix", |mut f| {
+		writeln!(f, "import ./nix/")?;
+		Ok(())
+	})?;
+
+	write_init_file(&init_opts, &root, "nix/default.nix", |mut f| {
+		let enable_ocaml = " enableOcaml = true; ";
+		let callpkgs_opts = match opts.lock_type {
+			lock::Type::Esy => enable_ocaml,
+			lock::Type::Opam => enable_ocaml,
+			_ => "",
+		};
+		writeln!(f, "\
+{{ pkgs ? import <nixpkgs> {{}} }}:
+with pkgs;
+let
+  fetlock = callPackage (builtins.fetchTarball \"https://github.com/timbertson/fetlock/archive/master.tar.gz\") {{{}}};
+  selection = fetlock.{}.load ./lock.nix {{}};
+in selection.root",
+			callpkgs_opts,
+			opts.lock_type
+		)?;
+		Ok(())
+	})?;
+
+	if init_opts.update {
+		info!("Initialization complete, updating lockfile ...");
+		let update_opts = opts::UpdateOpts {
+			common_write: init_opts.write.clone(),
+			no_nix: false,
+		};
+		update::<B>(opts, &update_opts).await
+	} else {
+		info!("Initialization complete, writing lock expression ...");
+		write::<B>(opts, &init_opts.write).await
+	}
+}
+
+fn write_init_file<F: FnOnce(fs::File) -> Result<()>>(
+	opts: &opts::InitOpts,
+	root: &PathBuf,
+	rel: &str,
+	block: F) -> Result<()> {
+	let p = root.join(rel);
+	if opts.force || (!p.exists()) {
+		if let Some(parent) = p.parent() {
+			fs::create_dir_all(parent)?;
+		}
+		let output = fs::File::create(p)?;
+		block(output)
+	} else {
+		warn!("Skipping initialization of {:?} (pass --force to overwrite it)", &p);
+		Ok(())
+	}
+}
+
+async fn require_local_src(opts: &CliOpts) -> Result<LocalSrc> {
+	if let LockRoot::Path(p) = opts.lock_src.root() {
+		opts.lock_src.resolve().await
+	} else {
+		Err(anyhow!("local path required"))
 	}
 }

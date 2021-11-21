@@ -65,8 +65,14 @@ mod raw {
 		#[clap(flatten)]
 		pub common: CommonOpts,
 
-		#[clap(long)]
+		#[clap(flatten)]
+		pub common_write: CommonWriteOpts,
+
+		#[clap(long, about="Overwrite existing boilerplate files")]
 		pub force: bool,
+
+		#[clap(short, long, about="Update (or generate) lock file based on package spec")]
+		pub update: bool,
 	}
 
 #[derive(Parser, Debug)]
@@ -116,6 +122,8 @@ pub enum Command {
 #[derive(Debug, Clone)]
 pub struct InitOpts {
 	pub force: bool,
+	pub update: bool,
+	pub write: WriteOpts,
 }
 
 #[derive(Debug, Clone)]
@@ -128,7 +136,7 @@ pub struct UpdateOpts {
 pub struct WriteOpts {
 	pub out_path: Option<String>,
 	pub src: Option<GithubSrc>,
-	pub clone_freshness_days: u32,
+	pub clone_freshness_days: Option<u32>,
 	pub ocaml_version: Option<String>,
 }
 
@@ -158,63 +166,50 @@ impl CliOpts {
 		};
 
 		match cmd {
-			raw::Command::Init(c) => {
-				let raw::InitOpts { force, common } = c;
-				let raw::CommonOpts { lock_type, path } = common;
-				let mut lock_src = LockSrc::parse(LockSrcOpts {
-					lock_type: None,
-					repo: None,
-					lock_root: path,
-					lockfile: None,
-				})?;
-				let lock_type = Self::resolve_type(&mut lock_src, lock_type.as_ref()).await?;
+			raw::Command::Write(c) => {
+				let (lock_type, lock_src, write_opts) = Self::resolve_write_opts(c).await?;
+				Ok(CliOpts { lock_type, lock_src, cmd: Command::Write(write_opts) })
+			},
+			raw::Command::Update(c) => {
+				let raw::UpdateOpts { common, common_write, no_nix } = c;
+				let raw_write = raw::WriteOpts { common, common_write, github: None };
+				let (lock_type, lock_src, common_write) = Self::resolve_write_opts(raw_write).await?;
 				Ok(CliOpts {
 					lock_type,
 					lock_src,
-					cmd: Command::Init(InitOpts { force }),
+					cmd: Command::Update(UpdateOpts { common_write, no_nix }),
 				})
 			},
-			raw::Command::Write(c) => Self::resolve_write_opts(c).await,
-			raw::Command::Update(c) => {
-				// update is just write with a few extra details:
-				let raw::UpdateOpts { common, common_write, no_nix } = c;
-				let CliOpts { lock_type, lock_src, cmd } = Self::resolve_write_opts(raw::WriteOpts {
-					common, common_write, github: None
-				}).await?;
-				match cmd {
-					Command::Write(common_write) => Ok(CliOpts {
-						lock_type,
-						lock_src,
-						cmd: Command::Update(UpdateOpts { common_write, no_nix }),
-					}),
-					_ => panic!("impossible"),
-				}
+			raw::Command::Init(c) => {
+				let raw::InitOpts { force, update, common, common_write } = c;
+				let raw_write = raw::WriteOpts { common, common_write, github: None };
+				let (lock_type, lock_src, write) = Self::resolve_write_opts(raw_write).await?;
+				Ok(CliOpts {
+					lock_type,
+					lock_src,
+					cmd: Command::Init(InitOpts { force, update, write }),
+				})
 			},
 		}
 	}
 	
-	async fn resolve_write_opts(opts: raw::WriteOpts) -> Result<CliOpts> {
+	async fn resolve_write_opts(opts: raw::WriteOpts) -> Result<(lock::Type, LockSrc, WriteOpts)> {
 		let raw::WriteOpts { common, common_write, github } = opts;
 		let raw::CommonOpts { lock_type, path } = common;
 		let raw::CommonWriteOpts { out_path, lockfile, src, clone_freshness_days, ocaml_version } = common_write;
 		let src = src.as_deref().map(GithubSrc::parse).transpose()?;
 		let mut lock_src = LockSrc::parse(LockSrcOpts {
-			lock_type: None, // TODO remove
 			repo: github,
 			lock_root: path,
 			lockfile: lockfile,
 		})?;
 		let lock_type = Self::resolve_type(&mut lock_src, lock_type.as_ref()).await?;
-		Ok(CliOpts {
-			lock_type,
-			lock_src,
-			cmd: Command::Write(WriteOpts {
-				out_path,
-				src,
-				clone_freshness_days: clone_freshness_days.unwrap_or(1),
-				ocaml_version
-			}),
-		})
+		Ok((lock_type, lock_src, WriteOpts {
+			out_path,
+			src,
+			clone_freshness_days,
+			ocaml_version
+		}))
 	}
 	
 	async fn resolve_type(lock_src: &mut LockSrc, type_str: Option<&String>) -> Result<lock::Type> {
@@ -272,6 +267,7 @@ impl CliOpts {
 			}
 			if let Some((t, lockfile)) = types.into_iter().next() {
 				src.lockfile = Some(lockfile);
+				info!("Detected lock type: {}", t);
 				Some(t)
 			} else {
 				None

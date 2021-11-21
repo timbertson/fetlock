@@ -3,6 +3,7 @@ use crate::err::*;
 use crate::stream_util::*;
 use crate::string_util::*;
 use crate::*;
+use tokio::process::Command;
 use anyhow::*;
 use async_trait::async_trait;
 use log::*;
@@ -86,6 +87,15 @@ impl Backend for YarnLock {
 
 	async fn finalize(mut self) -> Result<Lock<Self::Spec>> {
 		Ok(self.lockfile.0)
+	}
+
+	async fn update_lockfile<'a>(root: &'a PathBuf, rel: &'a Option<String>) -> Result<()> {
+		cmd::exec(Command::new("yarn")
+			.arg("install")
+			.arg("--mode")
+			.arg("update-lockfile")
+			.current_dir(root)
+		).await
 	}
 }
 

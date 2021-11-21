@@ -36,6 +36,6 @@ pub trait Backend: Sized + std::fmt::Debug {
 	// is available on $PATH
 	async fn update_lockfile<'a>(root: &'a PathBuf, rel: &'a Option<String>) -> Result<()> {
 		// TODO remove default impl
-		Err(anyhow!("--update is not implemented for this backend"))
+		Err(anyhow!("update is not implemented for this backend"))
 	}
 }

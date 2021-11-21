@@ -12,15 +12,13 @@ pub enum LockRoot {
 
 #[derive(Debug, Clone)]
 pub struct LockSrc {
-	pub lock_type: Option<lock::Type>, // TODO remove
 	root: LockRoot,
-	relative: Option<String>,
+	pub relative: Option<String>,
 	pub lockfile: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct LockSrcOpts {
-	pub lock_type: Option<lock::Type>,
 	pub repo: Option<String>,
 	pub lock_root: Option<String>,
 	pub lockfile: Option<String>,
@@ -117,7 +115,7 @@ impl LocalSrc {
 impl LockSrc {
 	pub fn parse(opts: LockSrcOpts) -> Result<LockSrc> {
 		debug!("parsing lock src:: {:?}", &opts);
-		let LockSrcOpts { repo, lock_type, lock_root, lockfile } = opts;
+		let LockSrcOpts { repo, lock_root, lockfile } = opts;
 		let repo_root: Option<Result<LockRoot>> =
 			repo.map(|repo| Ok(LockRoot::Github(GithubSrc::parse(repo.as_str())?)));
 		let repo_root = repo_root.transpose()?;
@@ -127,7 +125,6 @@ impl LockSrc {
 			(None, Some(local_root)) => (LockRoot::Path(PathBuf::from(local_root)), None),
 		};
 		Ok(LockSrc {
-			lock_type,
 			root,
 			relative,
 			lockfile: lockfile.map(|s| s.to_owned()),

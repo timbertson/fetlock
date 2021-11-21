@@ -4,21 +4,25 @@ use log::*;
 use std::process::{ExitStatus, Stdio};
 use std::str;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
-use tokio::process::Command;
+use tokio::process::{Command, Child};
+
+fn spawn(command: &mut Command) -> Result<Child> {
+	command.kill_on_drop(true);
+	debug!("{:?}", command);
+	Ok(command.spawn().with_context(||format!("Spawning {:?}", command))?)
+}
 
 pub async fn run_raw(
 	stdin: Option<&str>,
 	stdout: Stdio,
 	command: &mut Command,
 ) -> Result<(Option<String>, Option<String>, ExitStatus)> {
-	debug!("{:?}", command);
 	command.stdout(stdout);
 	command.stderr(Stdio::piped());
 	if stdin.is_some() {
 		command.stdin(Stdio::piped());
 	}
-	command.kill_on_drop(true);
-	let mut child = command.spawn()?;
+	let mut child = spawn(command)?;
 	let stdin_pipe = child.stdin.take();
 	let mut stdout_pipe = child.stdout.take();
 	let mut stderr_pipe = child.stderr.take();
@@ -42,7 +46,7 @@ pub async fn run_raw(
 		read_io_opt(&mut stdout_pipe),
 		read_io_opt(&mut stderr_pipe),
 	);
-	let status = child.wait().await?;
+	let status = child.wait().await.with_context(|| "process.wait()")?;
 	wrote_stdin.with_context(|| "writing to stdin")?;
 	Ok((stdout?, stderr?, status))
 }
@@ -93,9 +97,7 @@ fn check_status(
 }
 
 pub async fn exec(command: &mut Command) -> Result<()> {
-	debug!("{:?}", command);
-	command.kill_on_drop(true);
-	let status = command.spawn()?.wait().await?;
+	let status = spawn(command)?.wait().await?;
 	check_status("cmd", command, status, Ok(None))
 }
 

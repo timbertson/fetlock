@@ -85,7 +85,8 @@ impl CachedRepo {
 				.or_else(|_| now.duration_since(SystemTime::UNIX_EPOCH))?;
 			let fetch_ref = "fetlock-fetched";
 			let age_in_days = age.as_secs() / SECONDS_PER_DAY;
-			if age.as_secs() > (u64::from(opts.clone_freshness_days) * SECONDS_PER_DAY) {
+			let clone_freshness_days = opts.clone_freshness_days.unwrap_or(1);
+			if age.as_secs() > (u64::from(clone_freshness_days) * SECONDS_PER_DAY) {
 				info!("updating {} (age={} days)", &url, age_in_days);
 				cmd::exec(
 					Command::new("git")

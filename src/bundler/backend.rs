@@ -3,6 +3,7 @@ use crate::*;
 use anyhow::*;
 use async_trait::async_trait;
 use serde::Deserialize;
+use std::path::PathBuf;
 use tokio::process::Command;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -80,5 +81,9 @@ impl Backend for BundlerLock {
 
 	async fn finalize(mut self) -> Result<Lock<Self::Spec>> {
 		Ok(self.0)
+	}
+
+	async fn update_lockfile<'a>(root: &'a PathBuf, rel: &'a Option<String>) -> Result<()> {
+		cmd::exec(Command::new("bundle").arg("lock").arg("--update").current_dir(root)).await
 	}
 }

@@ -238,7 +238,6 @@ impl Backend for CargoLock {
 	}
 	
 	async fn update_lockfile<'a>(root: &'a PathBuf, rel: &'a Option<String>) -> Result<()> {
-		// TODO chdir into root
-		cmd::exec(Command::new("cargo").arg("generate-lockfile")).await
+		cmd::exec(Command::new("cargo").arg("generate-lockfile").current_dir(root)).await
 	}
 }

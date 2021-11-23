@@ -18,75 +18,75 @@ Fetlock is a _unified tool_ for converting various lockfiles into `nix` expressi
 
 The general workflow is:
 
-### Write `fetlock.nix`:
+## Getting started:
 
-(TODO: automate `fetlock init`)
-
-This imports the nix code from the master branch for ease of demonstration, you should pin the revision as appropriate:
+TODO clean me up / sanity check
 
 ```
-# fetlock.nix
-import (builtins.fetchTarball "https://github.com/timbertson/opam2nix/archive/v1.tar.gz") {}
+#   Generate some nix boilerplate, plus the initial lock expression. Use `fetlock init --update` if you don't already have a lockfile:
+$ nix-shell -A cargo.shell --expr 'import (builtins.fetchTarball "https://github.com/timbertson/fetlock/archive/master.tar.gz")' --run 'fetlock init'
+
+#   Your generated shell.nix will include fetlock plus your package manager.
+#   You should run further `fetlock` commands from inside this shell
+$ nix-shell
+
+#    For example, update lockfile (based on dependency specification) and generate a new nix expression:
+$ fetlock update
+
+#    And of course, we wouldn't be here if it didn't give us a buildable derivation:
+$ nix-build
 ```
 
-### Get into a development shell:
-
-(TODO: `fetlock shell -t cargo`)
-
-This is a convenience to get shell both `fetlock` and the backend-appropriate tooling available on $PATH.
-
-```
-$ nix-shell -A cargo.shell fetlock.nix
-```
-
-### Generate `lock.nix`
-
-(TODO: default -o to nix/lock.nix)
-
-```
-$ fetlock --type cargo -o lock.nix Cargo.lock
-```
-
-### Use the lock.nix to build a full nix expression
-
-(TODO: part of `fetlock init`)
-
-```
-# default.nix
-let
-  fetlock = import ./fetlock.nix;
-  selection = fetlock.cargo.load ./lock.nix;
-in
-selection.root
-```
-
-Fingers crossed, this derivation will build your whole project. If there are issues, you may need to add package-specific overrides to tweak things (e.g. adding missing dependencies which aren't captured by the language-specific package manager).
-
-See the `examples/` directory for more examples.
+If that doesn't build, you may need to dig deeper into overrides etc to add missing dependencies. See the `examples/` directory for more examples.
 
 ### Updating dependencies
 
-You can of course use your regular tooling to update your lockfile, and then regenerate `lock.nix` as above. But `fetlock` also provides convenience commands so that you don't have to install those development tools yourself.
+You can of course use your regular tooling to update your lockfile, and then regenerate `lock.nix` by running `fetlock`. But you can also just run `fetlock update` to do both at once.
 
-(TODO: implement this)
-If you run `fetlock update`, it'll invoke the appropriate command within a nix-shell that has the appropriate development tooling available, as well as updating `lock.nix`. So after that, a `nix-shell` will drop you into a shell with any changed dependencies available.
-(TODO: --lockfile-only)
+## nix-shell usage
+
+The default generated `shell.nix` only includes fetlock and your package manager. It doesn't need a valid `nix/lock.nix`, so it should always work. For reference, it looks like this:
+
+```
+(import ./nix/ {}).shell
+```
+
+Depending on your setup, you may prefer to replace the `.shell` attribute path:
+
+ - your package's build-time dependencies only: `.root`
+ - your package's build-time dependencies, _plus_ fetlock and your package manager: `.root.shell`
+
+If you just want a one-off shell with these options, you can bypass `shell.nix` and pass in the attribute path explicitly, e.g.:
+
+```
+$ nix-shell nix/ --attr root.shell
+```
+
+Note that getting into a shell with these alternatives requires a valid `lock.nix`, and that all of your dependencies are buildable. This means you can "lock yourself out" if some derivations are unbuildable, preventing you from running any `fetlock` commands. If this happens, use the above one-off command with `--attr shell` to get the basic fetlock shell.
 
 ---
 
-## Specifying a source
+## Specifying a project
 
-A source can be either local or remote. (TODO: automatically set `src` to fetchgit or ./. if within the store)
+A project can be either local or remote. (TODO: automatically set `src` to fetchgit or ./. if within the store)
 
-A local source is simply the path to the project directory.
+A local project is simply the path to the project directory.
 
 A remote source is a github author/project, plus an (optional) relative path to the project directory.
 
 Most backends have a hardcoded lock filename (think `yarn.lock` or `Cargo.lock`). For backends with arbitrary lockfile names, you can pass in the `--file` option to specify the lockfile name.
 
+## Specifying a `src`
+
+You'll typically use `fetlock` on a local project. But nix needs a source expression to build.
+
+By default, the source for local projects is `../.` (which works for the default path of `nix/lock.nix`). But you can pass `--src` to override this. To pass a local path, it must start with a dot (i.e. `./` or `../`). Anything else is assumed to be a github `author/reponame` pair.
+
+Note: if the project path is a git directory, the generated source expression will actually be a git checkout, rather than the raw files.
+
 ## Specifying a lock type
 
-Typically, fetlock can autodetect the type. If you don't pass `--type` or `--file`, it'll look for known lock types in your project directory. If it can't find one (or finds multiple), you'll need to either pass `--type` or `--file` (lockfiles typically have an unambiguous mapping to a backend).
+Typically, fetlock can autodetect the type. If you don't pass `--type` or `--lockfile`, it'll look for known lock types in your project directory. If it can't find one (or finds multiple), you'll need to either pass `--type` or `--lockfile` (lockfiles typically have an unambiguous mapping to a type, so you rarely need to specify both).
 
 --
 

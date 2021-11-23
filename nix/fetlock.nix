@@ -4,9 +4,11 @@
 # ../shell.nix can be used to bootstrap & build fetlock
 # via cargo, without needing a lock.nix
 let
-	makeBackends = fetlock:
+	makeBackend = fetlockImpls:
+
+	makeBackends = fetlockImpls:
 	let
-		core = callPackage (import ./core.nix { inherit fetlock; }) {};
+		core = fetlock: callPackage (import ./core.nix { inherit fetlockImpls; }) {};
 		backend = path: callPackage (import path { inherit core; }) {};
 	in
 	{
@@ -15,14 +17,17 @@ let
 		esy = backend ./esy;
 		opam = backend ./opam;
 		yarn = backend ./yarn;
+		shell = stdenv.mkShell {
+			packages = [ fetlockImpls.basic ];
+		};
 	};
 
 	# import API with a nonfunctional fetlock
-	# (it's only used in shell derivations, which we don't need)
-	bootstrap = makeBackends (abort "fetlock used from `bootstrap` expression");
+	# (it's only used to load ./lock.nix, and that doesn't make use of the fetlock binary)
+	bootstrap = makeBackends { fetlockImpls.basic = abort "fetlock used from `bootstrap` expression"; };
 	
 	# import full API with the bootstrapped fetlock
-	backends = makeBackends selection.root;
+	backends = makeBackends { basic = fetlockBasic; ocaml = fetlockWithOcaml; };
 
 	osx = darwin.apple_sdk.frameworks;
 	selection = bootstrap.cargo.load ./lock.nix {
@@ -31,19 +36,22 @@ let
 				fetlock = o: ({
 					inherit src;
 					nativeBuildInputs = (o.nativeBuildInputs or [])
-						++ [ makeWrapper ]
 						++ (if stdenv.isDarwin then [ osx.Security ] else []);
-				}
-					// (if opam2nix == null then {} else {
-						preFixup = (o.preFixup or "") + ''
-							wrapProgram $out/bin/fetlock \
-								--prefix PATH : ${opam2nix}/bin
-						'';
-					})
-				);
+				});
 			})
 		];
 	};
+
+	fetlockBasic = selection.root;
+	fetlockWithOcaml = stdenv.mkDerivation {
+		inherit (fetlockBasic) pname version;
+		buildInputs = [ makeWrapper ];
+		buildCommand = ''
+			mkdir -p $out/bin
+			makeWrapper ${fetlockBasic}/bin/fetlock $out/bin/fetlock \
+				--prefix PATH : ${opam2nix}/bin
+		'';
+	};
 in
 # return the built fetlock derivation, with backends as passthru attributes
-lib.extendDerivation true backends selection.root
+lib.extendDerivation true backends fetlockBasic

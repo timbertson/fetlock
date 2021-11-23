@@ -1,4 +1,4 @@
-{ fetlock }:
+{ fetlockImpls }:
 { pkgs, stdenv, lib }:
 with lib;
 let
@@ -47,25 +47,9 @@ let
 							else drv
 						);
 
-					shellDeps = self.lockDependencies ++ [ fetlock pkgs.nix ];
-					commonShellHook = ''
-						${self.shellHook or ""}
-						function log_exit {
-							st=$?
-							set +x
-							if [ $st -eq 0 ]; then
-								desc="successfully"
-							else
-								desc="with error status $st"
-							fi
-							echo >&2 "nix-shell exited $desc"
-							exit $st
-						}
-						trap log_exit EXIT
-					'';
-
+					shellDeps = self.lockDependencies ++ [ self.fetlock pkgs.nix ];
 				in {
-					inherit pkgs getDrv;
+					inherit pkgs getDrv fetlockImpls;
 
 					emptyDrv = stdenv.mkDerivation {
 						name = "empty-drv";
@@ -104,6 +88,12 @@ let
 						inherit spec;
 						inherit (self) drvsByName;
 						overrideSpec = fn: self.specToDrv (fn spec);
+						
+						# each drv has its own shell attribute, which also injects fetlock
+						# and the package manager
+						shell = (getDrv spec.key).overrideAttrs (o: {
+							buildInputs = (o.buildInputs or []) ++ shellDeps;
+						});
 					};
 					
 					specToDrv = spec:
@@ -166,17 +156,24 @@ let
 					overrideSpec = attrs:
 						overrideOnly attrs (fn: drv: drv.overrideSpec fn);
 
+					fetlock = fetlockImpls.basic;
+
+					# Don't mess with an existing store path.
+					# If there's a .git directory, export git.
+					# Otherwise, fall back to a plain path
+					pathSrc = p:
+						if isStorePath p
+							then p
+							else (
+								if pathExists "${p}/.git"
+									then builtins.fetchGit { url = p; }
+									else p
+							);
+
 					# shell makes the lock tool available (e.g. cargo, bundler, etc)
 					# This should be used with nix-shell, not nix-build
 					shell = self.pkgs.mkShell {
 						packages = shellDeps;
-						shellHook = commonShellHook;
-					};
-					updateLock = self.pkgs.mkShell {
-						packages = shellDeps;
-						shellHook = commonShellHook + ''
-							updateLock && exit 0
-						'';
 					};
 				}
 			);
@@ -193,7 +190,12 @@ let
 				# with builtins;
 				# with pkgs;
 				let
-					sourceOverlay = import lock; # TODO allow literal?
+					sourceOverlay = final: prev:
+						let lockResult = (import lock) final; in # TODO allow literal?
+						# we could return `lockResult` verbatim, but this lets nix shortcut attributes
+						# that don't depend on a valid lock (e.g. shell)
+						{ inherit (lockResult) context specs; };
+
 					rootSrcOverlay = final: prev: { rootSrc = src; };
 					
 					# applies all overrides to drvs. Note that overrides is a slightly simpler,
@@ -225,7 +227,7 @@ let
 		in
 		{
 			inherit load;
-			inherit (bootstrap) shell updateLock;
+			inherit (bootstrap) shell fetlock;
 		} // apiPassthru
 	);
 in

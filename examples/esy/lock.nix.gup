@@ -1,5 +1,5 @@
 #!bash -eux
 gup -u ../../bin ../yarn/lock.nix
-nix-shell --show-trace --arg enableOcaml true -A esy.shell ../../nix --run "set -x; fetlock -o '$1' \
+nix-shell --show-trace -A esy.shell ../../nix --run "set -x; fetlock -o '$1' \
   --github onivim/oni2#39bb26f68040326ecf4d03f6c4428c05f13a02d5 \
   --lockfile esy.lock"

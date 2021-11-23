@@ -374,13 +374,23 @@ impl Writeable for Spec {
 				c.attr(&"buildInputs", &Expr::List(build_inputs))?;
 			}
 
-			if let Some(digest) = digest.as_ref() {
-				c.attr(&"src", &SrcDigest::new(src, digest))?;
-			} else {
-				if src.requires_digest() {
-					warn!("digest missing for source: {:?}", src);
+			match src {
+				Src::None => (),
+				Src::RelativePath(p) => {
+					let nix_path = format!("{}/.", p.strip_suffix('/').unwrap_or(p));
+					c.attr(&"src", &Expr::FunCall(FunCall::new(
+						Expr::Literal("final.pathSrc".to_owned()),
+						vec!(Expr::Literal(nix_path))
+					)))?;
+				},
+				_ => {
+					if let Some(digest) = digest.as_ref() {
+						c.attr(&"src", &SrcDigest::new(src, digest))?;
+					} else {
+						warn!("digest missing for source: {:?}", src);
+					}
 				}
-			}
+			};
 
 			for (k, v) in extra.iter() {
 				c.attr(k, v)?;
@@ -485,7 +495,7 @@ impl<S: AsSpec> Writeable for Lock<S> {
 			vars,
 			specs,
 		} = self;
-		c.write_str("final: prev:")?;
+		c.write_str("final:")?;
 		c.nl()?;
 		c.write_str("let")?;
 		c.indent += 1;

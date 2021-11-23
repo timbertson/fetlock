@@ -260,14 +260,17 @@ impl Archive {
 pub enum Src {
 	Github(Github),
 	Archive(Archive),
+	RelativePath(String),
 	None,
 }
 
 impl Src {
 	pub fn requires_digest(&self) -> bool {
 		match self {
+			Src::Github(_) => true,
+			Src::Archive(_) => true,
+			Src::RelativePath(_) => false,
 			Src::None => false,
-			_ => true,
 		}
 	}
 
@@ -381,7 +384,10 @@ impl SrcDigest<'_> {
 					vec![Expr::attr_set(attrs)],
 				)
 			}
-			Src::None => Expr::Null, // TODO better error reporting, assert?
+
+			// TODO better error reporting, assert?
+			Src::RelativePath(_) => Expr::Null,
+			Src::None => Expr::Null,
 		}
 	}
 }
@@ -416,6 +422,11 @@ impl Spec {
 	pub fn set_src_digest(&mut self, src: Src, digest: Sha256) {
 		self.src = src;
 		self.digest = Some(digest);
+	}
+
+	pub fn set_src_path(&mut self, src: String) {
+		self.src = Src::RelativePath(src);
+		self.digest = None;
 	}
 
 	pub fn build_inputs(&self) -> Vec<Expr> {

@@ -353,7 +353,7 @@ impl Eval {
 		match self {
 			Bool(b) => Ok(*b),
 			Undefined => Ok(false),
-			_ => Err(anyhow!("Can't coerce {:?} into boolean")),
+			other => Err(anyhow!("Can't coerce {:?} into boolean", other)),
 		}
 	}
 

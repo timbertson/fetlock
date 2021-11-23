@@ -4,6 +4,7 @@
   overlay = final: prev: {
     siteLib = prefix: "${prefix}/lib/ocaml/${final.ocaml.version}/site-lib";
     specToAttrs = import ./specToAttrs.nix final prev;
+    fetlock = final.fetlockImpls.ocaml;
     ocaml = final.drvs.ocaml or final.drvsByName.ocaml or (abort ''
       ERROR: No ocaml version present in lockfile.
       To build this expression, you will need to provide

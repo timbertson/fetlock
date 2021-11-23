@@ -5,6 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::io::Write;
 use std::writeln;
+use either::*;
 
 use crate::nix_serialize::{WriteContext, Writeable};
 use crate::*;
@@ -78,17 +79,29 @@ async fn write<B: Backend + fmt::Debug>(opts: &CliOpts, write_opts: &WriteOpts) 
 		.ok_or_else(|| anyhow!("root spec ({}) is not defined", root_key))?;
 
 	// src comes from an explicit `src`, or `lock_src`.
-	let src_digest = if let Some(gh) = &write_opts.src {
-		let src = gh.resolve().await?;
-		let digest = fetch::calculate_digest(&src).await?;
-		Some((src, digest))
-	} else {
-		lock_src.src_digest
+	let src_digest = match &write_opts.src {
+		Some(LockRoot::Github(gh)) => {
+			let src = gh.resolve().await?;
+			let digest = fetch::calculate_digest(&src).await?;
+			Left((src, digest))
+		},
+		Some(LockRoot::Path(p)) => Right(p.to_str().ok_or_else(|| anyhow!("Invalid path"))?),
+		
+		// If there's no explicit source and no remote source, use `../`.
+		// This works well for the default path of nix/lock.nix, but is a bit odd otherwise.
+		None => lock_src.src_digest.map(Left).unwrap_or_else(|| Right("..")),
 	};
-	if let Some((src, digest)) = src_digest {
-		debug!("setting src {:?}, on root {:?}", src, lock_mut.context.root);
-		let spec_ref: &mut Spec = root_spec.as_spec_mut();
-		spec_ref.set_src_digest(src, digest);
+
+	let spec_ref: &mut Spec = root_spec.as_spec_mut();
+	match src_digest {
+		Left((src, digest)) => {
+			debug!("setting src {:?}, on root {:?}", src, lock_mut.context.root);
+			spec_ref.set_src_digest(src, digest);
+		},
+		Right(p) => {
+			debug!("setting src {:?}, on root {:?}", &p, lock_mut.context.root);
+			spec_ref.set_src_path(p.to_owned());
+		},
 	}
 
 	fetch::populate_source_digests(lock_mut).await?;
@@ -140,28 +153,26 @@ async fn init<B: Backend + fmt::Debug>(opts: &CliOpts, init_opts: &opts::InitOpt
 		_ => PathBuf::from("."),
 	};
 	
+	write_init_file(&init_opts, &root, "nix/default.nix", |mut f| {
+		writeln!(f, "\
+{{ pkgs ? import <nixpkgs> {{}} }}:
+with pkgs;
+let
+  fetlock = callPackage (builtins.fetchTarball \"https://github.com/timbertson/fetlock/archive/master.tar.gz\") {{}};
+  selection = fetlock.{}.load ./lock.nix {{}};
+in selection.root",
+			opts.lock_type
+		)?;
+		Ok(())
+	})?;
+
 	write_init_file(&init_opts, &root, "default.nix", |mut f| {
 		writeln!(f, "import ./nix/")?;
 		Ok(())
 	})?;
 
-	write_init_file(&init_opts, &root, "nix/default.nix", |mut f| {
-		let enable_ocaml = " enableOcaml = true; ";
-		let callpkgs_opts = match opts.lock_type {
-			lock::Type::Esy => enable_ocaml,
-			lock::Type::Opam => enable_ocaml,
-			_ => "",
-		};
-		writeln!(f, "\
-{{ pkgs ? import <nixpkgs> {{}} }}:
-with pkgs;
-let
-  fetlock = callPackage (builtins.fetchTarball \"https://github.com/timbertson/fetlock/archive/master.tar.gz\") {{{}}};
-  selection = fetlock.{}.load ./lock.nix {{}};
-in selection.root",
-			callpkgs_opts,
-			opts.lock_type
-		)?;
+	write_init_file(&init_opts, &root, "shell.nix", |mut f| {
+		writeln!(f, "(import ./nix/ {{}}).shell")?;
 		Ok(())
 	})?;
 
@@ -188,7 +199,8 @@ fn write_init_file<F: FnOnce(fs::File) -> Result<()>>(
 		if let Some(parent) = p.parent() {
 			fs::create_dir_all(parent)?;
 		}
-		let output = fs::File::create(p)?;
+		let output = fs::File::create(&p)?;
+		info!("Writing: {:?}", &p);
 		block(output)
 	} else {
 		warn!("Skipping initialization of {:?} (pass --force to overwrite it)", &p);

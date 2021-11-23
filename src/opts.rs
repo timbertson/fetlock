@@ -3,6 +3,7 @@ use crate::lock_src::*;
 use anyhow::*;
 use log::*;
 use std::collections::HashSet;
+use std::path::PathBuf;
 use clap::Parser;
 
 mod raw {
@@ -25,8 +26,7 @@ mod raw {
 		#[clap(short='l', long, about="lockfile name (default: per-backend default)")]
 		pub lockfile: Option<String>,
 
-		// TODO let user specify e.g. `../.` as a path
-		#[clap(long, about="set root package src attribute to a github repository (author/repo), typically useful when using a local lockfile for an online project")]
+		#[clap(long, about="set root package src attribute to a local path (must begin with a dot) or github repository (author/repo)")]
 		pub src: Option<String>,
 
 		#[clap(long="clone-freshness", about="maximum age (in days) for cloned repos")]
@@ -135,7 +135,7 @@ pub struct UpdateOpts {
 #[derive(Debug, Clone)]
 pub struct WriteOpts {
 	pub out_path: Option<String>,
-	pub src: Option<GithubSrc>,
+	pub src: Option<LockRoot>,
 	pub clone_freshness_days: Option<u32>,
 	pub ocaml_version: Option<String>,
 }
@@ -193,11 +193,24 @@ impl CliOpts {
 		}
 	}
 	
+	fn is_implicit_path(p: &str) -> bool {
+		p.starts_with(".")
+	}
+
 	async fn resolve_write_opts(opts: raw::WriteOpts) -> Result<(lock::Type, LockSrc, WriteOpts)> {
 		let raw::WriteOpts { common, common_write, github } = opts;
 		let raw::CommonOpts { lock_type, path } = common;
 		let raw::CommonWriteOpts { out_path, lockfile, src, clone_freshness_days, ocaml_version } = common_write;
-		let src = src.as_deref().map(GithubSrc::parse).transpose()?;
+
+		// if path is implicit, also use it for `src`:
+		let implicit_path = path.as_deref().filter(|p| Self::is_implicit_path(p));
+		let src = src.as_deref().or(implicit_path).map(|s| {
+			if Self::is_implicit_path(s) {
+				Ok(LockRoot::Path(PathBuf::from(s)))
+			} else {
+				GithubSrc::parse(s).map(LockRoot::Github)
+			}
+		}).transpose()?;
 		let mut lock_src = LockSrc::parse(LockSrcOpts {
 			repo: github,
 			lock_root: path,

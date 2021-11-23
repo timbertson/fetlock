@@ -4,7 +4,7 @@ function test_shell {
 	backend="$1"
 	command="$2"
 	set -x
-	nix-shell --pure --show-trace --arg enableOcaml true -A "$backend.shell" ../nix --run "$command"
+	nix-shell --pure --show-trace -A "$backend.shell" ../nix --run "$command"
 	set +x
 }
 

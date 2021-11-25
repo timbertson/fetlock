@@ -1,4 +1,4 @@
-final: prev:
+final:
 let
   pkgs = final.pkgs;
 in

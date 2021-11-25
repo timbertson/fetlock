@@ -4,11 +4,9 @@
 # ../shell.nix can be used to bootstrap & build fetlock
 # via cargo, without needing a lock.nix
 let
-	makeBackend = fetlockImpls:
-
 	makeBackends = fetlockImpls:
 	let
-		core = fetlock: callPackage (import ./core.nix { inherit fetlockImpls; }) {};
+		core = callPackage (import ./core.nix { inherit fetlockImpls; }) {};
 		backend = path: callPackage (import path { inherit core; }) {};
 	in
 	{

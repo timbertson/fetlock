@@ -1,4 +1,4 @@
-final: prev:
+final:
 let
   pkgs = final.pkgs;
 in
@@ -1069,6 +1069,7 @@ in
         ("typescript@3.9.9")
         ("yauzl@2.10.0")
       ];
+      src = (final.pathSrc ../esy/node/.);
       nodePathDeps = [
       ];
       pkgname = "onivim2-node";

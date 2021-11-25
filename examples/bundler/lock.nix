@@ -1,4 +1,4 @@
-final: prev:
+final:
 let
   pkgs = final.pkgs;
 in
@@ -15,6 +15,7 @@ in
       depKeys = [
         ("rails")
       ];
+      src = (final.pathSrc ./src/.);
     };
     actioncable = {
       pname = "actioncable";

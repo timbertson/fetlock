@@ -1,4 +1,4 @@
-final: prev:
+final:
 let
   pkgs = final.pkgs;
 in
@@ -9,32 +9,32 @@ in
     root = "fetlock 0.1.0";
   };
   specs = {
-    "aho-corasick 0.7.15" = {
+    "aho-corasick 0.7.18" = {
       pname = "aho-corasick";
-      version = "0.7.15";
+      version = "0.7.18";
       depKeys = [
-        ("memchr 2.3.4")
+        ("memchr 2.4.1")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "1rb8gzhljl8r87dpf2n5pnqnkl694casgns4ma0sqzd4zazzw13l";
-        url = "https://crates.io/api/v1/crates/aho-corasick/0.7.15/download";
+        sha256 = "0vv50b3nvkhyy7x7ip19qnsq11bqlnffkmj2yx2xlyk5wzawydqy";
+        url = "https://crates.io/api/v1/crates/aho-corasick/0.7.18/download";
       });
-      edition = "2015";
+      edition = "2018";
       features = [
         ("default")
         ("std")
       ];
     };
-    "anyhow 1.0.45" = {
+    "anyhow 1.0.48" = {
       pname = "anyhow";
-      version = "1.0.45";
+      version = "1.0.48";
       depKeys = [
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "1izmq8kmjgx8sjlrv78r32z57r8r2zd2lkhxb6iw0lx8whxf847f";
-        url = "https://crates.io/api/v1/crates/anyhow/1.0.45/download";
+        sha256 = "03m8b3h8krm1vjc3wl9fg0k6pmnl912xsw73lhkj0hn0gmzz9qb2";
+        url = "https://crates.io/api/v1/crates/anyhow/1.0.48/download";
       });
       buildSrc = "build.rs";
       edition = "2018";
@@ -79,7 +79,7 @@ in
       pname = "atty";
       version = "0.2.14";
       depKeys = [
-        ("libc 0.2.106")
+        ("libc 0.2.108")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
@@ -131,9 +131,9 @@ in
         ("default")
       ];
     };
-    "bitvec 0.19.5" = {
+    "bitvec 0.19.6" = {
       pname = "bitvec";
-      version = "0.19.5";
+      version = "0.19.6";
       depKeys = [
         ("funty 1.1.0")
         ("radium 0.5.3")
@@ -142,8 +142,8 @@ in
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "08a3rfly22mky5y1881a4gr6wsapnqmcmc50vp4kh65fab9whhl9";
-        url = "https://crates.io/api/v1/crates/bitvec/0.19.5/download";
+        sha256 = "0cvb24nanb50vq61d3ac3pz7rxjcy0w6lr3nb56kcg1nyc73vyam";
+        url = "https://crates.io/api/v1/crates/bitvec/0.19.6/download";
       });
       edition = "2018";
       features = [
@@ -234,7 +234,7 @@ in
         ("cargo-platform 0.1.2")
         ("semver 1.0.4")
         ("serde 1.0.130")
-        ("serde_json 1.0.68")
+        ("serde_json 1.0.71")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
@@ -246,15 +246,15 @@ in
         ("default")
       ];
     };
-    "cc 1.0.71" = {
+    "cc 1.0.72" = {
       pname = "cc";
-      version = "1.0.71";
+      version = "1.0.72";
       depKeys = [
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "1pgflzb5dc9pli1lfwfv5jksmz57j15iqqxqpdbnjq4lclfnihkr";
-        url = "https://crates.io/api/v1/crates/cc/1.0.71/download";
+        sha256 = "1vl50h2qh0nh0iddzj6gd1pnxnxpvwmbfxc30578c1pajmxi7a92";
+        url = "https://crates.io/api/v1/crates/cc/1.0.72/download";
       });
       crateBin = [
         ({
@@ -276,12 +276,71 @@ in
       });
       edition = "2018";
     };
+    "clap 3.0.0-beta.5" = {
+      pname = "clap";
+      version = "3.0.0-beta.5";
+      depKeys = [
+        ("atty 0.2.14")
+        ("bitflags 1.3.2")
+        ("clap_derive 3.0.0-beta.5")
+        ("indexmap 1.7.0")
+        ("lazy_static 1.4.0")
+        ("os_str_bytes 4.2.0")
+        ("strsim 0.10.0")
+        ("termcolor 1.1.2")
+        ("textwrap 0.14.2")
+        ("unicase 2.6.0")
+      ];
+      src = (pkgs.fetchurl {
+        name = "crate.tar.gz";
+        sha256 = "0qqxzdxys8amgb420ykfa1143wk3gghn7ksqbms97nsfarw3izzy";
+        url = "https://crates.io/api/v1/crates/clap/3.0.0-beta.5/download";
+      });
+      edition = "2018";
+      features = [
+        ("atty")
+        ("cargo")
+        ("clap_derive")
+        ("color")
+        ("default")
+        ("derive")
+        ("env")
+        ("lazy_static")
+        ("std")
+        ("strsim")
+        ("suggestions")
+        ("termcolor")
+        ("unicase")
+        ("unicode")
+      ];
+    };
+    "clap_derive 3.0.0-beta.5" = {
+      pname = "clap_derive";
+      version = "3.0.0-beta.5";
+      depKeys = [
+        ("heck 0.3.3")
+        ("proc-macro-error 1.0.4")
+        ("proc-macro2 1.0.32")
+        ("quote 1.0.10")
+        ("syn 1.0.81")
+      ];
+      src = (pkgs.fetchurl {
+        name = "crate.tar.gz";
+        sha256 = "1lyhsxpcv3bl2sp4a2fd9d2c47xwamla6rgy5wcvdzw6yyscc5cb";
+        url = "https://crates.io/api/v1/crates/clap_derive/3.0.0-beta.5/download";
+      });
+      edition = "2018";
+      features = [
+        ("default")
+      ];
+      procMacro = true;
+    };
     "core-foundation 0.9.2" = {
       pname = "core-foundation";
       version = "0.9.2";
       depKeys = [
         ("core-foundation-sys 0.8.3")
-        ("libc 0.2.106")
+        ("libc 0.2.108")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
@@ -385,7 +444,7 @@ in
         ("atty 0.2.14")
         ("humantime 1.3.0")
         ("log 0.4.14")
-        ("regex 1.4.6")
+        ("regex 1.5.4")
         ("termcolor 1.1.2")
       ];
       src = (pkgs.fetchurl {
@@ -406,29 +465,31 @@ in
       pname = "fetlock";
       version = "0.1.0";
       depKeys = [
-        ("anyhow 1.0.45")
+        ("anyhow 1.0.48")
         ("async-trait 0.1.51")
         ("cargo-platform 0.1.2")
         ("cargo_metadata 0.14.1")
+        ("clap 3.0.0-beta.5")
         ("either 1.6.1")
         ("env_logger 0.7.1")
         ("fs2 0.4.3")
-        ("futures 0.3.17")
+        ("futures 0.3.18")
         ("getopts 0.2.21")
         ("hex 0.4.3")
         ("lazy_static 1.4.0")
         ("log 0.4.14")
-        ("nom 6.2.1")
+        ("nom 6.1.2")
         ("platforms 1.1.0")
-        ("regex 1.4.6")
+        ("regex 1.5.4")
         ("reqwest 0.11.6")
         ("serde 1.0.130")
-        ("serde_json 1.0.68")
+        ("serde_json 1.0.71")
         ("serde_yaml 0.8.21")
         ("sha2 0.9.8")
         ("tempdir 0.3.7")
-        ("tokio 1.13.0")
+        ("tokio 1.14.0")
       ];
+      src = (final.pathSrc ../../.);
       crateBin = [
         ({
           name = "fetlock";
@@ -497,7 +558,7 @@ in
       pname = "fs2";
       version = "0.4.3";
       depKeys = [
-        ("libc 0.2.106")
+        ("libc 0.2.108")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
@@ -530,22 +591,22 @@ in
       });
       edition = "2018";
     };
-    "futures 0.3.17" = {
+    "futures 0.3.18" = {
       pname = "futures";
-      version = "0.3.17";
+      version = "0.3.18";
       depKeys = [
-        ("futures-channel 0.3.17")
-        ("futures-core 0.3.17")
-        ("futures-executor 0.3.17")
-        ("futures-io 0.3.17")
-        ("futures-sink 0.3.17")
-        ("futures-task 0.3.17")
-        ("futures-util 0.3.17")
+        ("futures-channel 0.3.18")
+        ("futures-core 0.3.18")
+        ("futures-executor 0.3.18")
+        ("futures-io 0.3.18")
+        ("futures-sink 0.3.18")
+        ("futures-task 0.3.18")
+        ("futures-util 0.3.18")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "1jk6znbqrmb6xkgs4g0s7ivv1djq7dyaci9d7xfdb04hagms0am1";
-        url = "https://crates.io/api/v1/crates/futures/0.3.17/download";
+        sha256 = "17jbp2zl1f0cfblaiky8d8kim6k82cxmmnbgy1gj8p1jih6j3l4c";
+        url = "https://crates.io/api/v1/crates/futures/0.3.18/download";
       });
       edition = "2018";
       features = [
@@ -557,17 +618,17 @@ in
         ("std")
       ];
     };
-    "futures-channel 0.3.17" = {
+    "futures-channel 0.3.18" = {
       pname = "futures-channel";
-      version = "0.3.17";
+      version = "0.3.18";
       depKeys = [
-        ("futures-core 0.3.17")
-        ("futures-sink 0.3.17")
+        ("futures-core 0.3.18")
+        ("futures-sink 0.3.18")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "121q4y5c10vihzgcb6fvp0gwzyh4hg6c37riqz9nbhdk7f6bm9jx";
-        url = "https://crates.io/api/v1/crates/futures-channel/0.3.17/download";
+        sha256 = "09rd4nigr2yyw074yv7yqqvzs90x80nnmkhd6kvnby6vwcwwvj3z";
+        url = "https://crates.io/api/v1/crates/futures-channel/0.3.18/download";
       });
       buildSrc = "build.rs";
       edition = "2018";
@@ -579,15 +640,15 @@ in
         ("std")
       ];
     };
-    "futures-core 0.3.17" = {
+    "futures-core 0.3.18" = {
       pname = "futures-core";
-      version = "0.3.17";
+      version = "0.3.18";
       depKeys = [
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "0gd5hfxcy5fqc3wm55a4yhcbh921wvzv09nkbhwh6dpjaxlw5lc8";
-        url = "https://crates.io/api/v1/crates/futures-core/0.3.17/download";
+        sha256 = "0id4niawvf6vxv2s7w782jmm6m5arrcx2isvlsws1hp75zj1d4v2";
+        url = "https://crates.io/api/v1/crates/futures-core/0.3.18/download";
       });
       buildSrc = "build.rs";
       edition = "2018";
@@ -597,69 +658,64 @@ in
         ("std")
       ];
     };
-    "futures-executor 0.3.17" = {
+    "futures-executor 0.3.18" = {
       pname = "futures-executor";
-      version = "0.3.17";
+      version = "0.3.18";
       depKeys = [
-        ("futures-core 0.3.17")
-        ("futures-task 0.3.17")
-        ("futures-util 0.3.17")
+        ("futures-core 0.3.18")
+        ("futures-task 0.3.18")
+        ("futures-util 0.3.18")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "0p3lv18dr90c032yrr4k833npp23a0spykvq4lq7d7cn63h5n0j5";
-        url = "https://crates.io/api/v1/crates/futures-executor/0.3.17/download";
+        sha256 = "15scf1ifrdipidc7wzcvlsmgrf89b5sh8zlxffmnr8s86gsqp03v";
+        url = "https://crates.io/api/v1/crates/futures-executor/0.3.18/download";
       });
       edition = "2018";
       features = [
         ("std")
       ];
     };
-    "futures-io 0.3.17" = {
+    "futures-io 0.3.18" = {
       pname = "futures-io";
-      version = "0.3.17";
+      version = "0.3.18";
       depKeys = [
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "0xrk0xsrmhxrndhby79j31mkzbwg21s09fkpqldhyf1yzshf4baj";
-        url = "https://crates.io/api/v1/crates/futures-io/0.3.17/download";
+        sha256 = "04dakn3362gw8q2jd9wdq19df4am1j5p4sngdhj57hxmnr6kb0g4";
+        url = "https://crates.io/api/v1/crates/futures-io/0.3.18/download";
       });
       edition = "2018";
       features = [
         ("std")
       ];
     };
-    "futures-macro 0.3.17" = {
+    "futures-macro 0.3.18" = {
       pname = "futures-macro";
-      version = "0.3.17";
+      version = "0.3.18";
       depKeys = [
-        ("proc-macro-hack 0.5.19")
         ("proc-macro2 1.0.32")
         ("quote 1.0.10")
         ("syn 1.0.81")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "1fvriw31ippggp8496dpbvkykr2fgk57amhwrz5lqjzabjws9r0q";
-        url = "https://crates.io/api/v1/crates/futures-macro/0.3.17/download";
+        sha256 = "1pbz9s2zhs9l8pfylxiq38zlmzggl34zk6n6fgblxg252sr1g7x8";
+        url = "https://crates.io/api/v1/crates/futures-macro/0.3.18/download";
       });
-      buildDepKeys = [
-        ("autocfg 1.0.1")
-      ];
-      buildSrc = "build.rs";
       edition = "2018";
       procMacro = true;
     };
-    "futures-sink 0.3.17" = {
+    "futures-sink 0.3.18" = {
       pname = "futures-sink";
-      version = "0.3.17";
+      version = "0.3.18";
       depKeys = [
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "04dwqbcwxil6iyv7fif2xjncz849mm63sghbb60f8kq22cy1bsin";
-        url = "https://crates.io/api/v1/crates/futures-sink/0.3.17/download";
+        sha256 = "1bq5jdv9d1llmlzq8ycmkbhw2z8yqkwhd6fd68dd4qkv8d168v4r";
+        url = "https://crates.io/api/v1/crates/futures-sink/0.3.18/download";
       });
       edition = "2018";
       features = [
@@ -668,15 +724,15 @@ in
         ("std")
       ];
     };
-    "futures-task 0.3.17" = {
+    "futures-task 0.3.18" = {
       pname = "futures-task";
-      version = "0.3.17";
+      version = "0.3.18";
       depKeys = [
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "169fi44d8sbfpkkyhncj0pgkp1amrllg5523lncf8wyvxps00g8x";
-        url = "https://crates.io/api/v1/crates/futures-task/0.3.17/download";
+        sha256 = "04nyz21ymr2r4fh9hdk1ppi8g61ryp97c8ighf3chcmbm9r1igys";
+        url = "https://crates.io/api/v1/crates/futures-task/0.3.18/download";
       });
       buildSrc = "build.rs";
       edition = "2018";
@@ -685,31 +741,26 @@ in
         ("std")
       ];
     };
-    "futures-util 0.3.17" = {
+    "futures-util 0.3.18" = {
       pname = "futures-util";
-      version = "0.3.17";
+      version = "0.3.18";
       depKeys = [
-        ("futures-channel 0.3.17")
-        ("futures-core 0.3.17")
-        ("futures-io 0.3.17")
-        ("futures-macro 0.3.17")
-        ("futures-sink 0.3.17")
-        ("futures-task 0.3.17")
-        ("memchr 2.3.4")
+        ("futures-channel 0.3.18")
+        ("futures-core 0.3.18")
+        ("futures-io 0.3.18")
+        ("futures-macro 0.3.18")
+        ("futures-sink 0.3.18")
+        ("futures-task 0.3.18")
+        ("memchr 2.4.1")
         ("pin-project-lite 0.2.7")
         ("pin-utils 0.1.0")
-        ("proc-macro-hack 0.5.19")
-        ("proc-macro-nested 0.1.7")
         ("slab 0.4.5")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "10al5ci74s6rk2d2wqqya0d4fwc6sqv525hzbvj6wfha45jq8min";
-        url = "https://crates.io/api/v1/crates/futures-util/0.3.17/download";
+        sha256 = "0gmqxlf3vx9aikb0yhcihjn2p3g2rsr1l3xcc4h4fmi3289j5lj1";
+        url = "https://crates.io/api/v1/crates/futures-util/0.3.18/download";
       });
-      buildDepKeys = [
-        ("autocfg 1.0.1")
-      ];
       buildSrc = "build.rs";
       edition = "2018";
       features = [
@@ -723,8 +774,6 @@ in
         ("futures-sink")
         ("io")
         ("memchr")
-        ("proc-macro-hack")
-        ("proc-macro-nested")
         ("sink")
         ("slab")
         ("std")
@@ -765,7 +814,7 @@ in
       version = "0.2.3";
       depKeys = [
         ("cfg-if 1.0.0")
-        ("libc 0.2.106")
+        ("libc 0.2.108")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
@@ -783,13 +832,13 @@ in
       depKeys = [
         ("bytes 1.1.0")
         ("fnv 1.0.7")
-        ("futures-core 0.3.17")
-        ("futures-sink 0.3.17")
-        ("futures-util 0.3.17")
+        ("futures-core 0.3.18")
+        ("futures-sink 0.3.18")
+        ("futures-util 0.3.18")
         ("http 0.2.5")
         ("indexmap 1.7.0")
         ("slab 0.4.5")
-        ("tokio 1.13.0")
+        ("tokio 1.14.0")
         ("tokio-util 0.6.9")
         ("tracing 0.1.29")
       ];
@@ -815,11 +864,24 @@ in
         ("raw")
       ];
     };
+    "heck 0.3.3" = {
+      pname = "heck";
+      version = "0.3.3";
+      depKeys = [
+        ("unicode-segmentation 1.8.0")
+      ];
+      src = (pkgs.fetchurl {
+        name = "crate.tar.gz";
+        sha256 = "0b0kkr790p66lvzn9nsmfjvydrbmh9z5gb664jchwgw64vxiwqkd";
+        url = "https://crates.io/api/v1/crates/heck/0.3.3/download";
+      });
+      edition = "2018";
+    };
     "hermit-abi 0.1.19" = {
       pname = "hermit-abi";
       version = "0.1.19";
       depKeys = [
-        ("libc 0.2.106")
+        ("libc 0.2.108")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
@@ -895,15 +957,15 @@ in
         ("std")
       ];
     };
-    "httpdate 1.0.1" = {
+    "httpdate 1.0.2" = {
       pname = "httpdate";
-      version = "1.0.1";
+      version = "1.0.2";
       depKeys = [
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "0h240ck2xlp62dqfhfp6g45984avsmh1pkcgjmyywgzkr2kbhmk4";
-        url = "https://crates.io/api/v1/crates/httpdate/1.0.1/download";
+        sha256 = "08bln7b1ibdw26gl8h4dr6rlybvlkyhlha309xbh9ghxh9nf78f4";
+        url = "https://crates.io/api/v1/crates/httpdate/1.0.2/download";
       });
       edition = "2018";
     };
@@ -920,31 +982,31 @@ in
       });
       edition = "2015";
     };
-    "hyper 0.14.14" = {
+    "hyper 0.14.15" = {
       pname = "hyper";
-      version = "0.14.14";
+      version = "0.14.15";
       depKeys = [
         ("bytes 1.1.0")
-        ("futures-channel 0.3.17")
-        ("futures-core 0.3.17")
-        ("futures-util 0.3.17")
+        ("futures-channel 0.3.18")
+        ("futures-core 0.3.18")
+        ("futures-util 0.3.18")
         ("h2 0.3.7")
         ("http 0.2.5")
         ("http-body 0.4.4")
         ("httparse 1.5.1")
-        ("httpdate 1.0.1")
+        ("httpdate 1.0.2")
         ("itoa 0.4.8")
         ("pin-project-lite 0.2.7")
         ("socket2 0.4.2")
-        ("tokio 1.13.0")
+        ("tokio 1.14.0")
         ("tower-service 0.3.1")
         ("tracing 0.1.29")
         ("want 0.3.0")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "0syjjbxp6xy0a2s72ngvq9s8fx201yvic4ipwkqs2vhv48gvp49b";
-        url = "https://crates.io/api/v1/crates/hyper/0.14.14/download";
+        sha256 = "0g4mnsacfvj4127587ihm802kzkh6zgs0c3a2mayc82g3q4w0vj3";
+        url = "https://crates.io/api/v1/crates/hyper/0.14.15/download";
       });
       edition = "2018";
       features = [
@@ -962,9 +1024,9 @@ in
       version = "0.5.0";
       depKeys = [
         ("bytes 1.1.0")
-        ("hyper 0.14.14")
+        ("hyper 0.14.15")
         ("native-tls 0.2.8")
-        ("tokio 1.13.0")
+        ("tokio 1.14.0")
         ("tokio-native-tls 0.3.0")
       ];
       src = (pkgs.fetchurl {
@@ -1102,15 +1164,15 @@ in
         ("table")
       ];
     };
-    "libc 0.2.106" = {
+    "libc 0.2.108" = {
       pname = "libc";
-      version = "0.2.106";
+      version = "0.2.108";
       depKeys = [
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "0wynaqs2ix4fqk603qhi7axw1fg9p5rhbcp9nhrs6fg0m7wm61d6";
-        url = "https://crates.io/api/v1/crates/libc/0.2.106/download";
+        sha256 = "06finl0p44lvqyw7s0qgc7bgmdz771gfg6bmmxlyrcbngsss28c5";
+        url = "https://crates.io/api/v1/crates/libc/0.2.108/download";
       });
       buildSrc = "build.rs";
       edition = "2015";
@@ -1174,18 +1236,18 @@ in
       edition = "2015";
       libPath = "lib.rs";
     };
-    "memchr 2.3.4" = {
+    "memchr 2.4.1" = {
       pname = "memchr";
-      version = "2.3.4";
+      version = "2.4.1";
       depKeys = [
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "098m9clfs495illlw00hv2gg67mhm7jflld3msyclvi5m9xc9q8f";
-        url = "https://crates.io/api/v1/crates/memchr/2.3.4/download";
+        sha256 = "0smq8xzd40njqpfzv5mghigj91fzlfrfg842iz8x0wqvw2dw731h";
+        url = "https://crates.io/api/v1/crates/memchr/2.4.1/download";
       });
       buildSrc = "build.rs";
-      edition = "2015";
+      edition = "2018";
       features = [
         ("default")
         ("std")
@@ -1208,7 +1270,7 @@ in
       pname = "mio";
       version = "0.7.14";
       depKeys = [
-        ("libc 0.2.106")
+        ("libc 0.2.108")
         ("log 0.4.14")
       ];
       src = (pkgs.fetchurl {
@@ -1246,7 +1308,7 @@ in
       version = "0.2.8";
       depKeys = [
         ("lazy_static 1.4.0")
-        ("libc 0.2.106")
+        ("libc 0.2.108")
         ("security-framework 2.4.2")
         ("security-framework-sys 2.4.2")
         ("tempfile 3.2.0")
@@ -1259,19 +1321,19 @@ in
       buildSrc = "build.rs";
       edition = "2015";
     };
-    "nom 6.2.1" = {
+    "nom 6.1.2" = {
       pname = "nom";
-      version = "6.2.1";
+      version = "6.1.2";
       depKeys = [
-        ("bitvec 0.19.5")
+        ("bitvec 0.19.6")
         ("funty 1.1.0")
         ("lexical-core 0.7.6")
-        ("memchr 2.3.4")
+        ("memchr 2.4.1")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "19h3l5hajpcszwl6nzcmgs4mpng73ifn6akslq7n4g1s12wm2p4w";
-        url = "https://crates.io/api/v1/crates/nom/6.2.1/download";
+        sha256 = "1qnmyd9y9ljy7hxch8sbayybd7sn18vvs95nlx2lggbijsckyhg7";
+        url = "https://crates.io/api/v1/crates/nom/6.1.2/download";
       });
       buildDepKeys = [
         ("version_check 0.9.3")
@@ -1310,7 +1372,7 @@ in
       pname = "num_cpus";
       version = "1.13.0";
       depKeys = [
-        ("libc 0.2.106")
+        ("libc 0.2.108")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
@@ -1356,9 +1418,9 @@ in
         ("bitflags 1.3.2")
         ("cfg-if 1.0.0")
         ("foreign-types 0.3.2")
-        ("libc 0.2.106")
+        ("libc 0.2.108")
         ("once_cell 1.8.0")
-        ("openssl-sys 0.9.70")
+        ("openssl-sys 0.9.71")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
@@ -1370,7 +1432,7 @@ in
         openssl-sys = [
           ({
             rename = "ffi";
-            version = "0.9.70";
+            version = "0.9.71";
           })
         ];
       };
@@ -1388,24 +1450,42 @@ in
       });
       edition = "2015";
     };
-    "openssl-sys 0.9.70" = {
+    "openssl-sys 0.9.71" = {
       pname = "openssl-sys";
-      version = "0.9.70";
+      version = "0.9.71";
       depKeys = [
-        ("libc 0.2.106")
+        ("libc 0.2.108")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "1pryvrgwc7qrr8rq7smmkz2hqc3zzxjss7b6ldfnn8pqnf3pjlf6";
-        url = "https://crates.io/api/v1/crates/openssl-sys/0.9.70/download";
+        sha256 = "0wscz8aqw4n6166sklz9fj5832iz2dpplxd4cfrhjyb0bqb3vwbx";
+        url = "https://crates.io/api/v1/crates/openssl-sys/0.9.71/download";
       });
       buildDepKeys = [
         ("autocfg 1.0.1")
-        ("cc 1.0.71")
+        ("cc 1.0.72")
         ("pkg-config 0.3.22")
       ];
       buildSrc = "build/main.rs";
       edition = "2015";
+    };
+    "os_str_bytes 4.2.0" = {
+      pname = "os_str_bytes";
+      version = "4.2.0";
+      depKeys = [
+        ("memchr 2.4.1")
+      ];
+      src = (pkgs.fetchurl {
+        name = "crate.tar.gz";
+        sha256 = "16d70qzd2g18i28i6znjcpck0r9hjd5gz5qcr1cl2l9s6d1sknmd";
+        url = "https://crates.io/api/v1/crates/os_str_bytes/4.2.0/download";
+      });
+      edition = "2018";
+      features = [
+        ("default")
+        ("memchr")
+        ("raw_os_str")
+      ];
     };
     "parking_lot 0.11.2" = {
       pname = "parking_lot";
@@ -1431,7 +1511,7 @@ in
       depKeys = [
         ("cfg-if 1.0.0")
         ("instant 0.1.12")
-        ("libc 0.2.106")
+        ("libc 0.2.108")
         ("smallvec 1.7.0")
       ];
       src = (pkgs.fetchurl {
@@ -1532,32 +1612,49 @@ in
         ("std")
       ];
     };
-    "proc-macro-hack 0.5.19" = {
-      pname = "proc-macro-hack";
-      version = "0.5.19";
+    "proc-macro-error 1.0.4" = {
+      pname = "proc-macro-error";
+      version = "1.0.4";
       depKeys = [
+        ("proc-macro-error-attr 1.0.4")
+        ("proc-macro2 1.0.32")
+        ("quote 1.0.10")
+        ("syn 1.0.81")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "1rg0kzsj7lj00qj602d3h77spwfz48vixn1wbjp7a4yrq65w9w6v";
-        url = "https://crates.io/api/v1/crates/proc-macro-hack/0.5.19/download";
+        sha256 = "1373bhxaf0pagd8zkyd03kkx6bchzf6g0dkwrwzsnal9z47lj9fs";
+        url = "https://crates.io/api/v1/crates/proc-macro-error/1.0.4/download";
       });
+      buildDepKeys = [
+        ("version_check 0.9.3")
+      ];
+      buildSrc = "build.rs";
+      edition = "2018";
+      features = [
+        ("default")
+        ("syn")
+        ("syn-error")
+      ];
+    };
+    "proc-macro-error-attr 1.0.4" = {
+      pname = "proc-macro-error-attr";
+      version = "1.0.4";
+      depKeys = [
+        ("proc-macro2 1.0.32")
+        ("quote 1.0.10")
+      ];
+      src = (pkgs.fetchurl {
+        name = "crate.tar.gz";
+        sha256 = "0sgq6m5jfmasmwwy8x4mjygx5l7kp8s4j60bv25ckv2j1qc41gm1";
+        url = "https://crates.io/api/v1/crates/proc-macro-error-attr/1.0.4/download";
+      });
+      buildDepKeys = [
+        ("version_check 0.9.3")
+      ];
       buildSrc = "build.rs";
       edition = "2018";
       procMacro = true;
-    };
-    "proc-macro-nested 0.1.7" = {
-      pname = "proc-macro-nested";
-      version = "0.1.7";
-      depKeys = [
-      ];
-      src = (pkgs.fetchurl {
-        name = "crate.tar.gz";
-        sha256 = "11hh1jynh62f3m1ii0f9gf1l3y0fhkwpmr40lz3704v848n1p25w";
-        url = "https://crates.io/api/v1/crates/proc-macro-nested/0.1.7/download";
-      });
-      buildSrc = "build.rs";
-      edition = "2015";
     };
     "proc-macro2 1.0.32" = {
       pname = "proc-macro2";
@@ -1623,7 +1720,7 @@ in
       pname = "rand";
       version = "0.4.6";
       depKeys = [
-        ("libc 0.2.106")
+        ("libc 0.2.108")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
@@ -1641,7 +1738,7 @@ in
       pname = "rand";
       version = "0.8.4";
       depKeys = [
-        ("libc 0.2.106")
+        ("libc 0.2.108")
         ("rand_chacha 0.3.1")
         ("rand_core 0.6.3")
       ];
@@ -1765,20 +1862,20 @@ in
       });
       edition = "2018";
     };
-    "regex 1.4.6" = {
+    "regex 1.5.4" = {
       pname = "regex";
-      version = "1.4.6";
+      version = "1.5.4";
       depKeys = [
-        ("aho-corasick 0.7.15")
-        ("memchr 2.3.4")
+        ("aho-corasick 0.7.18")
+        ("memchr 2.4.1")
         ("regex-syntax 0.6.25")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "0nf7gj6b7qzrq8b11srnwva2amx6b4v3lnrki1jxajspid0sy9ia";
-        url = "https://crates.io/api/v1/crates/regex/1.4.6/download";
+        sha256 = "0qf479kjbmb582h4d1d6gfl75h0j8aq2nrdi5wg6zdcy6llqcynh";
+        url = "https://crates.io/api/v1/crates/regex/1.5.4/download";
       });
-      edition = "2015";
+      edition = "2018";
       features = [
         ("aho-corasick")
         ("default")
@@ -1841,11 +1938,11 @@ in
         ("base64 0.13.0")
         ("bytes 1.1.0")
         ("encoding_rs 0.8.29")
-        ("futures-core 0.3.17")
-        ("futures-util 0.3.17")
+        ("futures-core 0.3.18")
+        ("futures-util 0.3.18")
         ("http 0.2.5")
         ("http-body 0.4.4")
-        ("hyper 0.14.14")
+        ("hyper 0.14.15")
         ("hyper-tls 0.5.0")
         ("ipnet 2.3.1")
         ("lazy_static 1.4.0")
@@ -1856,7 +1953,7 @@ in
         ("pin-project-lite 0.2.7")
         ("serde 1.0.130")
         ("serde_urlencoded 0.7.0")
-        ("tokio 1.13.0")
+        ("tokio 1.14.0")
         ("tokio-native-tls 0.3.0")
         ("url 2.2.2")
       ];
@@ -1929,7 +2026,7 @@ in
         ("bitflags 1.3.2")
         ("core-foundation 0.9.2")
         ("core-foundation-sys 0.8.3")
-        ("libc 0.2.106")
+        ("libc 0.2.108")
         ("security-framework-sys 2.4.2")
       ];
       src = (pkgs.fetchurl {
@@ -1948,7 +2045,7 @@ in
       version = "2.4.2";
       depKeys = [
         ("core-foundation-sys 0.8.3")
-        ("libc 0.2.106")
+        ("libc 0.2.108")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
@@ -2020,9 +2117,9 @@ in
       ];
       procMacro = true;
     };
-    "serde_json 1.0.68" = {
+    "serde_json 1.0.71" = {
       pname = "serde_json";
-      version = "1.0.68";
+      version = "1.0.71";
       depKeys = [
         ("itoa 0.4.8")
         ("ryu 1.0.5")
@@ -2030,8 +2127,8 @@ in
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "1n2jg9cf14lrxasj63rlrwxlw5v79m851gycw6zy20jnjx9hhs8g";
-        url = "https://crates.io/api/v1/crates/serde_json/1.0.68/download";
+        sha256 = "06gv3gb3mr9jxdy62dxll5ysaq7f4jbh0j8a0hjaq4a0lrkg8fq6";
+        url = "https://crates.io/api/v1/crates/serde_json/1.0.71/download";
       });
       buildSrc = "build.rs";
       edition = "2018";
@@ -2098,7 +2195,7 @@ in
       pname = "signal-hook-registry";
       version = "1.4.0";
       depKeys = [
-        ("libc 0.2.106")
+        ("libc 0.2.108")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
@@ -2139,7 +2236,7 @@ in
       pname = "socket2";
       version = "0.4.2";
       depKeys = [
-        ("libc 0.2.106")
+        ("libc 0.2.108")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
@@ -2157,6 +2254,18 @@ in
         name = "crate.tar.gz";
         sha256 = "0gsl6xmw10gvn3zs1rv99laj5ig7ylffnh71f9l34js4nr4r7sx2";
         url = "https://crates.io/api/v1/crates/static_assertions/1.1.0/download";
+      });
+      edition = "2015";
+    };
+    "strsim 0.10.0" = {
+      pname = "strsim";
+      version = "0.10.0";
+      depKeys = [
+      ];
+      src = (pkgs.fetchurl {
+        name = "crate.tar.gz";
+        sha256 = "08s69r4rcrahwnickvi0kq49z524ci50capybln83mg6b473qivk";
+        url = "https://crates.io/api/v1/crates/strsim/0.10.0/download";
       });
       edition = "2015";
     };
@@ -2219,7 +2328,7 @@ in
       version = "3.2.0";
       depKeys = [
         ("cfg-if 1.0.0")
-        ("libc 0.2.106")
+        ("libc 0.2.108")
         ("rand 0.8.4")
         ("remove_dir_all 0.5.3")
       ];
@@ -2250,16 +2359,32 @@ in
       });
       edition = "2018";
     };
-    "tinyvec 1.5.0" = {
+    "textwrap 0.14.2" = {
+      pname = "textwrap";
+      version = "0.14.2";
+      depKeys = [
+        ("unicode-width 0.1.9")
+      ];
+      src = (pkgs.fetchurl {
+        name = "crate.tar.gz";
+        sha256 = "106xjfzfpk3nj51fx9slf9kyir7xjwvpqm003v9ardgq5b8whrh0";
+        url = "https://crates.io/api/v1/crates/textwrap/0.14.2/download";
+      });
+      edition = "2018";
+      features = [
+        ("unicode-width")
+      ];
+    };
+    "tinyvec 1.5.1" = {
       pname = "tinyvec";
-      version = "1.5.0";
+      version = "1.5.1";
       depKeys = [
         ("tinyvec_macros 0.1.0")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "1xwiycwfl80737i952adpn1qawdi20kxr97bsymx14ch9lyjlfzq";
-        url = "https://crates.io/api/v1/crates/tinyvec/1.5.0/download";
+        sha256 = "1lnqnva56673r0d40586rkzyl2qqcz19wm29q8h5a95n89d1s71c";
+        url = "https://crates.io/api/v1/crates/tinyvec/1.5.1/download";
       });
       edition = "2018";
       features = [
@@ -2280,25 +2405,25 @@ in
       });
       edition = "2018";
     };
-    "tokio 1.13.0" = {
+    "tokio 1.14.0" = {
       pname = "tokio";
-      version = "1.13.0";
+      version = "1.14.0";
       depKeys = [
         ("bytes 1.1.0")
-        ("libc 0.2.106")
-        ("memchr 2.3.4")
+        ("libc 0.2.108")
+        ("memchr 2.4.1")
         ("mio 0.7.14")
         ("num_cpus 1.13.0")
         ("once_cell 1.8.0")
         ("parking_lot 0.11.2")
         ("pin-project-lite 0.2.7")
         ("signal-hook-registry 1.4.0")
-        ("tokio-macros 1.5.1")
+        ("tokio-macros 1.6.0")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "1vi9dswv8m6h5h9zh42923i67d0libxxhz2nfzc5ininlc82v2sq";
-        url = "https://crates.io/api/v1/crates/tokio/1.13.0/download";
+        sha256 = "0i31mhhz0y0clr04z1slxx349xh017r4cx5kapvvjbqd3vj95sbh";
+        url = "https://crates.io/api/v1/crates/tokio/1.14.0/download";
       });
       buildDepKeys = [
         ("autocfg 1.0.1")
@@ -2331,9 +2456,9 @@ in
         ("winapi")
       ];
     };
-    "tokio-macros 1.5.1" = {
+    "tokio-macros 1.6.0" = {
       pname = "tokio-macros";
-      version = "1.5.1";
+      version = "1.6.0";
       depKeys = [
         ("proc-macro2 1.0.32")
         ("quote 1.0.10")
@@ -2341,8 +2466,8 @@ in
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
-        sha256 = "15chrgc62ydsq05i0dp0imqx1ggvfl0glyj6g72i4qma86q86hqi";
-        url = "https://crates.io/api/v1/crates/tokio-macros/1.5.1/download";
+        sha256 = "0pmsxblxda3mx8cwi2fzpyzzlbc85fm6cmjiyx1pjhvpl2mw3vy9";
+        url = "https://crates.io/api/v1/crates/tokio-macros/1.6.0/download";
       });
       edition = "2018";
       procMacro = true;
@@ -2352,7 +2477,7 @@ in
       version = "0.3.0";
       depKeys = [
         ("native-tls 0.2.8")
-        ("tokio 1.13.0")
+        ("tokio 1.14.0")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
@@ -2366,11 +2491,11 @@ in
       version = "0.6.9";
       depKeys = [
         ("bytes 1.1.0")
-        ("futures-core 0.3.17")
-        ("futures-sink 0.3.17")
+        ("futures-core 0.3.18")
+        ("futures-sink 0.3.18")
         ("log 0.4.14")
         ("pin-project-lite 0.2.7")
-        ("tokio 1.13.0")
+        ("tokio 1.14.0")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
@@ -2455,6 +2580,22 @@ in
       buildSrc = "build/main.rs";
       edition = "2018";
     };
+    "unicase 2.6.0" = {
+      pname = "unicase";
+      version = "2.6.0";
+      depKeys = [
+      ];
+      src = (pkgs.fetchurl {
+        name = "crate.tar.gz";
+        sha256 = "1xmlbink4ycgxrkjspp0mf7pghcx4m7vxq7fpfm04ikr2zk7pwsh";
+        url = "https://crates.io/api/v1/crates/unicase/2.6.0/download";
+      });
+      buildDepKeys = [
+        ("version_check 0.9.3")
+      ];
+      buildSrc = "build.rs";
+      edition = "2015";
+    };
     "unicode-bidi 0.3.7" = {
       pname = "unicode-bidi";
       version = "0.3.7";
@@ -2475,7 +2616,7 @@ in
       pname = "unicode-normalization";
       version = "0.1.19";
       depKeys = [
-        ("tinyvec 1.5.0")
+        ("tinyvec 1.5.1")
       ];
       src = (pkgs.fetchurl {
         name = "crate.tar.gz";
@@ -2487,6 +2628,18 @@ in
         ("default")
         ("std")
       ];
+    };
+    "unicode-segmentation 1.8.0" = {
+      pname = "unicode-segmentation";
+      version = "1.8.0";
+      depKeys = [
+      ];
+      src = (pkgs.fetchurl {
+        name = "crate.tar.gz";
+        sha256 = "0nrqfgxkh00wb5dhl0874z20789i2yjimp6ndgh4ay4yjjd895c8";
+        url = "https://crates.io/api/v1/crates/unicode-segmentation/1.8.0/download";
+      });
+      edition = "2018";
     };
     "unicode-width 0.1.9" = {
       pname = "unicode-width";

@@ -1,4 +1,4 @@
-final: prev:
+final:
 let
   pkgs = final.pkgs;
 in
@@ -554,6 +554,7 @@ in
         ("babel-core@6.26.3")
         ("babel-register@6.26.0")
       ];
+      src = (final.pathSrc ../.);
       bin = {
         main = "main.js";
       };

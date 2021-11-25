@@ -21,7 +21,7 @@ pub struct OpamSpec {
 #[derive(Clone, Debug)]
 pub struct OpamRepository {
 	src: Src,
-	digest: Sha256,
+	digest: NixHash,
 }
 
 impl OpamRepository {

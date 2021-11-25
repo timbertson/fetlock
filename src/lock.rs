@@ -297,9 +297,55 @@ impl Src {
 }
 
 #[derive(Debug, Clone)]
+pub enum NixHash {
+	SRI(SRIHash),
+	Sha256(Sha256),
+}
+
+impl NixHash {
+	pub fn parse(s: String) -> NixHash {
+		if s.contains('-') {
+			NixHash::SRI(SRIHash::new(s))
+		} else {
+			NixHash::Sha256(Sha256::new(s))
+		}
+	}
+
+	pub fn dummy() -> &'static Self {
+		lazy_static! {
+			static ref DUMMY: NixHash = NixHash::Sha256(Sha256::new(
+				std::iter::repeat("0")
+					.take(Sha256::default_len())
+					.collect::<String>()
+			));
+		}
+		&DUMMY
+	}
+
+	pub fn hash_repr(&self) -> String {
+		match self {
+			Self::Sha256(sha) => format!("sha256:{}", sha),
+			Self::SRI(sri) => sri.clone().into_string(),
+		}
+	}
+}
+
+impl fmt::Display for NixHash {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Self::SRI(x) => std::fmt::Display::fmt(&x, f),
+			Self::Sha256(x) => std::fmt::Display::fmt(&x, f),
+		}
+	}
+}
+
+#[derive(Debug, Clone)]
 pub struct Sha256(String);
 
 impl Sha256 {
+	// classic (base32) hashes
+	// If we want to support nix <2.4, we'd need to parse nix' custom b32 and rewrite in base64.
+	// So for now we just accept both
 	pub fn new(s: String) -> Sha256 {
 		Sha256(s)
 	}
@@ -311,21 +357,6 @@ impl Sha256 {
 	pub fn into_string(self) -> String {
 		self.0
 	}
-
-	pub fn sri_string(&self) -> String {
-		format!("sha256:{}", self.0)
-	}
-
-	pub fn dummy() -> &'static Self {
-		lazy_static! {
-			static ref DUMMY: Sha256 = Sha256::new(
-				std::iter::repeat("0")
-					.take(Sha256::default_len())
-					.collect::<String>()
-			);
-		}
-		&DUMMY
-	}
 }
 
 impl fmt::Display for Sha256 {
@@ -335,13 +366,33 @@ impl fmt::Display for Sha256 {
 }
 
 #[derive(Debug, Clone)]
+pub struct SRIHash(String);
+
+impl SRIHash {
+	pub fn new(s: String) -> Self {
+		Self(s)
+	}
+
+	pub fn into_string(self) -> String {
+		self.0
+	}
+}
+
+impl fmt::Display for SRIHash {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		fmt::Display::fmt(&self.0, f)
+	}
+}
+
+
+#[derive(Debug, Clone)]
 pub struct SrcDigest<'a> {
 	pub src: &'a Src,
-	pub digest: &'a Sha256,
+	pub digest: &'a NixHash,
 }
 
 impl SrcDigest<'_> {
-	pub fn new<'a>(src: &'a Src, digest: &'a Sha256) -> SrcDigest<'a> {
+	pub fn new<'a>(src: &'a Src, digest: &'a NixHash) -> SrcDigest<'a> {
 		SrcDigest { src, digest }
 	}
 
@@ -358,7 +409,7 @@ impl SrcDigest<'_> {
 					("owner", Expr::str(owner.to_owned())),
 					("repo", Expr::str(repo.to_owned())),
 					("rev", Expr::str(git_ref.to_owned())),
-					("sha256", Expr::str(digest.to_string())),
+					("hash", Expr::str(digest.to_string())),
 				];
 				if *fetch_submodules {
 					attrs.push(("fetchSubmodules", Expr::Bool(true)));
@@ -373,7 +424,7 @@ impl SrcDigest<'_> {
 				let Archive { url, name } = archive;
 				let mut attrs = vec![
 					("url", Expr::str(url.0.to_owned())),
-					("sha256", Expr::str(digest.to_string())),
+					("hash", Expr::str(digest.to_string())),
 				];
 				if let Some(name) = name {
 					attrs.push(("name", Expr::str(name.to_owned())));
@@ -407,7 +458,7 @@ pub struct Spec {
 	pub dep_keys: Vec<Key>,
 	build_inputs: Vec<Expr>,
 	pub src: Src,
-	pub digest: Option<Sha256>,
+	pub digest: Option<NixHash>,
 	pub extra: BTreeMap<String, Expr>,
 }
 
@@ -419,7 +470,7 @@ impl Spec {
 		})
 	}
 
-	pub fn set_src_digest(&mut self, src: Src, digest: Sha256) {
+	pub fn set_src_digest(&mut self, src: Src, digest: NixHash) {
 		self.src = src;
 		self.digest = Some(digest);
 	}

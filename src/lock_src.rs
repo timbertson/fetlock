@@ -76,7 +76,7 @@ impl GithubSrc {
 pub struct LocalSrc {
 	pub root: PathBuf,
 	pub relative: Option<String>,
-	pub src_digest: Option<(Src, Sha256)>,
+	pub src_digest: Option<(Src, NixHash)>,
 }
 
 impl LocalSrc {

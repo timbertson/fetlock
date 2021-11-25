@@ -1,7 +1,7 @@
 use crate::cmd;
 use crate::WriteOpts;
 use crate::memoize::Memoize;
-use crate::{Expr, GitUrl, Sha256, Src};
+use crate::{Expr, GitUrl, NixHash, Sha256, Src};
 use anyhow::*;
 use futures::future::FutureExt;
 use log::*;
@@ -41,7 +41,7 @@ pub struct CachedRepo {
 	pub path: PathBuf,
 	pub commit: String,
 	pub src: Src,
-	digest: Rc<Mutex<Memoize<Option<Sha256>>>>,
+	digest: Rc<Mutex<Memoize<Option<NixHash>>>>,
 }
 
 impl CachedRepo {
@@ -144,7 +144,7 @@ impl CachedRepo {
 		})
 	}
 
-	pub async fn digest(&self) -> Result<Sha256> {
+	pub async fn digest(&self) -> Result<NixHash> {
 		use std::ops::DerefMut;
 		debug!("acquiring mutex...");
 		let mut guard = self.digest.lock().await; //.unwrap();
@@ -155,7 +155,7 @@ impl CachedRepo {
 	}
 }
 
-pub async fn nix_digest_of_path<P: AsRef<Path>>(path: P) -> Result<Sha256> {
+pub async fn nix_digest_of_path<P: AsRef<Path>>(path: P) -> Result<NixHash> {
 	let output = cmd::run_stdout(
 		"nix-hash",
 		None,
@@ -167,11 +167,11 @@ pub async fn nix_digest_of_path<P: AsRef<Path>>(path: P) -> Result<Sha256> {
 			.env("DIR", path.as_ref()),
 	)
 	.await?;
-	Ok(Sha256::new(output))
+	Ok(NixHash::Sha256(Sha256::new(output)))
 }
 
 // rev could be a reference, but it makes the actual usage awkward
-pub async fn nix_digest_of_git_repo<P: AsRef<Path>>(path: P, rev: String) -> Result<Sha256> {
+pub async fn nix_digest_of_git_repo<P: AsRef<Path>>(path: P, rev: String) -> Result<NixHash> {
 	info!("exporting {:?} revision {}", path.as_ref(), rev);
 	let tmp_dir = tempdir::TempDir::new("fetlock-export")?;
 	cmd::exec(
@@ -186,14 +186,14 @@ pub async fn nix_digest_of_git_repo<P: AsRef<Path>>(path: P, rev: String) -> Res
 	nix_digest_of_path(tmp_dir.path()).await
 }
 
-pub fn subtree_expr(base: Expr, rel_path: String, hash: &Sha256) -> Expr {
+pub fn subtree_expr(base: Expr, rel_path: String, hash: &NixHash) -> Expr {
 	Expr::fun_call(
 		Expr::Literal("final.subtree".to_owned()),
 		vec![Expr::AttrSet(
 			vec![
 				("base".to_owned(), base),
 				("path".to_owned(), Expr::str(rel_path)),
-				("hash".to_owned(), Expr::str(hash.sri_string())),
+				("hash".to_owned(), Expr::str(hash.hash_repr())),
 			]
 			.into_iter()
 			.collect::<BTreeMap<String, Expr>>(),

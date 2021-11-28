@@ -1,6 +1,7 @@
 use crate::expr::Expr;
 use anyhow::*;
 use lazy_static::lazy_static;
+use regex::Regex;
 use serde::de::{Deserialize, Deserializer};
 use std::borrow::Borrow;
 use std::collections::BTreeMap;
@@ -296,7 +297,7 @@ impl Src {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum NixHash {
 	SRI(SRIHash),
 	Sha256(Sha256),
@@ -323,23 +324,23 @@ impl NixHash {
 	}
 
 	pub fn hash_repr(&self) -> String {
-		match self {
-			Self::Sha256(sha) => format!("sha256:{}", sha),
-			Self::SRI(sri) => sri.clone().into_string(),
-		}
+		format!("{}", self)
 	}
 }
 
 impl fmt::Display for NixHash {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
-			Self::SRI(x) => std::fmt::Display::fmt(&x, f),
-			Self::Sha256(x) => std::fmt::Display::fmt(&x, f),
+			Self::SRI(x) => f.write_str(&x.0),
+			Self::Sha256(x) => {
+				f.write_str("sha256:")?;
+				f.write_str(&x.0)
+			},
 		}
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Sha256(String);
 
 impl Sha256 {
@@ -347,6 +348,12 @@ impl Sha256 {
 	// If we want to support nix <2.4, we'd need to parse nix' custom b32 and rewrite in base64.
 	// So for now we just accept both
 	pub fn new(s: String) -> Sha256 {
+		lazy_static! {
+			static ref SHA256_RE: Regex = Regex::new(r"^[0-9a-zA-Z]{52}$").unwrap();
+		}
+		if !SHA256_RE.is_match(&s) {
+			panic!("invalid sha256: {:?}", s);
+		}
 		Sha256(s)
 	}
 
@@ -359,17 +366,17 @@ impl Sha256 {
 	}
 }
 
-impl fmt::Display for Sha256 {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		fmt::Display::fmt(&self.0, f)
-	}
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SRIHash(String);
 
 impl SRIHash {
 	pub fn new(s: String) -> Self {
+		lazy_static! {
+			static ref SRI_RE: Regex = Regex::new(r"^sha[0-9]+-[^ ]+$").unwrap();
+		}
+		if !SRI_RE.is_match(&s) {
+			panic!("invalid SRI hash: {:?}", s);
+		}
 		Self(s)
 	}
 
@@ -377,13 +384,6 @@ impl SRIHash {
 		self.0
 	}
 }
-
-impl fmt::Display for SRIHash {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		fmt::Display::fmt(&self.0, f)
-	}
-}
-
 
 #[derive(Debug, Clone)]
 pub struct SrcDigest<'a> {

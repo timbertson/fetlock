@@ -215,8 +215,8 @@ impl NixBuild {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::esy::eval::Ctx;
-	use crate::esy::parser::OpamSC;
+	use crate::opam::eval::Ctx;
+	use crate::opam::parser::OpamSC;
 	use Value::*;
 	type StringComponent = crate::StringComponent;
 

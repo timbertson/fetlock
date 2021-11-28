@@ -152,16 +152,37 @@ impl FetchMany {
 	}
 }
 
-async fn do_prefetch(src: &Src) -> Result<NixHash> {
+fn extract_expected_hash(stderr: &str) -> Result<NixHash> {
 	lazy_static! {
 	  // NOTE: this format works for nix 2.2+ only
-	  static ref EXPECTED_SHA_2_2: Regex = Regex::new(&format!(r"got: +sha256:([a-z0-9]{{{}}})", Sha256::default_len())).unwrap();
+	  static ref EXPECTED_SHA_2_2: Regex = Regex::new(&format!(r"(?m)^\s*got:\s+sha256:([a-z0-9]{{{}}})", Sha256::default_len())).unwrap();
 	  
 		// 2.4 uses SRI format: https://github.com/NixOS/nix/commit/63c5c91cc053cbc1fcb8d3fe71c41142c9f51bfa
 	  // https://github.com/NixOS/nix/commit/6024dc1d97212130c19d3ff5ce6b1d102837eee6#diff-6457959fc81a2b643a02948377299411961ae6027cf0b4da23928ec1d4d57ec8
-	  static ref EXPECTED_SHA_2_4: Regex = Regex::new(r"^ *got: +(sha[0-9]+-[^ ]+$)").unwrap();
+	  static ref EXPECTED_SHA_2_4: Regex = Regex::new(r"(?m)^\s*got:\s+(sha[0-9]+-[^ \n\t]+$)").unwrap();
 	}
 
+	println!("{}", stderr);
+	let mut it = EXPECTED_SHA_2_2.captures_iter(&stderr)
+		.filter_map(|matches| matches.get(1))
+		.map(|sha| NixHash::Sha256(Sha256::new(sha.as_str().to_owned())))
+		.chain(EXPECTED_SHA_2_4.captures_iter(&stderr)
+			.filter_map(|matches| matches.get(1))
+			.map(|sri| NixHash::SRI(SRIHash::new(sri.as_str().to_owned())))
+		);
+	let first = it.next()
+		.ok_or_else(|| anyhow!("Unable to extract expected sha from output:\n{}", stderr))?;
+	debug!("first capture: {:?}", &first);
+	if it.next().is_some() {
+		return Err(anyhow!(
+			"Extracted multiple expected digests from output:\n{}",
+			stderr
+		));
+	}
+	Ok(first)
+}
+
+async fn do_prefetch(src: &Src) -> Result<NixHash> {
 	let dummy = SrcDigest::new(src, NixHash::dummy());
 	debug!("prefetching {:?}", &dummy);
 	let fetch = FetchMany::singleton(&dummy)?;
@@ -171,25 +192,8 @@ async fn do_prefetch(src: &Src) -> Result<NixHash> {
 	cmd::warn_output("nix stdout", Ok(stdout));
 
 	let stderr = stderr.ok_or_else(|| anyhow!("stderr not piped"))?;
-	let mut it = EXPECTED_SHA_2_2.captures_iter(&stderr)
-		.filter_map(|matches| matches.get(1))
-		.map(|sha| NixHash::Sha256(Sha256::new(sha.as_str().to_owned())))
-		.chain(EXPECTED_SHA_2_4.captures_iter(&stderr)
-			.filter_map(|matches| matches.get(1))
-			.map(|sri| NixHash::SRI(SRIHash::new(sri.as_str().to_owned())))
-		);
-	let first = it
-		.next()
-		.ok_or_else(|| anyhow!("Unable to extract expected sha from output:\n{}", stderr))
-		.with_context(|| format!("{:?}", &fetch))?;
-	debug!("first capture: {:?}", &first);
-	if it.next().is_some() {
-		return Err(anyhow!(
-			"Extracted multiple expected digests from output:\n{}",
-			stderr
-		));
-	}
-	Ok(first)
+	extract_expected_hash(&stderr)
+		.with_context(|| format!("{:?}", &fetch))
 }
 
 pub async fn realise_sources<'a, It: Iterator<Item = (&'a Key, &'a Spec)>>(
@@ -337,5 +341,23 @@ impl ExtractSource<'_> {
 				.await
 			}
 		}
+	}
+}
+
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	#[test]
+	fn test_sri_extract() {
+		let output = "
+error: hash mismatch in fixed-output derivation '/nix/store/di8z942yxvackqffrzjv53y2f4gkv5gp-archive.tar.gz.drv':
+specified: sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+   got:    sha256-uwehbMgcghqFcnaTyrlF5KI7QvLTdUMERuAopgTdm7A=
+		";
+		assert_eq!(
+			extract_expected_hash(output).ok(),
+			Some(NixHash::SRI(SRIHash::new("sha256-uwehbMgcghqFcnaTyrlF5KI7QvLTdUMERuAopgTdm7A=".to_string()))),
+		);
 	}
 }

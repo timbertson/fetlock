@@ -51,7 +51,7 @@ pub mod test {
 	{
 		match parse(all_consuming(p), contents) {
 			Ok(result) => info!("{:?}", result),
-			Err(p) => panic!(format!("{}", p)),
+			Err(p) => panic!("{}", p),
 		}
 	}
 
@@ -65,7 +65,7 @@ pub mod test {
 				info!("{:?}", result);
 				result
 			}
-			Err(p) => panic!(format!("{}", p)),
+			Err(p) => panic!("{}", p),
 		}
 	}
 }

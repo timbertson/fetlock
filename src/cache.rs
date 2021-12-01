@@ -1,7 +1,8 @@
 use crate::cmd;
 use crate::WriteOpts;
+use crate::hash::*;
 use crate::memoize::Memoize;
-use crate::{Expr, GitUrl, NixHash, Sha256, Src};
+use crate::{Expr, GitUrl, Src};
 use anyhow::*;
 use futures::future::FutureExt;
 use log::*;

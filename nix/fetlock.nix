@@ -15,8 +15,11 @@ let
 		esy = backend ./esy;
 		opam = backend ./opam;
 		yarn = backend ./yarn;
-		shell = stdenv.mkShell {
+		shell = mkShell {
 			packages = [ fetlockImpls.basic ];
+		};
+		ocamlShell = mkShell {
+			packages = [ opam2nix ];
 		};
 	};
 

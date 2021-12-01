@@ -1,6 +1,7 @@
 use crate::cache::{cache_hash, cache_root};
 use crate::cmd;
 use crate::lock::*;
+use crate::hash::*;
 use crate::nix_serialize::*;
 use crate::stream_util::*;
 use anyhow::*;
@@ -31,21 +32,25 @@ async fn ensure_digest(implementation: &mut Spec) -> Result<()> {
 	Ok(())
 }
 
+fn get_cache_path(src: &Src) -> PathBuf {
+	// using Debug formatting is lazy, but easy :shrug:
+	let cache_filename = cache_hash(&format!("{:?}", src));
+	let cache_shard = &cache_filename[0..2];
+
+	let mut cache_dir = cache_root();
+	cache_dir.push("digests");
+	cache_dir.push(cache_shard);
+
+	cache_dir.join(cache_filename)
+}
+
 pub async fn calculate_digest(src: &Src) -> Result<NixHash> {
+	let cache_path = get_cache_path(src);
+	debug!(
+		"checking cached contents ({:?}) for src {:?}",
+		&cache_path, src
+	);
 	let result: Result<NixHash> = (|| async {
-		// using Debug formatting is lazy, but easy :shrug:
-		let cache_filename = cache_hash(&format!("{:?}", src));
-		let cache_shard = &cache_filename[0..2];
-
-		let mut cache_dir = cache_root();
-		cache_dir.push("digests");
-		cache_dir.push(cache_shard);
-
-		let cache_path = cache_dir.join(cache_filename);
-		debug!(
-			"checking cached contents ({:?}) for src {:?}",
-			&cache_path, src
-		);
 		match fs::read(&cache_path).await {
 			Ok(bytes) => {
 				let s = String::from_utf8(bytes)?.trim_end().to_owned();
@@ -54,7 +59,8 @@ pub async fn calculate_digest(src: &Src) -> Result<NixHash> {
 			Err(e) => {
 				if e.kind() == ErrorKind::NotFound {
 					info!("fetch: {:?}", src);
-					fs::create_dir_all(&cache_dir).await?;
+					let cache_dir = cache_path.parent().ok_or_else(||anyhow!("empty cache path"))?;
+					fs::create_dir_all(cache_dir).await?;
 					let digest = do_prefetch(src).await?;
 					crate::fs::write_atomically(&cache_path, |mut f| {
 						Ok(write!(f, "{}\n", digest)?)
@@ -205,7 +211,14 @@ pub async fn realise_sources<'a, It: Iterator<Item = (&'a Key, &'a Spec)>>(
 	info!("realising: {} sources...", pairs.len());
 	let paths = FetchMany::digests(pairs.iter().map(|(_key, digest)| digest))?
 		.realise()
-		.await?;
+		.await.with_context(|| {
+			let mut lines = pairs.iter().map(|(key, src_digest)| {
+				let SrcDigest { src, digest } = src_digest;
+				format!("{} // {:?}", digest, get_cache_path(&src))
+			}).collect::<Vec<String>>();
+			lines.sort();
+			format!("Failed realising sources:\n{}", lines.join("\n"))
+		})?;
 	Ok(pairs
 		.into_iter()
 		.zip(paths)

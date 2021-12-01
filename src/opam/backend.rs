@@ -1,6 +1,7 @@
 // opam backend. Note that opam doesn't have a builtin lock file,
 // so we lean on `opam2nix extract` to solve
 use crate::cache;
+use crate::hash::NixHash;
 use crate::cache::CachedRepo;
 use crate::opam::build::PkgType;
 use crate::opam::eval;

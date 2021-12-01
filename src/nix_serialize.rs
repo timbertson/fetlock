@@ -2,6 +2,7 @@
 
 use crate::expr::*;
 use crate::lock::*;
+use crate::hash::NixHash;
 use lazy_static::lazy_static;
 use log::*;
 use regex::Regex;

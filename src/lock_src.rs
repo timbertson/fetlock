@@ -1,4 +1,5 @@
 use crate::string_util::*;
+use crate::hash::NixHash;
 use crate::*;
 use anyhow::*;
 use log::*;

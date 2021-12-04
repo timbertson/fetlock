@@ -53,8 +53,8 @@ pub async fn calculate_digest(src: &Src) -> Result<NixHash> {
 	let result: Result<NixHash> = (|| async {
 		match fs::read(&cache_path).await {
 			Ok(bytes) => {
-				let s = String::from_utf8(bytes)?.trim_end().to_owned();
-				Ok(NixHash::parse(s))
+				let s = String::from_utf8(bytes)?;
+				NixHash::parse_sri(s.trim_end())
 			},
 			Err(e) => {
 				if e.kind() == ErrorKind::NotFound {
@@ -63,7 +63,7 @@ pub async fn calculate_digest(src: &Src) -> Result<NixHash> {
 					fs::create_dir_all(cache_dir).await?;
 					let digest = do_prefetch(src).await?;
 					crate::fs::write_atomically(&cache_path, |mut f| {
-						Ok(write!(f, "{}\n", digest)?)
+						Ok(write!(f, "{}\n", digest.sri())?)
 					})?;
 					Ok(digest)
 				} else {
@@ -161,7 +161,7 @@ impl FetchMany {
 fn extract_expected_hash(stderr: &str) -> Result<NixHash> {
 	lazy_static! {
 	  // NOTE: this format works for nix 2.2+ only
-	  static ref EXPECTED_SHA_2_2: Regex = Regex::new(&format!(r"(?m)^\s*got:\s+sha256:([a-z0-9]{{{}}})", Sha256::default_len())).unwrap();
+	  static ref EXPECTED_SHA_2_2: Regex = Regex::new(&format!(r"(?m)^\s*got:\s+sha256:([a-z0-9]{{{}}})", NixHash::legacy_sha256_b32_len())).unwrap();
 	  
 		// 2.4 uses SRI format: https://github.com/NixOS/nix/commit/63c5c91cc053cbc1fcb8d3fe71c41142c9f51bfa
 	  // https://github.com/NixOS/nix/commit/6024dc1d97212130c19d3ff5ce6b1d102837eee6#diff-6457959fc81a2b643a02948377299411961ae6027cf0b4da23928ec1d4d57ec8
@@ -171,13 +171,13 @@ fn extract_expected_hash(stderr: &str) -> Result<NixHash> {
 	println!("{}", stderr);
 	let mut it = EXPECTED_SHA_2_2.captures_iter(&stderr)
 		.filter_map(|matches| matches.get(1))
-		.map(|sha| NixHash::Sha256(Sha256::new(sha.as_str().to_owned())))
+		.map(|sha| NixHash::from_nix_b32(HashAlg::Sha256, sha.as_str()))
 		.chain(EXPECTED_SHA_2_4.captures_iter(&stderr)
 			.filter_map(|matches| matches.get(1))
-			.map(|sri| NixHash::SRI(SRIHash::new(sri.as_str().to_owned())))
+			.map(|sri| NixHash::parse_sri(sri.as_str()))
 		);
 	let first = it.next()
-		.ok_or_else(|| anyhow!("Unable to extract expected sha from output:\n{}", stderr))?;
+		.ok_or_else(|| anyhow!("Unable to extract expected digest from output:\n{}", stderr))??;
 	debug!("first capture: {:?}", &first);
 	if it.next().is_some() {
 		return Err(anyhow!(
@@ -214,7 +214,7 @@ pub async fn realise_sources<'a, It: Iterator<Item = (&'a Key, &'a Spec)>>(
 		.await.with_context(|| {
 			let mut lines = pairs.iter().map(|(key, src_digest)| {
 				let SrcDigest { src, digest } = src_digest;
-				format!("{} // {:?}", digest, get_cache_path(&src))
+				format!("{} // {:?}", digest.sri(), get_cache_path(&src))
 			}).collect::<Vec<String>>();
 			lines.sort();
 			format!("Failed realising sources:\n{}", lines.join("\n"))
@@ -370,7 +370,7 @@ specified: sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 		";
 		assert_eq!(
 			extract_expected_hash(output).ok(),
-			Some(NixHash::SRI(SRIHash::new("sha256-uwehbMgcghqFcnaTyrlF5KI7QvLTdUMERuAopgTdm7A=".to_string()))),
+			Some(NixHash::SRI(SRIHashOld::new("sha256-uwehbMgcghqFcnaTyrlF5KI7QvLTdUMERuAopgTdm7A=".to_string()))),
 		);
 	}
 }

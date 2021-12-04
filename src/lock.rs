@@ -321,7 +321,7 @@ impl SrcDigest<'_> {
 					("owner", Expr::str(owner.to_owned())),
 					("repo", Expr::str(repo.to_owned())),
 					("rev", Expr::str(git_ref.to_owned())),
-					("hash", Expr::str(digest.to_string())),
+					("hash", Expr::str(digest.sri_string())),
 				];
 				if *fetch_submodules {
 					attrs.push(("fetchSubmodules", Expr::Bool(true)));
@@ -336,7 +336,7 @@ impl SrcDigest<'_> {
 				let Archive { url, name } = archive;
 				let mut attrs = vec![
 					("url", Expr::str(url.0.to_owned())),
-					("hash", Expr::str(digest.to_string())),
+					("hash", Expr::str(digest.sri_string())),
 				];
 				if let Some(name) = name {
 					attrs.push(("name", Expr::str(name.to_owned())));

@@ -432,7 +432,7 @@ impl<T: Writeable> Writeable for &T {
 
 impl Writeable for NixHash {
 	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
-		c.write_nix_string(self)
+		c.write_nix_string(&self.sri())
 	}
 }
 

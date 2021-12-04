@@ -30,12 +30,11 @@ pub fn cache_root() -> PathBuf {
 }
 
 pub fn cache_hash(src: &str) -> String {
+	use data_encoding::BASE32;
 	use sha2::{Digest, Sha256};
 	let mut hasher = Sha256::new();
 	hasher.update(src);
-	let mut hex = hex::encode(hasher.finalize());
-	hex.truncate(24);
-	hex
+	BASE32.encode(&hasher.finalize())
 }
 
 pub struct CachedRepo {
@@ -164,11 +163,11 @@ pub async fn nix_digest_of_path<P: AsRef<Path>>(path: P) -> Result<NixHash> {
 			.arg("-euo")
 			.arg("pipefail")
 			.arg("-c")
-			.arg("nix-store --dump \"$DIR\" | nix-hash --type sha256 --flat --base32 /dev/stdin")
+			.arg("nix-store --dump \"$DIR\" | nix-hash --type sha256 --flat --base16 /dev/stdin")
 			.env("DIR", path.as_ref()),
 	)
 	.await?;
-	Ok(NixHash::Sha256(Sha256::new(output)))
+	NixHash::from_hex(HashAlg::Sha256, &output)
 }
 
 // rev could be a reference, but it makes the actual usage awkward
@@ -194,7 +193,7 @@ pub fn subtree_expr(base: Expr, rel_path: String, hash: &NixHash) -> Expr {
 			vec![
 				("base".to_owned(), base),
 				("path".to_owned(), Expr::str(rel_path)),
-				("hash".to_owned(), Expr::str(hash.hash_repr())),
+				("hash".to_owned(), Expr::str(hash.sri_string())),
 			]
 			.into_iter()
 			.collect::<BTreeMap<String, Expr>>(),

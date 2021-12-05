@@ -18,8 +18,14 @@ use tokio::fs;
 use tokio::process::Command;
 
 pub async fn populate_source_digests<S: AsSpec>(lock: &mut Lock<S>) -> Result<()> {
+	let possible_digests = lock.specs.values().filter_map(|x|
+		x.as_spec_ref().src.supplied_digest().map(|d| d.is_some())
+	).collect::<Vec<bool>>();
+	let supplied_digests = possible_digests.iter().filter(|d| **d).count();
+	info!("Digests presupplied for {} of {} sources", supplied_digests, possible_digests.len());
 	let impls = lock.specs.values_mut().map(|x| x.as_spec_mut());
-	foreach_unordered(8, futures::stream::iter(impls), |i| ensure_digest(i)).await
+	let result = foreach_unordered(8, futures::stream::iter(impls), |i| ensure_digest(i)).await;
+	result
 }
 
 async fn ensure_digest(implementation: &mut Spec) -> Result<()> {
@@ -45,6 +51,17 @@ fn get_cache_path(src: &Src) -> PathBuf {
 }
 
 pub async fn calculate_digest(src: &Src) -> Result<NixHash> {
+	let known_digest = match src {
+		Src::Archive(archive) => archive.digest.clone(),
+		Src::Github(_) => None,
+		Src::RelativePath(_) => None,
+		Src::None => None
+	};
+	if let Some(d) = known_digest {
+		debug!("src has known digest; not prefetching: {:?}", src);
+		return Ok(d)
+	}
+
 	let cache_path = get_cache_path(src);
 	debug!(
 		"checking cached contents ({:?}) for src {:?}",
@@ -161,17 +178,16 @@ impl FetchMany {
 fn extract_expected_hash(stderr: &str) -> Result<NixHash> {
 	lazy_static! {
 	  // NOTE: this format works for nix 2.2+ only
-	  static ref EXPECTED_SHA_2_2: Regex = Regex::new(&format!(r"(?m)^\s*got:\s+sha256:([a-z0-9]{{{}}})", NixHash::legacy_sha256_b32_len())).unwrap();
+	  static ref EXPECTED_SHA_2_2: Regex = Regex::new(r"(?m)^\s*got:\s+sha256:([a-z0-9]{52})").unwrap();
 	  
 		// 2.4 uses SRI format: https://github.com/NixOS/nix/commit/63c5c91cc053cbc1fcb8d3fe71c41142c9f51bfa
 	  // https://github.com/NixOS/nix/commit/6024dc1d97212130c19d3ff5ce6b1d102837eee6#diff-6457959fc81a2b643a02948377299411961ae6027cf0b4da23928ec1d4d57ec8
 	  static ref EXPECTED_SHA_2_4: Regex = Regex::new(r"(?m)^\s*got:\s+(sha[0-9]+-[^ \n\t]+$)").unwrap();
 	}
 
-	println!("{}", stderr);
 	let mut it = EXPECTED_SHA_2_2.captures_iter(&stderr)
 		.filter_map(|matches| matches.get(1))
-		.map(|sha| NixHash::from_nix_b32(HashAlg::Sha256, sha.as_str()))
+		.map(|sha| NixHash::from_nix_b32(HashAlg::Sha256, sha.as_str().to_owned()))
 		.chain(EXPECTED_SHA_2_4.captures_iter(&stderr)
 			.filter_map(|matches| matches.get(1))
 			.map(|sri| NixHash::parse_sri(sri.as_str()))
@@ -361,6 +377,7 @@ impl ExtractSource<'_> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
 	#[test]
 	fn test_sri_extract() {
 		let output = "
@@ -369,8 +386,23 @@ specified: sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
    got:    sha256-uwehbMgcghqFcnaTyrlF5KI7QvLTdUMERuAopgTdm7A=
 		";
 		assert_eq!(
-			extract_expected_hash(output).ok(),
-			Some(NixHash::SRI(SRIHashOld::new("sha256-uwehbMgcghqFcnaTyrlF5KI7QvLTdUMERuAopgTdm7A=".to_string()))),
+			extract_expected_hash(output).unwrap(),
+			NixHash::parse_sri("sha256-uwehbMgcghqFcnaTyrlF5KI7QvLTdUMERuAopgTdm7A=").unwrap(),
+		);
+	}
+
+	#[test]
+	fn test_sha256_extract() {
+		let output = "
+unpacking source archive /private/var/folders/8h/9qtq_hhn6lg69q27h5d17lw80000gp/T/nix-build-source.drv-0/fcbf81e89df989206bdad4a92327e593078525b2.tar.gz
+hash mismatch in fixed-output derivation '/nix/store/n3b8iy0yjbckydapcj2lyjzcxyblis6x-source':
+  wanted: sha256:0000000000000000000000000000000000000000000000000000
+  got:    sha256:1mzs82grpwigji3a0gcs2g4s7i1lfd5qdwpnvczh6p3rrsfwsawc
+error: build of '/nix/store/3ckw1sz0ipki3wxx79pfwpbssh5cmv3j-source.drv' failed
+		";
+		assert_eq!(
+			extract_expected_hash(output).unwrap(),
+			NixHash::from_nix_b32(HashAlg::Sha256, "1mzs82grpwigji3a0gcs2g4s7i1lfd5qdwpnvczh6p3rrsfwsawc".to_owned()).unwrap(),
 		);
 	}
 }

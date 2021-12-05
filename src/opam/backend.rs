@@ -1,7 +1,7 @@
 // opam backend. Note that opam doesn't have a builtin lock file,
 // so we lean on `opam2nix extract` to solve
 use crate::cache;
-use crate::hash::NixHash;
+use crate::hash::{NixHash, HashAlg};
 use crate::cache::CachedRepo;
 use crate::opam::build::PkgType;
 use crate::opam::eval;
@@ -156,7 +156,21 @@ impl Backend for OpamLock {
 			spec.id.set_name(name_str.clone());
 			spec.id.set_version(version.clone());
 			spec.set_src(match src {
-				Some(src) => Src::Archive(Archive::new(src.url.clone())),
+				Some(src) => {
+					let best_digest = src.digests.iter()
+						.flat_map(|(alg_str, contents)|
+							match HashAlg::parse(alg_str) {
+								Err(e) => None,
+								Ok(alg) => Some((alg, contents))
+							}
+						).max_by_key(|(alg,_)| *alg)
+						.map(|(alg, contents)| NixHash::from_hex(alg, contents));
+					let digest = match best_digest {
+						None => { warn!("No useable opam digests found for {:?}", &src); None },
+						Some(d) => Some(d?),
+					};
+					Src::Archive(Archive::new(src.url.clone(), digest))
+				},
 				None => Src::None,
 			});
 

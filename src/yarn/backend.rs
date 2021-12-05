@@ -190,7 +190,7 @@ impl YarnSpec {
 				.await?;
 			let listing: PackageListing = serde_json::from_str(&body)?;
 			debug!("package listing for {:?}: {:?}", self.spec.id, listing);
-			self.spec.src = Src::Archive(Archive::new(listing.dist.tarball));
+			self.spec.src = Src::Archive(Archive::without_digest(listing.dist.tarball));
 			Ok(())
 		})()
 		.await;

@@ -30,11 +30,11 @@ pub fn cache_root() -> PathBuf {
 }
 
 pub fn cache_hash(src: &str) -> String {
-	use data_encoding::BASE32;
+	use data_encoding::BASE32_NOPAD;
 	use sha2::{Digest, Sha256};
 	let mut hasher = Sha256::new();
 	hasher.update(src);
-	BASE32.encode(&hasher.finalize())
+	BASE32_NOPAD.encode(&hasher.finalize())
 }
 
 pub struct CachedRepo {
@@ -163,7 +163,7 @@ pub async fn nix_digest_of_path<P: AsRef<Path>>(path: P) -> Result<NixHash> {
 			.arg("-euo")
 			.arg("pipefail")
 			.arg("-c")
-			.arg("nix-store --dump \"$DIR\" | nix-hash --type sha256 --flat --base16 /dev/stdin")
+			.arg("nix-store --dump \"$DIR\" | nix-hash --type sha256 --flat /dev/stdin")
 			.env("DIR", path.as_ref()),
 	)
 	.await?;

@@ -56,6 +56,7 @@ impl CargoLock {
 					"https://crates.io/api/v1/crates/{}/{}/download",
 					&package.name, &package.version
 				)),
+				digest: None,
 			})),
 		}
 		partial.id.set_name(package.name.to_string());

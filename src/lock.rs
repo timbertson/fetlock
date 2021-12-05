@@ -245,13 +245,24 @@ impl Url {
 pub struct Archive {
 	pub name: Option<String>,
 	pub url: Url,
+	pub digest: Option<NixHash>,
 }
 
 impl Archive {
-	pub fn new(s: String) -> Self {
+	pub fn new(s: String, digest: Option<NixHash>) -> Self {
 		Self {
 			name: None,
 			url: Url::new(s),
+			digest
+		}
+	}
+
+	// TODO remove all uses, use `new` with explicit None when no digest is available.
+	pub fn without_digest(s: String) -> Self {
+		Self {
+			name: None,
+			url: Url::new(s),
+			digest: None,
 		}
 	}
 }
@@ -271,6 +282,15 @@ impl Src {
 			Src::Archive(_) => true,
 			Src::RelativePath(_) => false,
 			Src::None => false,
+		}
+	}
+
+	pub fn supplied_digest(&self) -> Option<Option<&NixHash>> {
+		match self {
+			Src::Github(_) => None,
+			Src::Archive(a) => Some(a.digest.as_ref()),
+			Src::RelativePath(_) => None,
+			Src::None => None,
 		}
 	}
 
@@ -333,7 +353,7 @@ impl SrcDigest<'_> {
 				)
 			}
 			Src::Archive(archive) => {
-				let Archive { url, name } = archive;
+				let Archive { url, name, digest: _ } = archive;
 				let mut attrs = vec![
 					("url", Expr::str(url.0.to_owned())),
 					("hash", Expr::str(digest.sri_string())),

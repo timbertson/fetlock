@@ -16,6 +16,7 @@ mod stream_util;
 mod string_util;
 pub use opts::CliOpts;
 pub use opts::WriteOpts;
+pub use hash::{NixHash, HashAlg};
 pub mod hash;
 pub mod err;
 pub mod fetch;

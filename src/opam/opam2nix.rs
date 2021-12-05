@@ -65,23 +65,11 @@ pub struct Request {
 #[derive(Clone, Debug, serde::Deserialize)]
 pub struct Src {
 	pub url: String,
-	pub digests: Vec<(HashAlg, String)>,
+	pub digests: Vec<(String, String)>,
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
 pub struct Command(pub Vec<String>);
-
-#[derive(Clone, Debug, serde::Deserialize)]
-pub enum HashAlg {
-	#[serde(rename = "md5")]
-	Md5,
-
-	#[serde(rename = "sha256")]
-	Sha256,
-
-	#[serde(rename = "sha512")]
-	Sha512,
-}
 
 #[derive(Clone, Debug, Default, serde::Deserialize)]
 pub struct Depexts {

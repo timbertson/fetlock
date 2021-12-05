@@ -676,12 +676,20 @@ impl EsySrcInfoVisitor {
 				})
 			}
 			"archive" => {
-				let mut it = src.splitn(2, "#");
-				let url = it.next().unwrap().to_owned();
-				// TODO handle (optional?) digest after hash
+				let mut it = src.split("#");
+				let invalid = || anyhow!("invalid archive: {}", src);
+				let url = it.next().ok_or_else(invalid)?.to_owned();
+				let digest = match it.next() {
+					None => None,
+					Some(d) => {
+						let mut parts = d.splitn(2, ':');
+						let alg = HashAlg::parse(parts.next().ok_or_else(invalid)?)?;
+						Some(NixHash::from_hex(alg, parts.next().ok_or_else(invalid)?)?)
+					}
+				};
 				// TODO handle (optional) manifest
 				Ok(EsySrcInfo {
-					src: EsySrc::Remote(Src::Archive(Archive::without_digest(url))),
+					src: EsySrc::Remote(Src::Archive(Archive::new(url, digest))),
 					manifest: None,
 					opam: None,
 				})

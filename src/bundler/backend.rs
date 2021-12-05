@@ -1,6 +1,8 @@
 // yarn.lock backend
 use crate::*;
+use log::*;
 use anyhow::*;
+use crate::stream_util::map_parallel;
 use async_trait::async_trait;
 use serde::Deserialize;
 use std::path::PathBuf;
@@ -18,6 +20,12 @@ pub struct RawSpec {
 pub struct RawFile {
 	toplevel: Vec<String>,
 	specs: Vec<RawSpec>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct GemInfo {
+	gem_uri: String,
+	sha: String,
 }
 
 struct PartialBundlerSpec {
@@ -56,20 +64,9 @@ impl Backend for BundlerLock {
 		let roots: Vec<Key> = toplevel.into_iter().map(Key::new).collect();
 		lock.set_root(Root::Virtual(roots));
 
-		for spec in specs.into_iter() {
-			let RawSpec {
-				name,
-				version,
-				repository,
-				mut dependencies,
-			} = spec;
-			let mut spec = PartialSpec::empty();
-			let gem_url = format!("{}downloads/{}-{}.gem", &repository, &name, &version);
-			spec.set_src(Src::Archive(Archive::without_digest(gem_url)));
-			spec.id.set_name(name.clone());
-			spec.id.set_version(version);
-			spec.add_deps(&mut dependencies);
-			lock.add_impl(Key::new(name), spec.build()?);
+		let specs = BundlerLock::build_specs(specs).await?;
+		for spec in specs {
+			lock.add_impl(Key::new(spec.id.name.clone()), spec);
 		}
 
 		Ok(BundlerLock(lock))
@@ -85,5 +82,50 @@ impl Backend for BundlerLock {
 
 	async fn update_lockfile<'a>(root: &'a PathBuf, rel: &'a Option<String>) -> Result<()> {
 		cmd::exec(Command::new("bundle").arg("lock").arg("--update").current_dir(root)).await
+	}
+}
+
+impl BundlerLock {
+	async fn build_specs(raw: Vec<RawSpec>) -> Result<Vec<Spec>> {
+		info!(
+			"resolving {} package sources from online repository...",
+			raw.len()
+		);
+		let stream = futures::stream::iter(raw.into_iter());
+		map_parallel(10, stream, |raw| Self::build_spec(raw)).await
+	}
+
+	async fn build_spec(raw: RawSpec) -> Result<Spec> {
+		let RawSpec {
+			name,
+			version,
+			repository,
+			mut dependencies,
+		} = raw;
+		let desc = format!("populating src for {:?}", &name);
+
+		let mut spec = PartialSpec::empty();
+		spec.id.set_name(name.clone());
+		spec.id.set_version(version.clone());
+		spec.add_deps(&mut dependencies);
+
+		let src: Result<Src> = (|| async move {
+			// https://guides.rubygems.org/rubygems-org-api-v2/
+			let url = format!("{}api/v2/rubygems/{}/versions/{}.json", &repository, &name, &version);
+			let body = reqwest::get(&url)
+				.await
+				.with_context(|| format!("GET {}", &url))?
+				.text()
+				.await?;
+			let listing: GemInfo = serde_json::from_str(&body)?;
+			
+			// The field is `sha`, but it's a sha256. Hope they don't change that.
+			let digest = NixHash::from_hex(HashAlg::Sha256, &listing.sha)?;
+
+			debug!("package listing for {:?}: {:?}", &name, listing);
+			Ok(Src::Archive(Archive::new(listing.gem_uri, Some(digest))))
+		})().await;
+		spec.set_src(src.with_context(|| desc)?);
+		spec.build()
 	}
 }

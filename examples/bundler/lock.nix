@@ -27,8 +27,8 @@ in
         ("websocket-driver")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:0dr6w3h7i7xyqd04aw66x2ddm7xinvlw02pkk1sxczi8x21z16hf";
-        url = "https://rubygems.org/downloads/actioncable-6.1.3.1.gem";
+        hash = "sha256-Dprwg+goftZ1mPMKwOm2sZ/amujGcEVAw76feODgJjc=";
+        url = "https://rubygems.org/gems/actioncable-6.1.3.1.gem";
       });
     };
     actionmailbox = {
@@ -43,8 +43,8 @@ in
         ("mail")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:0w3cq2m1qbmxp7yv3qs82ffn9y46vq5q04vqwxak6ln0ki0v4hn4";
-        url = "https://rubygems.org/downloads/actionmailbox-6.1.3.1.gem";
+        hash = "sha256-xEKyQZzAUjNV53gTgAvehvhknRNI47H9ub0uHKrAbHA=";
+        url = "https://rubygems.org/gems/actionmailbox-6.1.3.1.gem";
       });
     };
     actionmailer = {
@@ -59,8 +59,8 @@ in
         ("rails-dom-testing")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:1wsa6kcgjx5am9hn44q2afg174m2gda4n8bfk5na17nj48s9g1ii";
-        url = "https://rubygems.org/downloads/actionmailer-6.1.3.1.gem";
+        hash = "sha256-MYaXNCLSnqBsmW4hS1R7opITnlMCE2Jhqqp0+dg0SvM=";
+        url = "https://rubygems.org/gems/actionmailer-6.1.3.1.gem";
       });
     };
     actionpack = {
@@ -75,8 +75,8 @@ in
         ("rails-html-sanitizer")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:0brr9kbmmc4fr2x8a7kj88yv8whfjfvalik3h82ypxlbg5b1c9iz";
-        url = "https://rubygems.org/downloads/actionpack-6.1.3.1.gem";
+        hash = "sha256-PyYWVnmL9usFgmNGqraTDnK0PUJyHoW6yI6wWtdMOS8=";
+        url = "https://rubygems.org/gems/actionpack-6.1.3.1.gem";
       });
     };
     actiontext = {
@@ -90,8 +90,8 @@ in
         ("nokogiri")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:04f7x7ycg73zc2v3lhvrnl072f7nl0nhp0sspfa2sqq14v4akmmb";
-        url = "https://rubygems.org/downloads/actiontext-6.1.3.1.gem";
+        hash = "sha256-q9apyCYBYy2Uu1qDCy2g9jhxALV5Qzq2YH+cx/zpxxE=";
+        url = "https://rubygems.org/gems/actiontext-6.1.3.1.gem";
       });
     };
     actionview = {
@@ -105,8 +105,8 @@ in
         ("rails-html-sanitizer")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:0m009iki20hhwwj713bqdw57hmz650l7drfbajw32xn2qnawf294";
-        url = "https://rubygems.org/downloads/actionview-6.1.3.1.gem";
+        hash = "sha256-JAnHlcXCdjG4VMvldigo5ld4Cm94jXAk5xACEWdMAFQ=";
+        url = "https://rubygems.org/gems/actionview-6.1.3.1.gem";
       });
     };
     activejob = {
@@ -117,8 +117,8 @@ in
         ("globalid")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:0zjwcfr4qyff9ln4hhjb1csbjpvr3z4pdgvg8axvhcs86h4xpy2n";
-        url = "https://rubygems.org/downloads/activejob-6.1.3.1.gem";
+        hash = "sha256-VvjbCTRIM7i7Qm+/dskfeV+5NAtLQkgsTc55TLJjXH4=";
+        url = "https://rubygems.org/gems/activejob-6.1.3.1.gem";
       });
     };
     activemodel = {
@@ -128,8 +128,8 @@ in
         ("activesupport")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:118slj94hif5g1maaijlxsywrq75h7qdz20bq62303pkrzabjaxm";
-        url = "https://rubygems.org/downloads/activemodel-6.1.3.1.gem";
+        hash = "sha256-tSu51M/zDjCEwQuI3/CB5eDMve5URqVqeMVFSJKkGoU=";
+        url = "https://rubygems.org/gems/activemodel-6.1.3.1.gem";
       });
     };
     activerecord = {
@@ -140,8 +140,8 @@ in
         ("activesupport")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:1jva5iqnjmj76mhhxcvx6xzda071cy80bhxn3r79f76pvgwwyymg";
-        url = "https://rubygems.org/downloads/activerecord-6.1.3.1.gem";
+        hash = "sha256-r3rP+dvXHJdOHrbDBZBn4QDVfjd9sw5hNUdWaXEsass=";
+        url = "https://rubygems.org/gems/activerecord-6.1.3.1.gem";
       });
     };
     activestorage = {
@@ -156,8 +156,8 @@ in
         ("mini_mime")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:1800ski0619mzyk2p2xcmy4xlym18g3lbqw8wb3ss06jhvn5dl5p";
-        url = "https://rubygems.org/downloads/activestorage-6.1.3.1.gem";
+        hash = "sha256-t9BW7IbSAK3H4ojjRcdDoXraia+siyum/zUFA+LUAKA=";
+        url = "https://rubygems.org/gems/activestorage-6.1.3.1.gem";
       });
     };
     activesupport = {
@@ -171,8 +171,8 @@ in
         ("zeitwerk")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:0l0khgrb7zn611xjnmygv5wdxh7wq645f613wldn5397q5w3l9lc";
-        url = "https://rubygems.org/downloads/activesupport-6.1.3.1.gem";
+        hash = "sha256-jCY6eMEnjWIb5SMYV4jB/MDeeNnPVyt7CMb+s/KDE1A=";
+        url = "https://rubygems.org/gems/activesupport-6.1.3.1.gem";
       });
     };
     builder = {
@@ -181,8 +181,8 @@ in
       depKeys = [
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:045wzckxpwcqzrjr353cxnyaxgf0qg22jh00dcx7z38cys5g1jlr";
-        url = "https://rubygems.org/downloads/builder-3.2.4.gem";
+        hash = "sha256-mcrwivYMjX86awBAKcTDwL2uvO1slJFl/pjx2yf7vBA=";
+        url = "https://rubygems.org/gems/builder-3.2.4.gem";
       });
     };
     concurrent-ruby = {
@@ -191,8 +191,8 @@ in
       depKeys = [
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:0mr23wq0szj52xnj0zcn1k0c7j4v79wlwbijkpfcscqww3l6jlg3";
-        url = "https://rubygems.org/downloads/concurrent-ruby-1.1.8.gem";
+        hash = "sha256-41Fp6OAcM83cnTIuTnk6m8jDwAyWfSBtF0V+DTAfIlc=";
+        url = "https://rubygems.org/gems/concurrent-ruby-1.1.8.gem";
       });
     };
     crass = {
@@ -201,8 +201,8 @@ in
       depKeys = [
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:0pfl5c0pyqaparxaqxi6s4gfl21bdldwiawrc0aknyvflli60lfw";
-        url = "https://rubygems.org/downloads/crass-1.0.6.gem";
+        hash = "sha256-3FFgIqVuezsVYJmryBttKwjqHtEmdqx6VldhfwEr1F0=";
+        url = "https://rubygems.org/gems/crass-1.0.6.gem";
       });
     };
     erubi = {
@@ -211,8 +211,8 @@ in
       depKeys = [
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:09l8lz3j00m898li0yfsnb6ihc63rdvhw3k5xczna5zrjk104f2l";
-        url = "https://rubygems.org/downloads/erubi-1.10.0.gem";
+        hash = "sha256-VDgCwpT5F2U/62UODnfLwzAYzbLaeRApSqgCIMeniCY=";
+        url = "https://rubygems.org/gems/erubi-1.10.0.gem";
       });
     };
     globalid = {
@@ -222,8 +222,8 @@ in
         ("activesupport")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:1zkxndvck72bfw235bd9nl2ii0lvs5z88q14706cmn702ww2mxv1";
-        url = "https://rubygems.org/downloads/globalid-0.4.2.gem";
+        hash = "sha256-YfcqOBfg2MoMOCRghH7Rm4IYBbWprTIEd0ucyXazff4=";
+        url = "https://rubygems.org/gems/globalid-0.4.2.gem";
       });
     };
     i18n = {
@@ -233,8 +233,8 @@ in
         ("concurrent-ruby")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:0g2fnag935zn2ggm5cn6k4s4xvv53v2givj1j90szmvavlpya96a";
-        url = "https://rubygems.org/downloads/i18n-1.8.10.gem";
+        hash = "sha256-yiTlL91q169BkkHu+MQeZe9ONJnGslLfE/aXkZ6yTjw=";
+        url = "https://rubygems.org/gems/i18n-1.8.10.gem";
       });
     };
     loofah = {
@@ -245,8 +245,8 @@ in
         ("nokogiri")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:1w9mbii8515p28xd4k72f3ab2g6xiyq15497ys5r8jn6m355lgi7";
-        url = "https://rubygems.org/downloads/loofah-2.9.1.gem";
+        hash = "sha256-Jz5ayqjGSpSL9ieRErCP3Tyx1HDiTNI6EreEgmJcNfE=";
+        url = "https://rubygems.org/gems/loofah-2.9.1.gem";
       });
     };
     mail = {
@@ -256,8 +256,8 @@ in
         ("mini_mime")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:00wwz6ys0502dpk8xprwcqfwyf3hmnx6lgxaiq6vj43mkx43sapc";
-        url = "https://rubygems.org/downloads/mail-2.7.1.gem";
+        hash = "sha256-7Co9SJ91ELkNjqo/arqtcDjPHWY8347mbQIUoL35nAM=";
+        url = "https://rubygems.org/gems/mail-2.7.1.gem";
       });
     };
     marcel = {
@@ -266,8 +266,8 @@ in
       depKeys = [
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:0bp001p687nsa4a8sp3q1iv8pfhs24w7s3avychjp64sdkg6jxq3";
-        url = "https://rubygems.org/downloads/marcel-1.0.1.gem";
+        hash = "sha256-A3dp3myamCsh81sNfTgRGrqLdgx4XI0UUdoeZG4A4C4=";
+        url = "https://rubygems.org/gems/marcel-1.0.1.gem";
       });
     };
     method_source = {
@@ -276,8 +276,8 @@ in
       depKeys = [
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:1pnyh44qycnf9mzi1j6fywd5fkskv3x7nmsqrrws0rjn5dd4ayfp";
-        url = "https://rubygems.org/downloads/method_source-1.0.0.gem";
+        hash = "sha256-13lFWitWZqB5zlhXe/rYU09XGvfOyBB/Tc4yjwmB3t4=";
+        url = "https://rubygems.org/gems/method_source-1.0.0.gem";
       });
     };
     mini_mime = {
@@ -286,8 +286,8 @@ in
       depKeys = [
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:1np6srnyagghhh2w4nyv09sz47v0i6ri3q6blicj94vgxqp12c94";
-        url = "https://rubygems.org/downloads/mini_mime-1.0.3.gem";
+        hash = "sha256-JDERLu5vkyRZpMvgEbOJYB/ydQLbW8IFhPA95W3W5to=";
+        url = "https://rubygems.org/gems/mini_mime-1.0.3.gem";
       });
     };
     mini_portile2 = {
@@ -296,8 +296,8 @@ in
       depKeys = [
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:1hdbpmamx8js53yk3h8cqy12kgv6ca06k0c9n3pxh6b6cjfs19x7";
-        url = "https://rubygems.org/downloads/mini_portile2-2.5.0.gem";
+        hash = "sha256-p6egnWRmGdjvsImBaYBiZr8pgscMwTH9KFqiXlW9q8E=";
+        url = "https://rubygems.org/gems/mini_portile2-2.5.0.gem";
       });
     };
     minitest = {
@@ -306,8 +306,8 @@ in
       depKeys = [
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:19z7wkhg59y8abginfrm2wzplz7py3va8fyngiigngqvsws6cwgl";
-        url = "https://rubygems.org/downloads/minitest-5.14.4.gem";
+        hash = "sha256-9HFmNNcbP/tifNY7pPbw93x6Pxc1OxvfUsin8uDk56c=";
+        url = "https://rubygems.org/gems/minitest-5.14.4.gem";
       });
     };
     nio4r = {
@@ -316,8 +316,8 @@ in
       depKeys = [
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:00fwz0qq7agd2xkdz02i8li236qvwhma3p0jdn5bdvc21b7ydzd5";
-        url = "https://rubygems.org/downloads/nio4r-2.5.7.gem";
+        hash = "sha256-WmoCbL3gRJizB7NbND+6up40dJ4IUIYQrueRmrlGXqw=";
+        url = "https://rubygems.org/gems/nio4r-2.5.7-java.gem";
       });
     };
     nokogiri = {
@@ -328,8 +328,8 @@ in
         ("racc")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:19d78mdg2lbz9jb4ph6nk783c9jbsdm8rnllwhga6pd53xffp6x0";
-        url = "https://rubygems.org/downloads/nokogiri-1.11.3.gem";
+        hash = "sha256-oJvrXB+lXaMe5JTajGrTSyY20JnWwEuWTH9R8VpFp6U=";
+        url = "https://rubygems.org/gems/nokogiri-1.11.3.gem";
       });
     };
     racc = {
@@ -338,8 +338,8 @@ in
       depKeys = [
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:178k7r0xn689spviqzhvazzvxfq6fyjldxb3ywjbgipbfi4s8j1g";
-        url = "https://rubygems.org/downloads/racc-1.5.2.gem";
+        hash = "sha256-EQu/nNbybuoihS/hEuJROU3/rBcmisDJld+HmOZ0G4c=";
+        url = "https://rubygems.org/gems/racc-1.5.2-java.gem";
       });
     };
     rack = {
@@ -348,8 +348,8 @@ in
       depKeys = [
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:0i5vs0dph9i5jn8dfc6aqd6njcafmb20rwqngrf759c9cvmyff16";
-        url = "https://rubygems.org/downloads/rack-2.2.3.gem";
+        hash = "sha256-Jjjn62aJpXJcfhbzDMSqTjFpTcPKMNeQlSUmeBvQu0Q=";
+        url = "https://rubygems.org/gems/rack-2.2.3.gem";
       });
     };
     rack-test = {
@@ -359,8 +359,8 @@ in
         ("rack")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:0rh8h376mx71ci5yklnpqqn118z3bl67nnv5k801qaqn1zs62h8m";
-        url = "https://rubygems.org/downloads/rack-test-1.1.0.gem";
+        hash = "sha256-FUFh9A8WKxwAmmVbewxd46MQLMbX0ulLZOH0as6ACGY=";
+        url = "https://rubygems.org/gems/rack-test-1.1.0.gem";
       });
     };
     rails = {
@@ -383,8 +383,8 @@ in
         ("sprockets-rails")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:1yl6wy2gfvjkq0457plwadk7jwx5sbpqxl9aycbphskisis9g238";
-        url = "https://rubygems.org/downloads/rails-6.1.3.1.gem";
+        hash = "sha256-aIiXdNRxangX8yrRju/SpXN5ZlOc3lMIwFNu94Tnhvo=";
+        url = "https://rubygems.org/gems/rails-6.1.3.1.gem";
       });
     };
     rails-dom-testing = {
@@ -395,8 +395,8 @@ in
         ("nokogiri")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:1lfq2a7kp2x64dzzi5p4cjcbiv62vxh9lyqk2f0rqq3fkzrw8h5i";
-        url = "https://rubygems.org/downloads/rails-dom-testing-2.0.3.gem";
+        hash = "sha256-sUDE859uYJyBExN7mmDfwuy4mGTklvh/I6aLO48S2NE=";
+        url = "https://rubygems.org/gems/rails-dom-testing-2.0.3.gem";
       });
     };
     rails-html-sanitizer = {
@@ -406,8 +406,8 @@ in
         ("loofah")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:1icpqmxbppl4ynzmn6dx7wdil5hhq6fz707m9ya6d86c7ys8sd4f";
-        url = "https://rubygems.org/downloads/rails-html-sanitizer-1.3.0.gem";
+        hash = "sha256-jjSNtD/MoGaUT/WA853BEBYaGz+9GVu/9YTeu3rFl8U=";
+        url = "https://rubygems.org/gems/rails-html-sanitizer-1.3.0.gem";
       });
     };
     railties = {
@@ -421,8 +421,8 @@ in
         ("thor")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:1m3ckisji9n3li2700jpkyncsrh5b2z20zb0b4jl5x16cwsymr7b";
-        url = "https://rubygems.org/downloads/railties-6.1.3.1.gem";
+        hash = "sha256-6+TqNWcm9EIlWWB9IL5YBWbNrJ9XAnBEpMOmKHWcbNQ=";
+        url = "https://rubygems.org/gems/railties-6.1.3.1.gem";
       });
     };
     rake = {
@@ -431,8 +431,8 @@ in
       depKeys = [
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:1iik52mf9ky4cgs38fp2m8r6skdkq1yz23vh18lk95fhbcxb6a67";
-        url = "https://rubygems.org/downloads/rake-13.0.3.gem";
+        hash = "sha256-xyizOlvQlTQpCnAP8X3As01tMqriOjT0Y8TP5KooM8Y=";
+        url = "https://rubygems.org/gems/rake-13.0.3.gem";
       });
     };
     sprockets = {
@@ -443,8 +443,8 @@ in
         ("rack")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:0ikgwbl6jv3frfiy3xhg5yxw9d0064rgzghar1rg391xmrc4gm38";
-        url = "https://rubygems.org/downloads/sprockets-4.0.2.gem";
+        hash = "sha256-aNRHWK49pPFyyAq+/zIxALTEuy8P9uGjy25saejib0Y=";
+        url = "https://rubygems.org/gems/sprockets-4.0.2.gem";
       });
     };
     sprockets-rails = {
@@ -456,8 +456,8 @@ in
         ("sprockets")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:0mwmz36265646xqfyczgr1mhkm1hfxgxxvgdgr4xfcbf2g72p1k2";
-        url = "https://rubygems.org/downloads/sprockets-rails-3.2.2.gem";
+        hash = "sha256-YoYrzhNuMddJfu3t3l93MNQJa8jvM+9wN8QUI8z4lVc=";
+        url = "https://rubygems.org/gems/sprockets-rails-3.2.2.gem";
       });
     };
     thor = {
@@ -466,8 +466,8 @@ in
       depKeys = [
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:18yhlvmfya23cs3pvhr1qy38y41b6mhr5q9vwv5lrgk16wmf3jna";
-        url = "https://rubygems.org/downloads/thor-1.1.0.gem";
+        hash = "sha256-ysrhKjdhvkzL5jvhkmE1KxCPhschw32HZkMo7+qm0KM=";
+        url = "https://rubygems.org/gems/thor-1.1.0.gem";
       });
     };
     tzinfo = {
@@ -477,8 +477,8 @@ in
         ("concurrent-ruby")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:10qp5x7f9hvlc0psv9gsfbxg4a7s0485wsbq1kljkxq94in91l4z";
-        url = "https://rubygems.org/downloads/tzinfo-2.0.4.gem";
+        hash = "sha256-n9CQbCQJ9ynpDHhpXhAB+ijy+nL6pa0vYHTD5E4vF4M=";
+        url = "https://rubygems.org/gems/tzinfo-2.0.4.gem";
       });
     };
     websocket-driver = {
@@ -488,8 +488,8 @@ in
         ("websocket-extensions")
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:1i3rs4kcj0jba8idxla3s6xd1xfln3k8b4cb1dik2lda3ifnp3dh";
-        url = "https://rubygems.org/downloads/websocket-driver-0.7.3.gem";
+        hash = "sha256-m3GiaIzKZvm025qTntog4M9gA9OqOAqDH+U0zXFCnfI=";
+        url = "https://rubygems.org/gems/websocket-driver-0.7.3-java.gem";
       });
     };
     websocket-extensions = {
@@ -498,8 +498,8 @@ in
       depKeys = [
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:0hc2g9qps8lmhibl5baa91b4qx8wqw872rgwagml78ydj8qacsqw";
-        url = "https://rubygems.org/downloads/websocket-extensions-0.1.5.gem";
+        hash = "sha256-HGumMJLNo0PrU/xlcRDHHHVMVkhKrUJXhJUifXF6gkE=";
+        url = "https://rubygems.org/gems/websocket-extensions-0.1.5.gem";
       });
     };
     zeitwerk = {
@@ -508,8 +508,8 @@ in
       depKeys = [
       ];
       src = (pkgs.fetchurl {
-        hash = "sha256:1746czsjarixq0x05f7p3hpzi38ldg6wxnxxw74kbjzh1sdjgmpl";
-        url = "https://rubygems.org/downloads/zeitwerk-2.4.2.gem";
+        hash = "sha256-9NYnmw7wyzXJ4b3bzs1rFI34Lxz3uAI6wD1mJfVnhpw=";
+        url = "https://rubygems.org/gems/zeitwerk-2.4.2.gem";
       });
     };
   };

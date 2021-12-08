@@ -118,6 +118,15 @@ mod tests {
 	use super::*;
 
 	#[test]
+	fn test_hash_alg_order() {
+		use HashAlg::*;
+		let mut all = vec!(Sha1, Sha512, Sha256, Md5);
+		all.sort();
+		assert_eq!(all, vec!(Md5, Sha1, Sha256, Sha512));
+		assert_eq!(all.into_iter().max(), Some(Sha512));
+	}
+
+	#[test]
 	fn test_sri() {
 		NixHash::parse_sri("sha256-uwehbMgcghqFcnaTyrlF5KI7QvLTdUMERuAopgTdm7A=").unwrap();
 	}

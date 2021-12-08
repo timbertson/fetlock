@@ -18,11 +18,16 @@ use tokio::fs;
 use tokio::process::Command;
 
 pub async fn populate_source_digests<S: AsSpec>(lock: &mut Lock<S>) -> Result<()> {
-	let possible_digests = lock.specs.values().filter_map(|x|
-		x.as_spec_ref().src.supplied_digest().map(|d| d.is_some())
-	).collect::<Vec<bool>>();
-	let supplied_digests = possible_digests.iter().filter(|d| **d).count();
-	info!("Digests presupplied for {} of {} sources", supplied_digests, possible_digests.len());
+	let missing_digests = lock.specs.values().filter(|x|
+		match x.as_spec_ref().src.supplied_digest() {
+			None => false, // no digest possible / needed
+			Some(None) => true, // missing
+			Some(Some(_)) => false, // present
+		}
+	).count();
+	if missing_digests > 0 {
+		warn!("Backend didn't supply digests for {} sources", missing_digests);
+	}
 	let impls = lock.specs.values_mut().map(|x| x.as_spec_mut());
 	let result = foreach_unordered(8, futures::stream::iter(impls), |i| ensure_digest(i)).await;
 	result
@@ -224,13 +229,21 @@ pub async fn realise_sources<'a, It: Iterator<Item = (&'a Key, &'a Spec)>>(
 	let pairs = specs
 		.filter_map(|(k, spec)| spec.src_digest().map(|digest| (k, digest)))
 		.collect::<Vec<(&Key, SrcDigest)>>();
+	if pairs.is_empty() {
+		return Ok(HashMap::new());
+	}
 	info!("realising: {} sources...", pairs.len());
 	let paths = FetchMany::digests(pairs.iter().map(|(_key, digest)| digest))?
 		.realise()
 		.await.with_context(|| {
 			let mut lines = pairs.iter().map(|(key, src_digest)| {
 				let SrcDigest { src, digest } = src_digest;
-				format!("{} // {:?}", digest.sri(), get_cache_path(&src))
+				if src.supplied_digest().flatten().is_some() {
+					// no cache path used; digest is taken from src
+					format!("{}", digest.sri())
+				} else {
+					format!("{} from {:?}", digest.sri(), get_cache_path(&src))
+				}
 			}).collect::<Vec<String>>();
 			lines.sort();
 			format!("Failed realising sources:\n{}", lines.join("\n"))

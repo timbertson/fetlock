@@ -119,6 +119,6 @@ pub async fn solve(request: &Request) -> Result<Solution> {
 	}
 	let contents =
 		cmd::run_stdout("opam2nix extract", Some(&serialized_request), &mut command).await?;
-	debug!("response: {}", &contents);
+	debug!("opam2nix extract result: {}", &contents);
 	Ok(serde_json::from_str(&contents)?)
 }

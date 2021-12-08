@@ -243,7 +243,7 @@ impl CliOpts {
 	fn type_from(filename: &str) -> Option<(lock::Type, &str)> {
 		// Note that we can infer a lock file which may not exist (yet),
 		// based on a spec file
-		if filename == "package.json" {
+		if filename == "package.json" || filename == "yarn.lock" {
 			Some((lock::Type::Yarn, "yarn.lock"))
 		} else if filename == "Cargo.toml" || filename == "Cargo.lock" {
 			Some((lock::Type::Cargo, "Cargo.lock"))
@@ -260,9 +260,10 @@ impl CliOpts {
 	}
 
 	async fn detect_type(src: &mut LockSrc) -> Result<lock::Type> {
-		let detected = if let Some(lockfile) = src.lockfile.as_ref() {
+		if let Some(lockfile) = src.lockfile.as_ref() {
 			debug!("detecting based on lockfile name: {:?}", lockfile);
 			Self::type_from(lockfile).map(|(t, _)| t)
+				.ok_or_else(|| anyhow!("Couldn't determint lock type from lock file name, you'll have to also specify --type/-t"))
 		} else {
 			// detect based on file presence
 			let local_src = src.resolve().await?;
@@ -278,16 +279,16 @@ impl CliOpts {
 			if types.len() > 1 {
 				return Err(anyhow!("Ambiguous lock type found ({:?})\nYou must specify `--lockfile` or `--type`", &types));
 			}
-			if let Some((t, lockfile)) = types.into_iter().next() {
+			let detected = if let Some((t, lockfile)) = types.into_iter().next() {
 				src.lockfile = Some(lockfile);
 				info!("Detected lock type: {}", t);
 				Some(t)
 			} else {
 				None
-			}
-		};
+			};
 
-		detected.ok_or_else(|| anyhow!("Couldn't autodetect lock type, use --type/-t"))
+			detected.ok_or_else(|| anyhow!("Couldn't autodetect lock type, use --type/-t"))
+		}
 	}
 }
 

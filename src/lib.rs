@@ -11,6 +11,7 @@ mod cmd;
 mod lock_src;
 pub use lock_src::*;
 mod nom_util;
+mod fs_util;
 mod opts;
 mod stream_util;
 mod string_util;

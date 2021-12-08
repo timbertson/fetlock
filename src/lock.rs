@@ -256,15 +256,6 @@ impl Archive {
 			digest
 		}
 	}
-
-	// TODO remove all uses, use `new` with explicit None when no digest is available.
-	pub fn without_digest(s: String) -> Self {
-		Self {
-			name: None,
-			url: Url::new(s),
-			digest: None,
-		}
-	}
 }
 
 #[derive(Debug, Clone)]

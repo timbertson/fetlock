@@ -278,7 +278,7 @@ impl Backend for EsyLock {
 			src_digest: None,
 		};
 
-		let contents = std::fs::read_to_string(src_file.lock_path())?;
+		let contents = crate::fs_util::read_to_string(src_file.lock_path())?;
 		let lockfile: EsyLockFile = serde_json::from_str(&contents)?;
 		Ok(EsyLock {
 			src: src_file.clone(),

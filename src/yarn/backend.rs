@@ -13,7 +13,6 @@ use serde::Deserialize;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
-use std::fs;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
@@ -35,10 +34,10 @@ impl Backend for YarnLock {
 
 		let mut package_json_path = lock_path.clone();
 		package_json_path.set_file_name("package.json");
-		let json_contents = fs::read_to_string(package_json_path)?;
+		let json_contents = fs_util::read_to_string(package_json_path)?;
 		let package_json: PackageJSON = serde_json::from_str(&json_contents)?;
 
-		let yaml_contents = fs::read_to_string(lock_path)?;
+		let yaml_contents = fs_util::read_to_string(lock_path)?;
 		let mut lockfile: YarnLockFile = serde_yaml::from_str(&yaml_contents)?;
 		lockfile.fixup_keys()?;
 
@@ -102,7 +101,8 @@ impl Backend for YarnLock {
 #[derive(Debug, Clone, Deserialize)]
 struct PackageDist {
 	tarball: String,
-	// todo shaSum
+	shasum: Option<String>, // sha1
+	integrity: Option<String>, // SRI hash
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -190,7 +190,15 @@ impl YarnSpec {
 				.await?;
 			let listing: PackageListing = serde_json::from_str(&body)?;
 			debug!("package listing for {:?}: {:?}", self.spec.id, listing);
-			self.spec.src = Src::Archive(Archive::without_digest(listing.dist.tarball));
+			let digest = match &listing.dist.integrity {
+				Some(sri) => Some(NixHash::parse_sri(sri)?),
+				None => match &listing.dist.shasum {
+					Some(sha1) => Some(NixHash::from_hex(HashAlg::Sha1, sha1)?),
+					None => None,
+				}
+			};
+
+			self.spec.src = Src::Archive(Archive::new(listing.dist.tarball, digest));
 			Ok(())
 		})()
 		.await;
@@ -199,7 +207,7 @@ impl YarnSpec {
 
 	fn load_manifest(&mut self, extract: PathBuf) -> Result<()> {
 		let json_path = extract.join("package.json");
-		let json_contents = fs::read_to_string(&json_path)?;
+		let json_contents = fs_util::read_to_string(&json_path)?;
 		let package_json: PackageJSON = serde_json::from_str(&json_contents)?;
 		if !package_json.bin.is_empty() {
 			self.spec.extra.insert(

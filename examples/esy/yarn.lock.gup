@@ -1,0 +1,8 @@
+#!bash -eu
+
+# upstream uses yarn1, but we need a yarn2 lockfile...
+gup -u oni2
+cd oni2/node
+yarn set version berry
+yarn install --mode update-lockfile
+cp yarn.lock "$1"

@@ -1,3 +1,3 @@
 #!bash -eux
-gup -u ../../bin ../esy/node/yarn.lock
-../../bin/fetlock -o "$1" -p ../esy/node
+gup -u ../../bin ../esy/yarn.lock
+../../bin/fetlock --lockfile yarn.lock -o "$1" -p ../esy

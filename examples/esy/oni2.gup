@@ -1,0 +1,6 @@
+#!bash -eu
+gup -u COMMIT
+COMMIT="$(cat COMMIT)"
+git clone git@github.com:onivim/oni2.git "$1"
+cd "$1"
+git reset --hard "$COMMIT"

@@ -1,5 +1,5 @@
 #!bash -eux
-gup -u ../../bin ../yarn/lock.nix
+gup -u ../../bin ../yarn/lock.nix COMMIT
 nix-shell --show-trace -A ocamlShell ../../nix --run "../../bin/fetlock -o '$1' \
-  --github onivim/oni2#39bb26f68040326ecf4d03f6c4428c05f13a02d5 \
+  --github onivim/oni2#$(cat COMMIT) \
   --lockfile esy.lock"

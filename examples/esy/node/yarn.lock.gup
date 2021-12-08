@@ -1,4 +1,0 @@
-#!bash -eu
-yarn install
-gup --always
-gup --leave

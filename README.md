@@ -48,7 +48,7 @@ You can of course use your regular tooling to update your lockfile, and then reg
 The default generated `shell.nix` only includes fetlock and your package manager. It doesn't need a valid `nix/lock.nix`, so it should always work. For reference, it looks like this:
 
 ```
-(import ./nix/ {}).shell
+(import ./nix {}).shell
 ```
 
 Depending on your setup, you may prefer to replace the `.shell` attribute path:

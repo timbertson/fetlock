@@ -15,7 +15,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.8"
 futures = "0.3"
-anyhow = "1.0"
+anyhow = "=1.0.48" # https://github.com/dtolnay/anyhow/issues/201
 tokio = { version = "1.2", features = ["full"] }
 getopts = "0.2"
 sha2 = "0.9"
@@ -31,4 +31,4 @@ fs2 = "0.4"
 cargo_metadata = "0.14"
 cargo-platform = "0.1"
 platforms = "1"
-clap = "3.0.0-beta.5"
+clap = { version = "3.0.0-beta.5", features = [ "derive" ] }

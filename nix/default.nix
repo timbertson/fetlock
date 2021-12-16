@@ -1,4 +1,4 @@
-{ pkgs ? import <nixpkgs> {}, enableOcaml ? false }: with pkgs;
+{ pkgs ? import <nixpkgs> {} }: with pkgs;
 let
 	sources = (builtins.fromJSON (builtins.readFile ./wrangle.json)).sources;
 	wrangle = callPackage "${fetchFromGitHub sources.nix-wrangle.fetch}/nix/api.nix" {};

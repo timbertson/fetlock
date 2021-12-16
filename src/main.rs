@@ -167,12 +167,12 @@ in selection.root",
 	})?;
 
 	write_init_file(&init_opts, &root, "default.nix", |mut f| {
-		writeln!(f, "import ./nix/")?;
+		writeln!(f, "import ./nix")?;
 		Ok(())
 	})?;
 
 	write_init_file(&init_opts, &root, "shell.nix", |mut f| {
-		writeln!(f, "(import ./nix/ {{}}).shell")?;
+		writeln!(f, "(import ./nix {{}}).shell")?;
 		Ok(())
 	})?;
 

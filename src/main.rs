@@ -160,14 +160,14 @@ with pkgs;
 let
   fetlock = callPackage (builtins.fetchTarball \"https://github.com/timbertson/fetlock/archive/master.tar.gz\") {{}};
   selection = fetlock.{}.load ./lock.nix {{}};
-in selection.root",
+in selection",
 			opts.lock_type
 		)?;
 		Ok(())
 	})?;
 
 	write_init_file(&init_opts, &root, "default.nix", |mut f| {
-		writeln!(f, "import ./nix")?;
+		writeln!(f, "(import ./nix {{}}).root")?;
 		Ok(())
 	})?;
 

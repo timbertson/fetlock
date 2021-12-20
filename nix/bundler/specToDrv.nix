@@ -7,8 +7,5 @@ with prev.pkgs.lib;
 }@spec: final.buildRubyGem {
   inherit pname version src;
   gemName = pname;
-  
   propagatedBuildInputs = (map final.getDrv (filter (k: k != "bundler") depKeys));
-
-  buildInputs = [ final.ruby ]; # TODO correct ruby version?
 }

@@ -2,7 +2,7 @@ use crate::cmd;
 use crate::WriteOpts;
 use crate::hash::*;
 use crate::memoize::Memoize;
-use crate::{Expr, GitUrl, Src};
+use crate::{Expr, GitUrl};
 use anyhow::*;
 use futures::future::FutureExt;
 use log::*;
@@ -40,7 +40,6 @@ pub fn cache_hash(src: &str) -> String {
 pub struct CachedRepo {
 	pub path: PathBuf,
 	pub commit: String,
-	pub src: Src,
 	digest: Rc<Mutex<Memoize<Option<NixHash>>>>,
 }
 
@@ -138,7 +137,6 @@ impl CachedRepo {
 		};
 		Ok(CachedRepo {
 			commit: head_rev.to_owned(),
-			src: src.src_for_rev(head_rev),
 			path: repo_path,
 			digest: Rc::new(Mutex::new(Memoize::new(Box::pin(lazy_digest)))),
 		})

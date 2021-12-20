@@ -49,6 +49,8 @@ let
 
 					shellDeps = self.lockDependencies ++ [ self.fetlock pkgs.nix ];
 				in {
+					_catchWholesaleEvaluation = abort "\nYou appear to be evaluating the result of `fetlock.load`.\nYou probably meant to evaluate `root`, `fetlock`, `shell`, or a particular `drvsByName.PACKAGE_NAME`";
+
 					inherit pkgs getDrv fetlockImpls;
 
 					emptyDrv = stdenv.mkDerivation {
@@ -116,7 +118,6 @@ let
 					# placeholder for better error messages
 					mkDerivation = stdenv.mkDerivation;
 					specToAttrs = abort "specToAttrs must be overridden";
-					lockCommand = abort "lockCommand not set for this backend";
 					
 					# root may not always be buildable, since not all backends
 					# have enough package metadata for that
@@ -165,9 +166,9 @@ let
 						if isStorePath p
 							then p
 							else (
-								if pathExists "${p}/.git"
+								if pathExists (p + "/.git")
 									then builtins.fetchGit { url = p; }
-									else p
+									else warn "Using source path: ${p} - this is less efficient than using a git repository or overriding `src`" p
 							);
 
 					# shell makes the lock tool available (e.g. cargo, bundler, etc)

@@ -1,8 +1,10 @@
 // cargo backend
 use crate::*;
+use crate::cargo::registry::*;
 use anyhow::*;
 use log::*;
 use std::collections::HashMap;
+use std::hash::Hash;
 use tokio::process::Command;
 use std::env;
 use std::path::{Path, PathBuf};
@@ -15,19 +17,17 @@ use cargo_platform::Cfg;
 #[derive(Clone, Debug)]
 pub struct CargoLock(Lock<Spec>);
 
-struct CargoMeta<'a> {
+pub struct CargoMeta<'a> {
 	package: &'a Package,
 	node: &'a Node,
 }
 
+// TODO derive from pkk.name and version, rather than parsing
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-struct CargoKey(Key);
+struct CargoKey;
 impl CargoKey {
-	fn from(id: &PackageId) -> Self {
-		// cargo keys take the format `name version (repo-info)`. The repo-info is noisy (contains local paths) and
-		// generally shouldn't be important.
-		let significant_parts = id.repr.split(' ').take_while(|part| !part.starts_with('(')).collect::<Vec<&str>>().join(" ");
-		Self(Key::new(significant_parts))
+	fn from(pkg: &Package) -> Key {
+		Key::new(format!("{}-{}", &pkg.name, pkg.version.to_string()))
 	}
 }
 
@@ -42,22 +42,17 @@ impl CargoLock {
 		Ok(sub.as_ref().strip_prefix(base.as_ref())?.to_str().ok_or_else(||anyhow!("invalid path"))?)
 	}
 
-	fn package_spec(meta: &CargoMeta, packages: &HashMap<CargoKey, CargoMeta>, platform: &Platform) -> Result<(CargoKey, Spec)> {
+	async fn package_spec(registries: &mut Registries<'_>, meta: &CargoMeta<'_>, packages: &HashMap<PackageId, CargoMeta<'_>>, platform: &Platform) -> Result<Spec> {
 		let CargoMeta { package, node } = meta;
 		// code / concepts cribbed from https://github.com/kolloch/crate2nix/blob/4ea73d6a96f9dcf5cab70e454e39b33ca0bbaccb/crate2nix/src/resolve.rs
-		let key = CargoKey::from(&package.id);
-
 		let mut partial = PartialSpec::empty();
-		match package.source {
+		match &package.source {
 			None => partial.set_src(Src::None),
-			Some(_) => partial.set_src(Src::Archive(Archive {
-				name: Some("crate.tar.gz".to_owned()),
-				url: Url::new(format!(
-					"https://crates.io/api/v1/crates/{}/{}/download",
-					&package.name, &package.version
-				)),
-				digest: None,
-			})),
+			Some(registry_spec) => {
+				let src = registries.get_source(registry_spec, &meta.package).await
+					.with_context(|| format!("Getting source for {:?}", &meta.package.id))?;
+				partial.set_src(src);
+			},
 		}
 		partial.id.set_name(package.name.to_string());
 		partial.id.set_version(package.version.to_string());
@@ -69,10 +64,8 @@ impl CargoLock {
 		// we need to use the actual resolved deps for this package
 		let mut build_deps = Vec::new();
 		for dep in &node.deps {
-			// TODO implement crate renames
-			let key = CargoKey::from(&dep.pkg);
-			let dep_meta = packages.get(&key).ok_or_else(||
-				anyhow!("Resolution package missing for dependency {:?}", &key))?;
+			let dep_meta = packages.get(&dep.pkg).ok_or_else(||
+				anyhow!("Resolution package missing for dependency {:?}", &dep.pkg))?;
 
 			// cargo renames dash -> underscore by default, any other
 			// differences are explicit renames
@@ -83,6 +76,7 @@ impl CargoLock {
 				let rename_map = renames.entry(pkgname).or_insert_with(|| HashMap::new());
 				rename_map.insert(version, renamed);
 			}
+			let dep_key = CargoKey::from(&dep_meta.package);
 			for dep_kind in &dep.dep_kinds {
 				if let Some(platform_filter) = &dep_kind.target {
 					if !platform_filter.matches(platform.platform.target_triple, &platform.cfgs) {
@@ -91,9 +85,9 @@ impl CargoLock {
 					}
 				}
 				match dep_kind.kind {
-					DependencyKind::Normal => partial.add_dep(key.clone().0),
-					DependencyKind::Build => build_deps.push(key.clone().0),
-					DependencyKind::Unknown => partial.add_dep(key.clone().0),
+					DependencyKind::Normal => partial.add_dep(dep_key.clone()),
+					DependencyKind::Build => build_deps.push(dep_key.clone()),
+					DependencyKind::Unknown => partial.add_dep(dep_key.clone()),
 					DependencyKind::Development => (),
 				}
 			}
@@ -170,8 +164,7 @@ impl CargoLock {
 			}).collect()));
 		}
 
-		let spec = partial.build()?;
-		Ok((key, spec))
+		partial.build()
 	}
 	
 	async fn current_platform() -> Result<Platform> {
@@ -206,25 +199,28 @@ impl Backend for CargoLock {
 
 		let mut lock: Lock<Spec> = Lock::<Spec>::new(LockContext::new(lock::Type::Cargo));
 		let resolve = meta.resolve.ok_or_else(||anyhow!("Cargo metadata did not include resolution information"))?;
-		let root = resolve.root.ok_or_else(|| anyhow!("Cargo metadata has no root package"))?;
-		lock.set_root(Root::Package(CargoKey::from(&root).0));
-
-		let nodes: HashMap<CargoKey, &Node> = resolve.nodes.iter().map(|node| (CargoKey::from(&node.id), node)).collect();
+		let nodes: HashMap<PackageId, &Node> = resolve.nodes.iter().map(|node| (node.id.clone(), node)).collect();
 		let metas = {
-			let mut map: HashMap<CargoKey, CargoMeta<'_>> = HashMap::new();
+			let mut map: HashMap<PackageId, CargoMeta<'_>> = HashMap::new();
 			for package in meta.packages.iter() {
-				let key = CargoKey::from(&package.id);
-				let node = nodes.get(&key).ok_or_else(|| anyhow!("Resolution node missing for package {:?}", &key))?;
-				map.insert(CargoKey::from(&package.id), CargoMeta { package, node });
+				let key = &package.id;
+				let node = nodes.get(key).ok_or_else(|| anyhow!("Resolution node missing for package {:?}", &key))?;
+				map.insert(key.clone(), CargoMeta { package, node });
 			}
 			map
 		};
 
+		let root = resolve.root.ok_or_else(|| anyhow!("Cargo metadata has no root package"))?;
+		let root_meta = metas.get(&root).ok_or_else(||anyhow!("Meta missing for root package ({})", root))?;
+		lock.set_root(Root::Package(CargoKey::from(&root_meta.package)));
+
 		let platform = Self::current_platform().await?;
+		let mut registries = Registries::new(opts);
 		for meta in metas.values() {
-			let (key, spec) = Self::package_spec(&meta, &metas, &platform)
+			let key = CargoKey::from(&meta.package);
+			let spec = Self::package_spec(&mut registries, &meta, &metas, &platform).await
 				.with_context(||format!("Processing package {:?}", &meta.package))?;
-			lock.add_impl(key.0, spec)
+			lock.add_impl(key, spec);
 		}
 
 		Ok(CargoLock(lock))

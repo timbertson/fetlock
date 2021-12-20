@@ -195,7 +195,6 @@ impl LockContext {
 
 pub trait GitUrl {
 	fn git_url(&self) -> String;
-	fn src_for_rev(&self, rev: String) -> Src;
 }
 
 #[derive(Debug, Clone)]
@@ -204,12 +203,8 @@ pub struct GithubRepo {
 	pub repo: String,
 }
 
-impl GitUrl for GithubRepo {
-	fn git_url(&self) -> String {
-		format!("https://github.com/{}/{}.git", &self.owner, &self.repo)
-	}
-
-	fn src_for_rev(&self, rev: String) -> Src {
+impl GithubRepo {
+	pub fn src_for_rev(&self, rev: String) -> Src {
 		Src::Github(Github {
 			repo: self.clone(),
 			git_ref: rev,
@@ -218,13 +213,28 @@ impl GitUrl for GithubRepo {
 	}
 }
 
+impl GitUrl for GithubRepo {
+	fn git_url(&self) -> String {
+		format!("https://github.com/{}/{}.git", &self.owner, &self.repo)
+	}
+}
+
 #[derive(Debug, Clone)]
 pub struct GitRepo {
 	url: Url,
 }
 
-// TODO when anyone needs it
-// impl GitUrl for GitRepo { ... }
+impl GitRepo {
+	pub fn new(url: Url) -> Self {
+		Self { url }
+	}
+}
+
+impl GitUrl for GitRepo {
+	fn git_url(&self) -> String {
+		self.url.0.clone()
+	}
+}
 
 #[derive(Debug, Clone)]
 pub struct Github {

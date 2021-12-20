@@ -90,6 +90,15 @@ Typically, fetlock can autodetect the type. If you don't pass `--type` or `--loc
 
 --
 
+# Backend specific details
+
+## Bundler backend:
+
+To ensure you're working with the right ruby version, you can pass either `ruby` (a derivation) or `rubyVersion` (a version string, e.g. "2.7.5") as `load` function arguments.
+
+When using `rubyVersion` the minor version will be used based on nixpkgs naming conventions - e.g. "2.7.5" uses `ruby_2_7`. The patch version is disregarded, and you'll get an error if nixpkgs doesn't include that version of ruby.
+
+
 ## The problem
 
 There's a well-established pattern in the [nix][] community, for adopting language-specific packages into generic nix ones. That is, each ecosystem has one (or a handful of competing) `ecosystemToNix` tools.

@@ -2,6 +2,7 @@
 use crate::*;
 use crate::cargo::registry::*;
 use anyhow::*;
+use futures::TryFutureExt;
 use log::*;
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -49,8 +50,9 @@ impl CargoLock {
 		match &package.source {
 			None => partial.set_src(Src::None),
 			Some(registry_spec) => {
-				let src = registries.get_source(registry_spec, &meta.package).await
-					.with_context(|| format!("Getting source for {:?}", &meta.package.id))?;
+				let src = registries.get(registry_spec).and_then(|registry|
+					registry.get_source(&meta.package)
+				).await.with_context(|| format!("Getting source for {:?}", &meta.package.id))?;
 				partial.set_src(src);
 			},
 		}

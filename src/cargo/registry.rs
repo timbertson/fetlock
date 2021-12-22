@@ -89,16 +89,12 @@ impl<'a> Registries<'a> {
 		Self { cache: HashMap::new(), opts }
 	}
 
-	// TODO ideally this would return a registry which you then get the source of,
-	// but client code would have to hold the registry reference across an `await`
-	// point, and I couldn't get that to compile.
-	pub async fn get_source(&mut self, source: &cargo_metadata::Source, pkg: &Package) -> Result<Src> {
+	pub async fn get(&mut self, source: &cargo_metadata::Source) -> Result<&LocalRegistry> {
 		let url = source.repr.strip_prefix("registry+").ok_or_else(||anyhow!("Unknown registry spec: {}", source.repr))?;
 		if !self.cache.contains_key(url) {
 			let reg = LocalRegistry::load(&self.opts, Url::new(url.into())).await?;
 			self.cache.insert(url.to_owned(), reg);
 		}
-		let registry = self.cache.get(url).ok_or_else(||anyhow!("Couldn't retrieve repo from hash"))?.clone();
-		registry.get_source(pkg).await.with_context(|| format!("Getting source for {:?}", &pkg))
+		self.cache.get(url).ok_or_else(||anyhow!("Couldn't retrieve repo from hash"))
 	}
 }

@@ -23,7 +23,10 @@ let
       else abort notFound;
 
 in core.makeAPI {
-  overlays = [ base ];
+  # The base overlays includes pkgs.ruby, so that e.g. shell works.
+  # A full package may override this
+  overlays = [ base (injectRuby pkgs.ruby) ];
+
   # accept `ruby` or `rubyVersion` and project it into the overlay
   userArgs = args:
     let ruby = if args ? ruby then args.ruby else (
@@ -33,7 +36,6 @@ in core.makeAPI {
     );
   in
   filterAttrs (n: v: n != "ruby" && n != "rubyVersion") (args // {
-    overlays = (args.overlays or [])
-      ++ [(injectRuby ruby)];
+    overlays = (args.overlays or []) ++ [ (injectRuby ruby) ];
   });
 }

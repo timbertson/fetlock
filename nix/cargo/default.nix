@@ -7,5 +7,6 @@ let
     lockDependencies = [ final.pkgs.cargo];
   };
 in core.makeAPI {
+  userArgs = args: args;
   overlays = [ base ];
 }

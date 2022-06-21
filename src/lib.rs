@@ -34,3 +34,4 @@ pub mod cargo;
 pub mod esy;
 pub mod opam;
 pub mod yarn;
+pub mod gomod;

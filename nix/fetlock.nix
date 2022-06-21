@@ -21,6 +21,9 @@ let
 		ocamlShell = mkShell {
 			packages = [ opam2nix ];
 		};
+		goShell = mkShell {
+			packages = [ pkgs.go ];
+		};
 	};
 
 	# import API with a nonfunctional fetlock

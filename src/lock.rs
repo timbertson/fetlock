@@ -15,6 +15,7 @@ pub enum Type {
 	Yarn,
 	Bundler,
 	Cargo,
+	Go,
 }
 
 impl fmt::Display for Type {
@@ -26,6 +27,7 @@ impl fmt::Display for Type {
 			Yarn => "yarn",
 			Bundler => "bundler",
 			Cargo => "cargo",
+			Go => "Go",
 		})
 	}
 }

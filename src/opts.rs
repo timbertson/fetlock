@@ -233,6 +233,7 @@ impl CliOpts {
 				"yarn" => lock::Type::Yarn,
 				"bundler" => lock::Type::Bundler,
 				"cargo" => lock::Type::Cargo,
+				"go" => lock::Type::Go,
 				other => return Err(anyhow!("Unknown type: {}", other)),
 			})
 		} else {
@@ -249,6 +250,9 @@ impl CliOpts {
 			Some((lock::Type::Cargo, "Cargo.lock"))
 		} else if filename == "Gemfile" || filename == "Gemfile.lock" {
 			Some((lock::Type::Bundler, "Gemfile.lock"))
+		} else if filename == "go.mod" {
+			// TODO: support go.sum?
+			Some((lock::Type::Go, filename))
 		} else if filename.ends_with(".opam") || filename == "opam" {
 			Some((lock::Type::Opam, filename))
 		} else if filename.ends_with("esy.lock") {

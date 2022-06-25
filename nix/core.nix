@@ -139,7 +139,7 @@ let
 					overrideDrv = attrs:
 						overrideOnly attrs (fn: drv: fn drv);
 
-					# overrideDrv: each attr is a function taking oldAttrs and returning newAttrs
+					# overrideAttrs: each attr is a function taking oldAttrs and returning newAttrs
 					overrideAttrs = attrs:
 						overrideOnly attrs (fn: drv: drv.overrideAttrs fn);
 

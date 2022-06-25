@@ -33,7 +33,7 @@ pub async fn populate_source_digests<S: AsSpec>(lock: &mut Lock<S>) -> Result<()
 	result
 }
 
-async fn ensure_digest(implementation: &mut Spec) -> Result<()> {
+pub async fn ensure_digest(implementation: &mut Spec) -> Result<()> {
 	if implementation.src.requires_digest() && implementation.digest.is_none() {
 		let digest = calculate_digest(&implementation.src)
 			.await

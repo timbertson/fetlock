@@ -31,4 +31,12 @@
 				mv "$GOMODCACHE/${pkgs.lib.head (builtins.split "/" name)}" "$out/"
 			'';
 		};
+	
+	fetchGoModules = { src, hash }:
+		(pkgs.buildGoModule {
+			inherit src;
+			vendorSha256 = hash;
+			pname = "gomod";
+			version = "vendor";
+		}).go-modules;
 }

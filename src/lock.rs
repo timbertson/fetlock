@@ -287,22 +287,22 @@ pub enum Src {
 	Github(Github),
 	Archive(Archive),
 	RelativePath(String),
-	Custom(CustomSrc),
+	Custom(CustomFetch),
 	None,
 }
 
 #[derive(Clone)]
-pub struct CustomSrc {
+pub struct CustomFetch {
 	pub fn_name: &'static str,
-	pub id: Id,
+	pub cache_key: String,
 	pub attrs: BTreeMap<String, Expr>,
 }
 
-impl Debug for CustomSrc {
+impl Debug for CustomFetch {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		f.debug_tuple("CustomSrc")
+		f.debug_tuple("CustomFetch")
 			.field(&self.fn_name)
-			.field(&self.id)
+			.field(&self.cache_key)
 			.finish()
 	}
 }
@@ -407,7 +407,7 @@ impl SrcDigest<'_> {
 				let mut attrs = c.attrs.clone();
 				attrs.insert("hash".to_owned(), Expr::str(digest.sri_string()));
 				Expr::FunCall(Box::new(FunCall {
-					subject: Expr::Literal(c.fn_name.to_owned()),
+					subject: Expr::Literal(format!("final.{}", &c.fn_name)),
 					args: vec!(Expr::AttrSet(attrs))
 				}))
 			},

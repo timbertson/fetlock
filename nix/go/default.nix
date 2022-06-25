@@ -5,8 +5,6 @@ let
 	base = final: prev: {
 		specToDrv = spec:
 			let overrides = {
-				vendorSha256 = null;
-				deleteVendor = true;
 				passthru = (spec.passthru or {}) // final.mkPassthru spec;
 			}; in
 			final.pkgs.buildGoModule (spec // overrides);

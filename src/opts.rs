@@ -250,9 +250,8 @@ impl CliOpts {
 			Some((lock::Type::Cargo, "Cargo.lock"))
 		} else if filename == "Gemfile" || filename == "Gemfile.lock" {
 			Some((lock::Type::Bundler, "Gemfile.lock"))
-		} else if filename == "go.mod" {
-			// TODO: support go.sum?
-			Some((lock::Type::Go, filename))
+		} else if filename == "go.mod" || filename == "go.sum" {
+			Some((lock::Type::Go, "go.sum"))
 		} else if filename.ends_with(".opam") || filename == "opam" {
 			Some((lock::Type::Opam, filename))
 		} else if filename.ends_with("esy.lock") {

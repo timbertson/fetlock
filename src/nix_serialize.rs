@@ -366,7 +366,9 @@ impl Writeable for Spec {
 		} = self;
 		let Id { name, version } = id;
 		c.bracket_attrs(|c| {
-			c.attr(&"pname", &DrvName::new(name))?;
+			if !extra.contains_key("pname") {
+				c.attr(&"pname", &DrvName::new(name))?;
+			}
 			c.attr(&"version", &DrvName::new(version))?;
 			c.attr(&"depKeys", dep_keys)?;
 

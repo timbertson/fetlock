@@ -59,6 +59,7 @@ pub async fn calculate_digest(src: &Src) -> Result<NixHash> {
 	let known_digest = match src {
 		Src::Archive(archive) => archive.digest.clone(),
 		Src::Github(_) => None,
+		Src::Custom(_) => None,
 		Src::RelativePath(_) => None,
 		Src::None => None
 	};
@@ -108,8 +109,18 @@ impl FetchMany {
 		src_digests: Digests,
 	) -> Result<FetchMany> {
 		let mut expr = Vec::new();
+
 		let mut out = WriteContext::initial(&mut expr);
-		out.write_str("let pkgs = import <nixpkgs> {}; in ")?;
+		// TODO need to plumb fetlock path through
+		// build-time environment variable instead of
+		// making the user set it
+		out.write_str(r#"
+			let
+				pkgs = import <nixpkgs> {};
+				final = import <fetlock/fetch.nix> { inherit pkgs; };
+			in
+		"#)?;
+
 		out.write_str("rec { drvs = ")?;
 		write_iter(src_digests, &mut out)?;
 		out.write_str("; paths = builtins.map (d: d.outPath) drvs; }\n")?;

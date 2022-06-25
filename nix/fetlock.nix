@@ -15,6 +15,7 @@ let
 		esy = backend ./esy;
 		opam = backend ./opam;
 		yarn = backend ./yarn;
+		go = backend ./go;
 		shell = mkShell {
 			packages = [ fetlockImpls.basic ];
 		};

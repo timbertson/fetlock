@@ -1,4 +1,4 @@
-use crate::expr::Expr;
+use crate::expr::{Expr, FunCall};
 use crate::hash::NixHash;
 use anyhow::*;
 use serde::de::{Deserialize, Deserializer};
@@ -35,6 +35,11 @@ impl fmt::Display for Type {
 // newtype for a package key
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Key(String);
+impl Borrow<str> for Key {
+	fn borrow(&self) -> &str {
+		self.0.as_str()
+	}
+}
 
 // newtype for a logical package name
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Deserialize)]
@@ -104,7 +109,7 @@ impl<'de> Deserialize<'de> for Key {
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Id {
 	// TODO use Name and Version types
 	pub name: String,
@@ -156,6 +161,13 @@ impl PartialId {
 
 	pub fn set_version(&mut self, v: String) {
 		self.version = Some(v);
+	}
+}
+
+impl From<Id> for PartialId {
+	fn from(id: Id) -> Self {
+		let Id { name, version } = id;
+		PartialId { name: Some(name), version: Some(version) }
 	}
 }
 
@@ -275,7 +287,24 @@ pub enum Src {
 	Github(Github),
 	Archive(Archive),
 	RelativePath(String),
+	Custom(CustomSrc),
 	None,
+}
+
+#[derive(Clone)]
+pub struct CustomSrc {
+	pub fn_name: &'static str,
+	pub id: Id,
+	pub attrs: BTreeMap<String, Expr>,
+}
+
+impl Debug for CustomSrc {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.debug_tuple("CustomSrc")
+			.field(&self.fn_name)
+			.field(&self.id)
+			.finish()
+	}
 }
 
 impl Src {
@@ -283,6 +312,7 @@ impl Src {
 		match self {
 			Src::Github(_) => true,
 			Src::Archive(_) => true,
+			Src::Custom(_) => true,
 			Src::RelativePath(_) => false,
 			Src::None => false,
 		}
@@ -292,6 +322,7 @@ impl Src {
 		match self {
 			Src::Github(_) => None,
 			Src::Archive(a) => Some(a.digest.as_ref()),
+			Src::Custom(c) => None,
 			Src::RelativePath(_) => None,
 			Src::None => None,
 		}
@@ -354,7 +385,8 @@ impl SrcDigest<'_> {
 					Expr::Literal("pkgs.fetchFromGitHub".to_owned()),
 					vec![Expr::attr_set(attrs)],
 				)
-			}
+			},
+
 			Src::Archive(archive) => {
 				let Archive { url, name, digest: _ } = archive;
 				let mut attrs = vec![
@@ -369,7 +401,16 @@ impl SrcDigest<'_> {
 					Expr::Literal("pkgs.fetchurl".to_owned()),
 					vec![Expr::attr_set(attrs)],
 				)
-			}
+			},
+
+			Src::Custom(c) => {
+				let mut attrs = c.attrs.clone();
+				attrs.insert("hash".to_owned(), Expr::str(digest.sri_string()));
+				Expr::FunCall(Box::new(FunCall {
+					subject: Expr::Literal(c.fn_name.to_owned()),
+					args: vec!(Expr::AttrSet(attrs))
+				}))
+			},
 
 			// TODO better error reporting, assert?
 			Src::RelativePath(_) => Expr::Null,

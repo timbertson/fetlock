@@ -13,7 +13,7 @@ Fetlock is a _unified tool_ for converting various lockfiles into `nix` expressi
  - [yarn][] (nodejs): rudimentary support for v2 lockfiles
    - no `bin` wrappers
    - no `install` script / native compilation support
- - [go][] modules:
+ - [golang][] modules:
    - all-in-one build, i.e. a single `buildGoModule` derivation
    - no way to individually build or override dependencies
    - cache-inefficient, since a change in source code or any dependency causes a full rebuild

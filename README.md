@@ -13,6 +13,10 @@ Fetlock is a _unified tool_ for converting various lockfiles into `nix` expressi
  - [yarn][] (nodejs): rudimentary support for v2 lockfiles
    - no `bin` wrappers
    - no `install` script / native compilation support
+ - [go][] modules:
+   - all-in-one build, i.e. a single `buildGoModule` derivation
+   - no way to individually build or override dependencies
+   - cache-inefficient, since a change in source code or any dependency causes a full rebuild
 
 ## Workflow
 
@@ -42,6 +46,10 @@ If that doesn't build, you may need to dig deeper into overrides etc to add miss
 ### Updating dependencies
 
 You can of course use your regular tooling to update your lockfile, and then regenerate `lock.nix` by running `fetlock`. But you can also just run `fetlock update` to do both at once.
+
+## Nix API:
+
+Aside from poking around the `examples/` directory, some of the nix API is documented in [doc/nix-api.md](doc/nix-api.md).
 
 ## nix-shell usage
 
@@ -98,8 +106,9 @@ To ensure you're working with the right ruby version, you can pass either `ruby`
 
 When using `rubyVersion` the minor version will be used based on nixpkgs naming conventions - e.g. "2.7.5" uses `ruby_2_7`. The patch version is disregarded, and you'll get an error if nixpkgs doesn't include that version of ruby.
 
+--
 
-## The problem
+# The problem
 
 There's a well-established pattern in the [nix][] community, for adopting language-specific packages into generic nix ones. That is, each ecosystem has one (or a handful of competing) `ecosystemToNix` tools.
 
@@ -181,3 +190,4 @@ _If_ this turns out to work well for a few backends, perhaps it'll gain some tra
 [yarn]: https://yarnpkg.com/
 [bundler]: https://bundler.io/
 [cargo]: https://crates.io/
+[golang]: https://go.dev/

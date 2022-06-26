@@ -115,6 +115,11 @@ struct FetchMany {
 	expr: String,
 }
 
+// This is set to $PWD/nix in a development shell (e.g. shell.nix).
+// When building from nix, it's set to ${src}/nix, so it'll be
+// a nix store path.
+const FETLOCK_NIX: Option<&'static str> = option_env!("FETLOCK_NIX");
+
 impl FetchMany {
 	fn digests<'a, Digests: Iterator<Item = FetchSpecRef<'a>>>(
 		fetch_specs: Digests,
@@ -122,9 +127,9 @@ impl FetchMany {
 		let mut expr = Vec::new();
 
 		let mut out = WriteContext::initial(&mut expr);
-		// TODO need to plumb fetlock path through
-		// build-time environment variable instead of
-		// making the user set it
+		// we bind fetlock's fetchers as `final`, because custom fetch
+		// expressions will use that name to access fetchers provided
+		// in the fixpoint.
 		out.write_str(r#"
 			let
 				pkgs = import <nixpkgs> {};
@@ -149,9 +154,10 @@ impl FetchMany {
 		command
 			.arg("--no-out-link")
 			.arg("--show-trace")
-			.arg("-")
+			.arg("-I").arg(format!("fetlock={}", FETLOCK_NIX.unwrap_or("./nix")))
 			.arg("--attr")
-			.arg("drvs");
+			.arg("drvs")
+			.arg("-");
 		command
 	}
 

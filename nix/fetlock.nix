@@ -40,6 +40,7 @@ let
 			(self.overrideAttrs {
 				fetlock = o: ({
 					inherit src;
+					FETLOCK_NIX = "${src}/nix";
 					nativeBuildInputs = (o.nativeBuildInputs or [])
 						++ (if stdenv.isDarwin then [ osx.Security ] else []);
 				});

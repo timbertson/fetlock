@@ -1,5 +1,4 @@
 use crate::string_util::*;
-use crate::hash::NixHash;
 use crate::*;
 use anyhow::*;
 use log::*;
@@ -7,7 +6,7 @@ use std::path::*;
 
 #[derive(Debug, Clone)]
 pub enum LockRoot {
-	Github(GithubSrc),
+	Github(GithubSpec),
 	Path(PathBuf),
 }
 
@@ -37,7 +36,7 @@ impl LockSrc {
 			LockRoot::Path(p) => Ok(LocalSrc::path(p.clone(), relative)),
 			LockRoot::Github(gh) => {
 				let src = gh.resolve().await?;
-				LocalSrc::fetch_src(src, relative).await
+				LocalSrc::fetch_src(FetchSpec::Github(src), relative).await
 			}
 		}
 	}
@@ -48,22 +47,22 @@ impl LockSrc {
 }
 
 #[derive(Debug, Clone)]
-pub struct GithubSrc {
+pub struct GithubSpec {
 	repo: GithubRepo,
 	git_ref: String,
 }
 
-impl GithubSrc {
-	pub async fn resolve(&self) -> Result<Src> {
+impl GithubSpec {
+	pub async fn resolve(&self) -> Result<Github> {
 		let url = self.repo.git_url();
 		let rev = resolve_git::resolve(&url, &self.git_ref).await?;
-		Ok(self.repo.src_for_rev(rev))
+		Ok(self.repo.for_rev(rev))
 	}
 
-	pub fn parse(repo: &str) -> Result<GithubSrc> {
+	pub fn parse(repo: &str) -> Result<GithubSpec> {
 		let (path, git_ref) = split_one("#", &repo);
 		let (owner, repo) = split_one_or_else("/", path, || anyhow!("invalid repo: {}", repo))?;
-		Ok(GithubSrc {
+		Ok(GithubSpec {
 			repo: GithubRepo {
 				owner: owner.to_owned(),
 				repo: repo.to_owned(),
@@ -77,7 +76,7 @@ impl GithubSrc {
 pub struct LocalSrc {
 	pub root: PathBuf,
 	pub relative: Option<String>,
-	pub src_digest: Option<(Src, NixHash)>,
+	pub fetch: Option<Fetch>,
 }
 
 impl LocalSrc {
@@ -85,21 +84,18 @@ impl LocalSrc {
 		Self {
 			root,
 			relative,
-			src_digest: None,
+			fetch: None
 		}
 	}
 
-	async fn fetch_src(src: Src, relative: Option<String>) -> Result<Self> {
-		let digest = fetch::calculate_digest(&src).await?;
-		let root = fetch::realise_source(SrcDigest {
-			src: &src,
-			digest: &digest,
-		})
-		.await?;
+	async fn fetch_src(fetch_spec: FetchSpec, relative: Option<String>) -> Result<Self> {
+		let digest = fetch::calculate_digest(&fetch_spec).await?;
+		let fetch = Fetch::new(fetch_spec, digest);
+		let root = fetch::realise_source(&fetch).await?;
 		Ok(Self {
 			root,
 			relative,
-			src_digest: Some((src, digest)),
+			fetch: Some(fetch),
 		})
 	}
 
@@ -118,7 +114,7 @@ impl LockSrc {
 		debug!("parsing lock src:: {:?}", &opts);
 		let LockSrcOpts { repo, lock_root, lockfile } = opts;
 		let repo_root: Option<Result<LockRoot>> =
-			repo.map(|repo| Ok(LockRoot::Github(GithubSrc::parse(repo.as_str())?)));
+			repo.map(|repo| Ok(LockRoot::Github(GithubSpec::parse(repo.as_str())?)));
 		let repo_root = repo_root.transpose()?;
 		let (root, relative): (LockRoot, Option<String>) = match (repo_root, lock_root) {
 			(None, None) => (LockRoot::Path(PathBuf::from(".")), None),

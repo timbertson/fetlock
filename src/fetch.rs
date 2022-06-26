@@ -9,7 +9,7 @@ use lazy_static::lazy_static;
 use log::*;
 use regex::Regex;
 use std::collections::HashMap;
-use std::fmt;
+use std::{fmt, mem};
 use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::process::{ExitStatus, Stdio};
@@ -18,85 +18,96 @@ use tokio::fs;
 use tokio::process::Command;
 
 pub async fn populate_source_digests<S: AsSpec>(lock: &mut Lock<S>) -> Result<()> {
-	let missing_digests = lock.specs.values().filter(|x|
-		match x.as_spec_ref().src.supplied_digest() {
-			None => false, // no digest possible / needed
-			Some(None) => true, // missing
-			Some(Some(_)) => false, // present
-		}
-	).count();
-	if missing_digests > 0 {
-		warn!("Backend didn't supply digests for {} sources", missing_digests);
+	let partial_sources = lock.specs.values()
+		.filter_map(|x| x.as_spec_ref().src.partial())
+		.count();
+	if partial_sources > 0 {
+		warn!("Backend didn't supply digests for {} sources", partial_sources);
 	}
 	let impls = lock.specs.values_mut().map(|x| x.as_spec_mut());
-	let result = foreach_unordered(8, futures::stream::iter(impls), |i| ensure_digest(i)).await;
+	let result = foreach_unordered(
+		8,
+		futures::stream::iter(impls),
+		|i| ensure_digest(&mut i.src)
+	).await;
 	result
 }
 
-pub async fn ensure_digest(implementation: &mut Spec) -> Result<()> {
-	if implementation.src.requires_digest() && implementation.digest.is_none() {
-		let digest = calculate_digest(&implementation.src)
-			.await
-			.with_context(|| format!("fetching source for {:?}", &implementation))?;
-		implementation.digest = Some(digest);
-	}
+pub async fn ensure_digest(src: &mut AnySrc) -> Result<()> {
+	let mut tmp = AnySrc::Full(Src::None);
+	mem::swap(&mut tmp, src);
+	let full = match tmp {
+		AnySrc::Full(full) => full,
+		AnySrc::Partial(fetch) => {
+			let digest = calculate_digest(&fetch)
+				.await
+				.with_context(|| format!("fetching source: {:?}", &fetch))?;
+			Src::Fetch(Fetch::new(fetch, digest))
+		},
+	};
+	*src = AnySrc::Full(full);
 	Ok(())
 }
 
-fn get_cache_path(src: &Src) -> PathBuf {
+fn get_cache_path(fetch_spec: &FetchSpec) -> Option<PathBuf> {
 	// using Debug formatting is lazy, but easy :shrug:
-	let cache_filename = cache_hash(&format!("{:?}", src));
+	let cache_filename = cache_hash(&format!("{:?}", fetch_spec));
 	let cache_shard = &cache_filename[0..2];
 
 	let mut cache_dir = cache_root();
 	cache_dir.push("digests");
 	cache_dir.push(cache_shard);
 
-	cache_dir.join(cache_filename)
+	Some(cache_dir.join(cache_filename))
 }
 
-pub async fn calculate_digest(src: &Src) -> Result<NixHash> {
-	let known_digest = match src {
-		Src::Archive(archive) => archive.digest.clone(),
-		Src::Github(_) => None,
-		Src::Custom(_) => None,
-		Src::RelativePath(_) => None,
-		Src::None => None
-	};
-	if let Some(d) = known_digest {
-		debug!("src has known digest; not prefetching: {:?}", src);
-		return Ok(d)
+pub async fn calculate_digest(fetch_spec: &FetchSpec) -> Result<NixHash> {
+	let cache_path = get_cache_path(fetch_spec);
+	if cache_path.is_some() {
+		debug!(
+			"checking cached contents ({:?}) for src {:?}",
+			&cache_path, fetch_spec
+		);
 	}
-
-	let cache_path = get_cache_path(src);
-	debug!(
-		"checking cached contents ({:?}) for src {:?}",
-		&cache_path, src
-	);
 	let result: Result<NixHash> = (|| async {
-		match fs::read(&cache_path).await {
-			Ok(bytes) => {
-				let s = String::from_utf8(bytes)?;
-				NixHash::parse_sri(s.trim_end())
-			},
-			Err(e) => {
-				if e.kind() == ErrorKind::NotFound {
-					info!("fetch: {:?}", src);
+		let cached: Option<NixHash> = match &cache_path {
+			None => None,
+			Some(cache_path) => {
+				match fs::read(cache_path).await {
+					Ok(bytes) => {
+						let s = String::from_utf8(bytes)?;
+						Some(NixHash::parse_sri(s.trim_end())?)
+					},
+					Err(e) => {
+						if e.kind() == ErrorKind::NotFound {
+							None
+						} else {
+							return Err(e).with_context(|| format!("reading {:?}", &cache_path));
+						}
+					}
+				}
+			}
+		};
+
+		match cached {
+			Some(hash) => Ok(hash),
+			None => {
+				info!("fetch: {:?}", fetch_spec);
+				let digest = do_prefetch(fetch_spec).await?;
+				if let Some(cache_path) = cache_path {
 					let cache_dir = cache_path.parent().ok_or_else(||anyhow!("empty cache path"))?;
 					fs::create_dir_all(cache_dir).await?;
-					let digest = do_prefetch(src).await?;
 					crate::fs::write_atomically(&cache_path, |mut f| {
 						Ok(write!(f, "{}\n", digest.sri())?)
 					})?;
-					Ok(digest)
-				} else {
-					Ok(Err(e).with_context(|| format!("reading {:?}", &cache_path))?)
 				}
+				Ok(digest)
 			}
 		}
+
 	})()
 	.await;
-	result.with_context(|| format!("fetching source {:?}", src))
+	result.with_context(|| format!("fetching source {:?}", fetch_spec))
 }
 
 #[derive(Debug)]
@@ -105,8 +116,8 @@ struct FetchMany {
 }
 
 impl FetchMany {
-	fn digests<'a, Digests: Iterator<Item = &'a SrcDigest<'a>>>(
-		src_digests: Digests,
+	fn digests<'a, Digests: Iterator<Item = FetchSpecRef<'a>>>(
+		fetch_specs: Digests,
 	) -> Result<FetchMany> {
 		let mut expr = Vec::new();
 
@@ -122,13 +133,13 @@ impl FetchMany {
 		"#)?;
 
 		out.write_str("rec { drvs = ")?;
-		write_iter(src_digests, &mut out)?;
+		write_iter(fetch_specs, &mut out)?;
 		out.write_str("; paths = builtins.map (d: d.outPath) drvs; }\n")?;
 		let expr = String::from_utf8(expr)?;
 		Ok(FetchMany { expr })
 	}
 
-	fn singleton(src_digest: &SrcDigest) -> Result<FetchMany> {
+	fn singleton(src_digest: FetchSpecRef) -> Result<FetchMany> {
 		let digests = Some(src_digest);
 		Self::digests(digests.into_iter())
 	}
@@ -220,10 +231,10 @@ fn extract_expected_hash(stderr: &str) -> Result<NixHash> {
 	Ok(first)
 }
 
-async fn do_prefetch(src: &Src) -> Result<NixHash> {
-	let dummy = SrcDigest::new(src, NixHash::dummy());
+async fn do_prefetch(spec: &FetchSpec) -> Result<NixHash> {
+	let dummy = FetchSpecRef { spec, hash: NixHash::dummy() };
 	debug!("prefetching {:?}", &dummy);
-	let fetch = FetchMany::singleton(&dummy)?;
+	let fetch = FetchMany::singleton(dummy)?;
 	let (stdout, stderr, status) = fetch
 		.run_command_raw(&mut fetch.build_command(), Stdio::piped())
 		.await?;
@@ -234,40 +245,41 @@ async fn do_prefetch(src: &Src) -> Result<NixHash> {
 		.with_context(|| format!("{:?}", &fetch))
 }
 
-pub async fn realise_sources<'a, It: Iterator<Item = (&'a Key, &'a Spec)>>(
-	specs: It,
-) -> Result<HashMap<Key, PathBuf>> {
-	let pairs = specs
-		.filter_map(|(k, spec)| spec.src_digest().map(|digest| (k, digest)))
-		.collect::<Vec<(&Key, SrcDigest)>>();
-	if pairs.is_empty() {
-		return Ok(HashMap::new());
+pub async fn realise_fetch_sources<'a, It: Iterator<Item = (&'a Key, &'a Spec)>>
+	(specs: It) -> Result<HashMap<Key, PathBuf>>
+{
+	let src_pairs = specs
+		.filter_map(|(key, spec)| {
+			match spec.src.require_full() {
+				Err(e) => Some(Err(e)),
+				Ok(full) => full.fetch().map(|fetch| {
+					Ok((key, fetch))
+				})
+			}
+		}).collect::<Result<Vec<(&Key, &Fetch)>>>()?;
+
+	if src_pairs.is_empty() {
+		return Ok(HashMap::new())
 	}
-	info!("realising: {} sources...", pairs.len());
-	let paths = FetchMany::digests(pairs.iter().map(|(_key, digest)| digest))?
+	info!("realising: {} sources...", src_pairs.len());
+	let paths = FetchMany::digests(src_pairs.iter().map(|(_key, fetch)| fetch.as_ref()))?
 		.realise()
 		.await.with_context(|| {
-			let mut lines = pairs.iter().map(|(key, src_digest)| {
-				let SrcDigest { src, digest } = src_digest;
-				if src.supplied_digest().flatten().is_some() {
-					// no cache path used; digest is taken from src
-					format!("{}", digest.sri())
-				} else {
-					format!("{} from {:?}", digest.sri(), get_cache_path(&src))
-				}
+			let mut lines = src_pairs.iter().map(|(key, fetch)| {
+				format!("{:?} from {:?}", fetch, get_cache_path(&fetch.spec))
 			}).collect::<Vec<String>>();
 			lines.sort();
 			format!("Failed realising sources:\n{}", lines.join("\n"))
 		})?;
-	Ok(pairs
+	Ok(src_pairs
 		.into_iter()
 		.zip(paths)
 		.map(|((key, _), path)| (key.to_owned(), path))
 		.collect::<HashMap<Key, PathBuf>>())
 }
 
-pub async fn realise_source<'a>(src_digest: SrcDigest<'a>) -> Result<PathBuf> {
-	let paths = FetchMany::singleton(&src_digest)?.realise().await?;
+pub async fn realise_source<'a>(fetch: &Fetch) -> Result<PathBuf> {
+	let paths = FetchMany::singleton(fetch.as_ref())?.realise().await?;
 	Ok(paths.into_iter().next().expect("empty iter"))
 }
 
@@ -347,15 +359,24 @@ impl ExtractSource<'_> {
 	pub async fn upgrade_gitmodules(&self, spec: &mut Spec) -> Result<()> {
 		// note we don't actually switch the extracted source, we assume that any
 		// files we need to inspect as part of fetlock aren't behind a submodule
-		match &mut spec.src {
-			Src::Github(gh) => {
+		let new_src = match &mut spec.src.fetch_spec() {
+			Some(FetchSpec::Github(gh)) => {
 				if (!gh.fetch_submodules) && self.exists(".gitmodules").await {
 					debug!("found .gitmodules file, upgrading fetch expression");
-					gh.fetch_submodules = true;
-					spec.digest = Some(calculate_digest(&spec.src).await?);
+
+					let mut new_gh = gh.clone();
+					new_gh.fetch_submodules = true;
+					let new_spec = FetchSpec::Github(new_gh);
+					let digest = calculate_digest(&new_spec).await?;
+					Some(Src::Fetch(Fetch::new(new_spec, digest)))
+				} else {
+					None
 				}
-			}
-			_ => (),
+			},
+			_ => None,
+		};
+		if let Some(src) = new_src {
+			spec.set_src(src);
 		}
 		Ok(())
 	}

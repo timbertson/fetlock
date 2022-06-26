@@ -20,18 +20,6 @@ pub struct OpamSpec {
 }
 
 #[derive(Clone, Debug)]
-pub struct OpamRepository {
-	src: Src,
-	digest: NixHash,
-}
-
-impl OpamRepository {
-	fn as_expr(&self) -> Expr {
-		SrcDigest::new(&self.src, &self.digest).as_expr()
-	}
-}
-
-#[derive(Clone, Debug)]
 pub struct OpamLock {
 	lock: Lock<OpamSpec>,
 }
@@ -102,15 +90,14 @@ impl Backend for OpamLock {
 		let mut repositories = BTreeMap::new();
 		repositories.insert(
 			"opam".to_owned(),
-			OpamRepository {
-				src: Src::Github(Github {
+			Fetch::new(
+				FetchSpec::Github(Github {
 					repo: opam_repo_git,
 					git_ref: opam_repo.commit.clone(),
 					fetch_submodules: false,
 				}),
-				digest: repo_digest?,
-			}
-			.as_expr(),
+				repo_digest?
+			).as_expr(),
 		);
 
 		lock.context
@@ -155,7 +142,7 @@ impl Backend for OpamLock {
 
 			spec.id.set_name(name_str.clone());
 			spec.id.set_version(version.clone());
-			spec.set_src(match src {
+			spec.set_any_src(match src {
 				Some(src) => {
 					let best_digest = src.digests.iter()
 						.flat_map(|(alg_str, contents)|
@@ -169,9 +156,9 @@ impl Backend for OpamLock {
 						None => { warn!("No useable opam digests found for {:?}", &src); None },
 						Some(d) => Some(d?),
 					};
-					Src::Archive(Archive::new(src.url.clone(), digest))
+					AnySrc::fetch(FetchSpec::Archive(Archive::new(src.url.clone())), digest)
 				},
-				None => Src::None,
+				None => AnySrc::Full(Src::None),
 			});
 
 			spec.add_deps(&mut depends);

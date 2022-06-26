@@ -269,13 +269,13 @@ impl Backend for EsyLock {
 		// relative paths obtained from esy.lock contain the path to index.json,
 		// so for convenience that's the internal path we use too, despite the fact that
 		// fetlock uses the containing directory
-		let LocalSrc { root, relative: relative_dir, src_digest: _ } = src_dir;
+		let LocalSrc { root, relative: relative_dir, fetch: _ } = src_dir;
 		let relative_file = format!("{}/index.json",
 			relative_dir.as_ref().ok_or_else(||anyhow!("lockfile path required"))?);
 		let src_file = LocalSrc {
 			root: root.clone(),
 			relative: Some(relative_file),
-			src_digest: None,
+			fetch: None,
 		};
 
 		let contents = crate::fs_util::read_to_string(src_file.lock_path())?;
@@ -303,14 +303,13 @@ impl Backend for EsyLock {
 			warn!("no `ocaml` implementation found, you will need to supply one at import time")
 		}
 
-		let realised_sources = fetch::realise_sources(
+		let realised_sources = fetch::realise_fetch_sources(
 			self.lockfile
 				.lock
 				.specs
 				.iter()
-				.map(|(key, spec)| (key, &spec.spec)),
-		)
-		.await?;
+				.map(|(key, spec)| (key, &spec.spec))
+			).await?;
 
 		let installed = self.partition_specs()?;
 		let installed_ref = &installed;
@@ -560,21 +559,24 @@ impl<'de> Visitor<'de> for EsySpecVisitor {
 					} = map.next_value::<EsySrcInfo>()?;
 
 					let remote_src = match src {
-						EsySrc::Local(prefix) => {
+						AnySrc::Full(Src::Local(prefix)) => {
 							if let Some(manifest) = manifest {
-								meta.manifest_path =
-									Some(ManifestPath::Local(format!("{}/{}", prefix, manifest)));
+								let prefix_str = err::into_serde(path_util::to_str(&prefix.0))?;
+								meta.manifest_path = Some(ManifestPath::Local(format!("{}/{}", prefix_str, manifest)));
 							};
-							Src::None
-						}
-						EsySrc::Remote(src) => {
-							if let Some(manifest) = manifest {
-								meta.manifest_path = Some(ManifestPath::Remote(manifest));
+							AnySrc::Full(Src::None)
+						},
+						other => {
+							if other.fetch_spec().is_some() {
+								// it's some kind of remote source
+								if let Some(manifest) = manifest {
+									meta.manifest_path = Some(ManifestPath::Remote(manifest));
+								}
 							}
-							src
-						}
+							other
+						},
 					};
-					partial.set_src(remote_src);
+					partial.set_any_src(remote_src);
 					opam_src = opam;
 				}
 				"dependencies" => {
@@ -612,23 +614,8 @@ impl<'de> Visitor<'de> for EsySpecVisitor {
 }
 
 #[derive(Debug, Clone)]
-enum EsySrc {
-	Remote(Src),
-	Local(String),
-}
-
-impl EsySrc {
-	fn extension(&self) -> Option<&str> {
-		match self {
-			Self::Local(_) => None,
-			Self::Remote(src) => src.extension(),
-		}
-	}
-}
-
-#[derive(Debug, Clone)]
 struct EsySrcInfo {
-	src: EsySrc,
+	src: AnySrc,
 	manifest: Option<String>,
 	opam: Option<EsySrcOpam>,
 }
@@ -666,7 +653,7 @@ impl EsySrcInfoVisitor {
 				let owner = owner.to_owned();
 				let manifest = manifest.map(|m| m.to_owned());
 				Ok(EsySrcInfo {
-					src: EsySrc::Remote(Src::Github(Github {
+					src: AnySrc::Partial(FetchSpec::Github(Github {
 						repo: GithubRepo { owner, repo },
 						git_ref,
 						fetch_submodules: false, // may be modified in fetch::upgrade_gitmodules
@@ -689,13 +676,13 @@ impl EsySrcInfoVisitor {
 				};
 				// TODO handle (optional) manifest
 				Ok(EsySrcInfo {
-					src: EsySrc::Remote(Src::Archive(Archive::new(url, digest))),
+					src: AnySrc::fetch(FetchSpec::Archive(Archive::new(url)), digest),
 					manifest: None,
 					opam: None,
 				})
 			}
 			"no-source" => Ok(EsySrcInfo {
-				src: EsySrc::Remote(Src::None),
+				src: AnySrc::Full(Src::None),
 				manifest: None,
 				opam: None,
 			}),
@@ -784,9 +771,9 @@ impl<'de> Visitor<'de> for EsySrcInfoVisitor {
 				src.ok_or_else(|| anyhow!("Missing `source.source`"))
 			}
 			Some(SrcType::LinkDev) => Ok(EsySrcInfo {
-				src: local_path
-					.map(EsySrc::Local)
-					.unwrap_or(EsySrc::Remote(Src::None)),
+				src: AnySrc::Full(local_path
+					.map(|p| Src::Local(LocalPath::from_string(p)))
+					.unwrap_or(Src::None)),
 				manifest: local_manifest,
 				opam,
 			}),

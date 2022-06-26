@@ -208,7 +208,7 @@ impl CliOpts {
 			if Self::is_implicit_path(s) {
 				Ok(LockRoot::Path(PathBuf::from(s)))
 			} else {
-				GithubSrc::parse(s).map(LockRoot::Github)
+				GithubSpec::parse(s).map(LockRoot::Github)
 			}
 		}).transpose()?;
 		let mut lock_src = LockSrc::parse(LockSrcOpts {

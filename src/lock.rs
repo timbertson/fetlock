@@ -1,5 +1,6 @@
 use crate::expr::{Expr, FunCall};
 use crate::hash::NixHash;
+use crate::path_util;
 use anyhow::*;
 use serde::de::{Deserialize, Deserializer};
 use std::borrow::Borrow;
@@ -7,6 +8,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Debug;
 use std::iter::Iterator;
+use std::path::PathBuf;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
@@ -218,12 +220,12 @@ pub struct GithubRepo {
 }
 
 impl GithubRepo {
-	pub fn src_for_rev(&self, rev: String) -> Src {
-		Src::Github(Github {
+	pub fn for_rev(&self, rev: String) -> Github {
+		Github {
 			repo: self.clone(),
 			git_ref: rev,
 			fetch_submodules: false,
-		})
+		}
 	}
 }
 
@@ -269,68 +271,197 @@ impl Url {
 pub struct Archive {
 	pub name: Option<String>,
 	pub url: Url,
-	pub digest: Option<NixHash>,
 }
 
 impl Archive {
-	pub fn new(s: String, digest: Option<NixHash>) -> Self {
+	pub fn new(s: String) -> Self {
 		Self {
 			name: None,
 			url: Url::new(s),
-			digest
+		}
+	}
+}
+
+// A buildable src. Only accepts Fetch not FetchSpec,
+// ensuring all fetched sources have a nix hash
+#[derive(Debug, Clone)]
+pub enum Src {
+	Fetch(Fetch),
+
+	// Local paths are rendered as relative to the root
+	// derivation's src when rendered to a nix expression.
+	// At nix generation time, this is relative to the working
+	// directory.
+	Local(LocalPath),
+
+	None
+}
+
+impl Src {
+	pub fn fetch(&self) -> Option<&Fetch> {
+		match self {
+			Self::Fetch(f) => Some(f),
+			_ => None
 		}
 	}
 }
 
 #[derive(Debug, Clone)]
-pub enum Src {
-	Github(Github),
-	Archive(Archive),
-	RelativePath(String),
-	Custom(CustomFetch),
-	None,
-}
+pub struct LocalPath(pub PathBuf);
+impl LocalPath {
+	pub fn from_string(s: String) -> Self {
+		LocalPath(PathBuf::from(s))
+	}
 
-#[derive(Clone)]
-pub struct CustomFetch {
-	pub fn_name: &'static str,
-	pub cache_key: String,
-	pub attrs: BTreeMap<String, Expr>,
-}
+	pub fn abs_expr_nonportable(&self) -> Result<Expr> {
+		Ok(Self::expr_raw(true, path_util::to_str(&std::fs::canonicalize(&self.0)?)?))
+	}
 
-impl Debug for CustomFetch {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		f.debug_tuple("CustomFetch")
-			.field(&self.fn_name)
-			.field(&self.cache_key)
-			.finish()
+	fn expr_raw(absolute: bool, s: &str) -> Expr {
+		let prefix = if absolute || s.starts_with('.') { "" } else { "./" };
+		let suffix = if s.ends_with('/') { "." } else { "" };
+		let nix_path = format!("{}{}{}", prefix, s, suffix);
+		Expr::FunCall(FunCall::new(
+			Expr::Literal("final.pathSrc".to_owned()),
+			vec!(Expr::Literal(nix_path))
+		))
+	}
+
+	pub fn as_expr(&self) -> Result<Expr> {
+		if self.0.is_absolute() {
+			return Err(anyhow!("Attempted to use absolute path in nix expression {:?}", &self.0));
+		}
+		Ok(Self::expr_raw(false, path_util::to_str(&self.0)?))
 	}
 }
 
-impl Src {
-	pub fn requires_digest(&self) -> bool {
-		match self {
-			Src::Github(_) => true,
-			Src::Archive(_) => true,
-			Src::Custom(_) => true,
-			Src::RelativePath(_) => false,
-			Src::None => false,
+// A fixed-output src (including hash)
+#[derive(Debug, Clone)]
+pub struct Fetch {
+	pub spec: FetchSpec,
+	pub hash: NixHash,
+}
+
+impl Fetch {
+	pub fn new(spec: FetchSpec, hash: NixHash) -> Self {
+		Fetch { spec, hash }
+	}
+
+	pub fn as_ref(&self) -> FetchSpecRef {
+		FetchSpecRef { spec: &self.spec, hash: &self.hash }
+	}
+
+	pub fn as_expr(&self) -> Expr {
+		self.as_ref().as_expr()
+	}
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct FetchSpecRef<'a> {
+	pub spec: &'a FetchSpec,
+	pub hash: &'a NixHash,
+}
+
+impl<'a> FetchSpecRef<'a> {
+	pub fn as_expr(self) -> Expr {
+		match &self.spec {
+			FetchSpec::Github(github) => {
+				let Github {
+					repo: GithubRepo { owner, repo },
+					git_ref,
+					fetch_submodules,
+				} = github;
+				let mut attrs = vec![
+					("owner", Expr::str(owner.to_owned())),
+					("repo", Expr::str(repo.to_owned())),
+					("rev", Expr::str(git_ref.to_owned())),
+					("hash", Expr::str(self.hash.sri_string())),
+				];
+				if *fetch_submodules {
+					attrs.push(("fetchSubmodules", Expr::Bool(true)));
+				}
+
+				Expr::fun_call(
+					Expr::Literal("pkgs.fetchFromGitHub".to_owned()),
+					vec![Expr::attr_set(attrs)],
+				)
+			},
+
+			FetchSpec::Archive(archive) => {
+				let Archive { url, name } = archive;
+				let mut attrs = vec![
+					("url", Expr::str(url.0.to_owned())),
+					("hash", Expr::str(self.hash.sri_string())),
+				];
+				if let Some(name) = name {
+					attrs.push(("name", Expr::str(name.to_owned())));
+				}
+
+				Expr::fun_call(
+					Expr::Literal("pkgs.fetchurl".to_owned()),
+					vec![Expr::attr_set(attrs)],
+				)
+			},
+
+			FetchSpec::Custom(c) => {
+				let mut attrs = c.attrs.clone();
+				attrs.insert("hash".to_owned(), Expr::str(self.hash.sri_string()));
+				Expr::FunCall(Box::new(FunCall {
+					subject: Expr::Literal(format!("final.{}", &c.fn_name)),
+					args: vec!(Expr::AttrSet(attrs))
+				}))
+			},
+		}
+	}
+}
+
+#[derive(Debug, Clone)]
+pub enum FetchSpec {
+	Github(Github),
+	Archive(Archive),
+	Custom(CustomFetch),
+}
+
+#[derive(Debug, Clone)]
+pub enum AnySrc {
+	Full(Src),
+	Partial(FetchSpec),
+}
+
+impl AnySrc {
+	pub fn fetch(fetch: FetchSpec, hash: Option<NixHash>) -> Self {
+		match hash {
+			None => Self::Partial(fetch),
+			Some(hash) => Self::Full(Src::Fetch(Fetch::new(fetch, hash))),
 		}
 	}
 
-	pub fn supplied_digest(&self) -> Option<Option<&NixHash>> {
+	pub fn require_full(&self) -> Result<&Src> {
 		match self {
-			Src::Github(_) => None,
-			Src::Archive(a) => Some(a.digest.as_ref()),
-			Src::Custom(c) => None,
-			Src::RelativePath(_) => None,
-			Src::None => None,
+			Self::Full(f) => Ok(f),
+			Self::Partial(partial) => Err(anyhow!("Nix digest not populated, this is a bug in fetlock: {:?}", partial)),
+		}
+	}
+
+	pub fn partial(&self) -> Option<&FetchSpec> {
+		match self {
+			Self::Full(_) => None,
+			Self::Partial(f) => Some(f),
+		}
+	}
+
+	pub fn fetch_spec(&self) -> Option<&FetchSpec> {
+		match self {
+			Self::Partial(f) => Some(f),
+			Self::Full(Src::Fetch(f)) => Some(&f.spec),
+			Self::Full(Src::None) => None,
+			Self::Full(Src::Local(_)) => None,
 		}
 	}
 
 	pub fn extension(&self) -> Option<&str> {
-		match self {
-			Src::Archive(archive) => {
+		match self.fetch_spec() {
+			Some(FetchSpec::Archive(archive)) => {
 				let mut it = archive
 					.url
 					.0
@@ -350,74 +481,22 @@ impl Src {
 	}
 }
 
-
-#[derive(Debug, Clone)]
-pub struct SrcDigest<'a> {
-	pub src: &'a Src,
-	pub digest: &'a NixHash,
+#[derive(Clone)]
+pub struct CustomFetch {
+	pub fn_name: &'static str,
+	pub cache_key: Option<String>,
+	pub attrs: BTreeMap<String, Expr>,
 }
 
-impl SrcDigest<'_> {
-	pub fn new<'a>(src: &'a Src, digest: &'a NixHash) -> SrcDigest<'a> {
-		SrcDigest { src, digest }
-	}
-
-	pub fn as_expr(&self) -> Expr {
-		let SrcDigest { src, digest } = self;
-		match src {
-			Src::Github(github) => {
-				let Github {
-					repo: GithubRepo { owner, repo },
-					git_ref,
-					fetch_submodules,
-				} = github;
-				let mut attrs = vec![
-					("owner", Expr::str(owner.to_owned())),
-					("repo", Expr::str(repo.to_owned())),
-					("rev", Expr::str(git_ref.to_owned())),
-					("hash", Expr::str(digest.sri_string())),
-				];
-				if *fetch_submodules {
-					attrs.push(("fetchSubmodules", Expr::Bool(true)));
-				}
-
-				Expr::fun_call(
-					Expr::Literal("pkgs.fetchFromGitHub".to_owned()),
-					vec![Expr::attr_set(attrs)],
-				)
-			},
-
-			Src::Archive(archive) => {
-				let Archive { url, name, digest: _ } = archive;
-				let mut attrs = vec![
-					("url", Expr::str(url.0.to_owned())),
-					("hash", Expr::str(digest.sri_string())),
-				];
-				if let Some(name) = name {
-					attrs.push(("name", Expr::str(name.to_owned())));
-				}
-
-				Expr::fun_call(
-					Expr::Literal("pkgs.fetchurl".to_owned()),
-					vec![Expr::attr_set(attrs)],
-				)
-			},
-
-			Src::Custom(c) => {
-				let mut attrs = c.attrs.clone();
-				attrs.insert("hash".to_owned(), Expr::str(digest.sri_string()));
-				Expr::FunCall(Box::new(FunCall {
-					subject: Expr::Literal(format!("final.{}", &c.fn_name)),
-					args: vec!(Expr::AttrSet(attrs))
-				}))
-			},
-
-			// TODO better error reporting, assert?
-			Src::RelativePath(_) => Expr::Null,
-			Src::None => Expr::Null,
-		}
+impl Debug for CustomFetch {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.write_fmt(format_args!("CustomFetch({}, {})",
+			&self.fn_name,
+			self.cache_key.as_deref().unwrap_or("[uncacheable]")
+		))
 	}
 }
+
 
 pub trait AsSpec: Debug + Clone {
 	fn wrap(spec: Spec) -> Self;
@@ -433,27 +512,13 @@ pub struct Spec {
 	pub id: Id,
 	pub dep_keys: Vec<Key>,
 	build_inputs: Vec<Expr>,
-	pub src: Src,
-	pub digest: Option<NixHash>,
+	pub src: AnySrc,
 	pub extra: BTreeMap<String, Expr>,
 }
 
 impl Spec {
-	pub fn src_digest(&self) -> Option<SrcDigest> {
-		self.digest.as_ref().map(|digest| SrcDigest {
-			src: &self.src,
-			digest,
-		})
-	}
-
-	pub fn set_src_digest(&mut self, src: Src, digest: NixHash) {
-		self.src = src;
-		self.digest = Some(digest);
-	}
-
-	pub fn set_src_path(&mut self, src: String) {
-		self.src = Src::RelativePath(src);
-		self.digest = None;
+	pub fn set_src(&mut self, src: Src) {
+		self.src = AnySrc::Full(src);
 	}
 
 	pub fn build_inputs(&self) -> Vec<Expr> {
@@ -481,7 +546,7 @@ impl AsSpec for Spec {
 pub struct PartialSpec {
 	pub id: PartialId,
 	pub dep_keys: Vec<Key>,
-	pub src: Option<Src>,
+	pub src: Option<AnySrc>,
 	pub build_inputs: Vec<Expr>,
 	pub extra: BTreeMap<String, Expr>,
 }
@@ -516,7 +581,6 @@ impl PartialSpec {
 						build_inputs,
 						src,
 						extra,
-						digest: None,
 					})
 				})();
 				built.with_context(|| error_desc)
@@ -536,7 +600,15 @@ impl PartialSpec {
 		self.build_inputs.push(dep)
 	}
 
+	pub fn set_fetch_src(&mut self, src: FetchSpec) {
+		self.src = Some(AnySrc::Partial(src));
+	}
+
 	pub fn set_src(&mut self, src: Src) {
+		self.src = Some(AnySrc::Full(src));
+	}
+
+	pub fn set_any_src(&mut self, src: AnySrc) {
 		self.src = Some(src);
 	}
 }

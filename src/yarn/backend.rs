@@ -65,7 +65,7 @@ impl Backend for YarnLock {
 
 		lockfile.populate_sources().await?;
 
-		let mut sources = fetch::realise_sources(lockfile.0.specs.iter().map(|(k,v)| (k, &v.spec))).await?;
+		let mut sources = fetch::realise_fetch_sources(lockfile.0.specs.iter().map(|(k,v)| (k, &v.spec))).await?;
 		sources.insert(root_key, src.root.clone());
 		for (key, path) in sources {
 			let spec = lockfile.0.specs.get_mut(&key).ok_or_else(||
@@ -198,7 +198,7 @@ impl YarnSpec {
 				}
 			};
 
-			self.spec.src = Src::Archive(Archive::new(listing.dist.tarball, digest));
+			self.spec.src = AnySrc::fetch(FetchSpec::Archive(Archive::new(listing.dist.tarball)), digest);
 			Ok(())
 		})()
 		.await;

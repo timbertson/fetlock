@@ -10,14 +10,27 @@ use crate::*;
 pub struct GoLock(Lock<Spec>);
 
 impl GoLock {
-	fn vendor_src_for(src: &SrcDigest) -> CustomFetch {
+	fn vendor_src_for_expr(src: Expr, cache_key: Option<String>) -> CustomFetch {
 		let mut attrs = BTreeMap::new();
-		attrs.insert("src".to_owned(), src.as_expr());
+		attrs.insert("src".to_owned(), src);
 		CustomFetch {
 			fn_name: "fetchGoModules",
-			cache_key: format!("{:?}", &src.src),
+			cache_key,
 			attrs,
 		}
+	}
+
+	fn vendor_src_for_fetch(src: &Fetch) -> CustomFetch {
+		Self::vendor_src_for_expr(
+			src.as_expr(),
+			Some(format!("{:?}", src))
+		)
+	}
+
+	fn vendor_src_for_path(p: &LocalPath) -> Result<CustomFetch> {
+		// we can use the nonportable expression because we're only ever evaluating this locally,
+		// it doesn't make it into the lockfile
+		Ok(Self::vendor_src_for_expr(p.abs_expr_nonportable()?, None))
 	}
 }
 
@@ -66,16 +79,26 @@ impl Backend for GoLock {
 	async fn finalize(mut self) -> Result<Lock<Self::Spec>> {
 		// fetlock populates `src`, but we need to also populate the vendor digest.
 		for spec in self.0.specs.values_mut() {
-			let mut mod_spec = spec.clone();
+			let mod_fetch = match &spec.src {
+				AnySrc::Partial(p) => {
+					return Err(anyhow!("Src digest not populated: {:?}", &p));
+				},
+				AnySrc::Full(src) => match src {
+					Src::Fetch(fetch) => {
+						FetchSpec::Custom(GoLock::vendor_src_for_fetch(fetch))
+					},
+					Src::Local(path) => {
+						FetchSpec::Custom(GoLock::vendor_src_for_path(path)?)
+					},
+					Src::None => {
+						return Err(anyhow!("root package src is None: {:?}", &spec));
+					},
+				}
+			};
 
+			let hash = fetch::calculate_digest(&mod_fetch).await?;
 			// TODO how to pass in local src?
-			let src_digest = spec.src_digest().ok_or_else(|| anyhow!("Src digest not populated"))?;
-
-			mod_spec.src = Src::Custom(GoLock::vendor_src_for(&src_digest));
-			mod_spec.digest = None;
-			fetch::ensure_digest(&mut mod_spec).await?;
-			let hash = mod_spec.digest.ok_or_else(|| anyhow!("digest not populated"))?.sri_string();
-			spec.extra.insert("vendorSha256".to_owned(), Expr::str(hash));
+			spec.extra.insert("vendorSha256".to_owned(), Expr::str(hash.sri_string()));
 		}
 		Ok(self.0)
 	}

@@ -64,11 +64,13 @@ impl LocalRegistry {
 			.replace(CHECKSUM_TEMPLATE, &entry.cksum);
 		
 		let digest = NixHash::from_hex(HashAlg::Sha256, &entry.cksum)?;
-		Ok(Src::Archive(Archive {
-			name: Some("crate.tar.gz".to_owned()),
-			url: Url::new(url),
-			digest: Some(digest),
-		}))
+		Ok(Src::Fetch(Fetch::new(
+			FetchSpec::Archive(Archive {
+				name: Some("crate.tar.gz".to_owned()),
+				url: Url::new(url),
+			}),
+			digest,
+		)))
 	}
 	
 	pub async fn load(opts: &WriteOpts, url: Url) -> Result<Self> {

@@ -109,7 +109,7 @@ impl BundlerLock {
 		spec.id.set_version(version.clone());
 		spec.add_deps(&mut dependencies);
 
-		let src: Result<Src> = (|| async move {
+		let src: Result<Fetch> = (|| async move {
 			// https://guides.rubygems.org/rubygems-org-api-v2/
 			let url = format!("{}api/v2/rubygems/{}/versions/{}.json", &repository, &name, &version);
 			let body = reqwest::get(&url)
@@ -123,9 +123,9 @@ impl BundlerLock {
 			let digest = NixHash::from_hex(HashAlg::Sha256, &listing.sha)?;
 
 			debug!("package listing for {:?}: {:?}", &name, listing);
-			Ok(Src::Archive(Archive::new(listing.gem_uri, Some(digest))))
+			Ok(Fetch::new(FetchSpec::Archive(Archive::new(listing.gem_uri)), digest))
 		})().await;
-		spec.set_src(src.with_context(|| desc)?);
+		spec.set_src(Src::Fetch(src.with_context(|| desc)?));
 		spec.build()
 	}
 }

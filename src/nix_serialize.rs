@@ -1,14 +1,16 @@
 // writes Expr objects to a stream
 
+use anyhow::*;
+use crate::err;
 use crate::expr::*;
 use crate::lock::*;
 use crate::hash::NixHash;
 use lazy_static::lazy_static;
-use log::*;
 use regex::Regex;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Debug;
+use std::io;
 use std::io::{Result, Write};
 use std::ops::Deref;
 
@@ -361,7 +363,6 @@ impl Writeable for Spec {
 			dep_keys,
 			extra,
 			src,
-			digest,
 			..
 		} = self;
 		let Id { name, version } = id;
@@ -378,21 +379,20 @@ impl Writeable for Spec {
 			}
 
 			match src {
-				Src::None => (),
-				Src::RelativePath(p) => {
-					let nix_path = format!("{}/.", p.strip_suffix('/').unwrap_or(p));
-					c.attr(&"src", &Expr::FunCall(FunCall::new(
-						Expr::Literal("final.pathSrc".to_owned()),
-						vec!(Expr::Literal(nix_path))
-					)))?;
+				AnySrc::Full(src) => match src {
+					Src::None => (),
+					Src::Local(local) => {
+						c.attr(&"src", &err::into_io(local.as_expr())?)?;
+					},
+					Src::Fetch(fetch) => {
+						c.attr(&"src", &fetch)?;
+					},
 				},
-				_ => {
-					if let Some(digest) = digest.as_ref() {
-						c.attr(&"src", &SrcDigest::new(src, digest))?;
-					} else {
-						warn!("digest missing for source: {:?}", src);
-					}
-				}
+				AnySrc::Partial(p) => {
+					return Err(io::Error::new(io::ErrorKind::Other,
+						anyhow!("Attempted to serialize src without digest: {:?}", self)
+					));
+				},
 			};
 
 			for (k, v) in extra.iter() {
@@ -403,11 +403,23 @@ impl Writeable for Spec {
 	}
 }
 
-impl Writeable for SrcDigest<'_> {
+impl<'a> Writeable for FetchSpecRef<'a> {
 	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
 		// This could be more efficient if written directly, but we need the
 		// Expr implementation in order to store sources in hashmaps etc
 		self.as_expr().write_to(c)
+	}
+}
+
+impl Writeable for Fetch {
+	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
+		self.as_ref().write_to(c)
+	}
+}
+
+impl Writeable for LocalPath {
+	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
+		err::into_io(self.as_expr())?.write_to(c)
 	}
 }
 

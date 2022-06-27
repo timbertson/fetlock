@@ -1,5 +1,5 @@
 use crate::cache::{cache_hash, cache_root};
-use crate::{cmd, url_util};
+use crate::{cmd};
 use crate::lock::*;
 use crate::hash::*;
 use crate::nix_serialize::*;
@@ -114,11 +114,8 @@ async fn calculate_digest_inner(fetch_spec: &mut FetchSpec) -> Result<Prefetch> 
 			Some(hash) => Ok(Prefetch::Complete(hash)),
 			None => {
 				if let FetchSpec::Github(github) = fetch_spec {
-					if github.use_builtins_fetchgit == false {
-						let url = format!("https://github.com/{}/{}",
-							url_util::encode(&github.repo.owner),
-							url_util::encode(&github.repo.repo),
-						);
+					if github.repo.private == false {
+						let url = github.repo.git_url();
 						debug!("Testing if public repo is reachable: {}", url);
 
 						let status = Client::builder().build()?
@@ -127,7 +124,7 @@ async fn calculate_digest_inner(fetch_spec: &mut FetchSpec) -> Result<Prefetch> 
 							.status();
 						if status == StatusCode::NOT_FOUND {
 							info!("Assuming private repo: {:?}", github.repo);
-							github.use_builtins_fetchgit = true;
+							github.repo.private = true;
 							return Ok(Prefetch::RetryModified);
 						}
 					}

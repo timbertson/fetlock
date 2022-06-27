@@ -62,10 +62,7 @@ impl Backend for OpamLock {
 			}),
 		);
 
-		let opam_repo_git = GithubRepo {
-			owner: "ocaml".to_owned(),
-			repo: "opam-repository".to_owned(),
-		};
+		let opam_repo_git = GithubRepo::new("ocaml".to_owned(), "opam-repository".to_owned());
 
 		let opam_repo = CachedRepo::cache(&opts, &opam_repo_git).await?;
 
@@ -95,7 +92,6 @@ impl Backend for OpamLock {
 					repo: opam_repo_git,
 					git_ref: opam_repo.commit.clone(),
 					fetch_submodules: false,
-					use_builtins_fetchgit: false,
 				}),
 				repo_digest?
 			).as_expr(),

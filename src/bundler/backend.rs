@@ -44,18 +44,15 @@ impl Backend for BundlerLock {
 		// TODO we need both the lockfile and the Gemfile,
 		// the CLIopts include only the lockfile
 		let lock_path = src.lock_path();
-		let base_dir = lock_path
-			.parent()
-			.and_then(|p| p.to_str())
-			.ok_or_else(|| anyhow!("can't get parent directory of lockfile"))?;
 		let contents = cmd::run_stdout(
 			"convert.rb",
 			None,
 			Command::new("ruby")
-				.current_dir(base_dir)
+				// .current_dir(base_dir)
 				.arg("-e")
 				.arg(include_str!("fetlock.rb"))
-				.arg("lock"),
+				.arg("lock")
+				.arg(lock_path),
 		)
 		.await?;
 		let lockfile: RawFile = serde_json::from_str(&contents)?;

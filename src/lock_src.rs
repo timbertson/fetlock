@@ -63,10 +63,7 @@ impl GithubSpec {
 		let (path, git_ref) = split_one("#", &repo);
 		let (owner, repo) = split_one_or_else("/", path, || anyhow!("invalid repo: {}", repo))?;
 		Ok(GithubSpec {
-			repo: GithubRepo {
-				owner: owner.to_owned(),
-				repo: repo.to_owned(),
-			},
+			repo: GithubRepo::new(owner.to_owned(), repo.to_owned()),
 			git_ref: git_ref.unwrap_or("HEAD").to_owned(),
 		})
 	}

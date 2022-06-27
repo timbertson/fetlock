@@ -654,10 +654,9 @@ impl EsySrcInfoVisitor {
 				let manifest = manifest.map(|m| m.to_owned());
 				Ok(EsySrcInfo {
 					src: AnySrc::Partial(FetchSpec::Github(Github {
-						repo: GithubRepo { owner, repo },
+						repo: GithubRepo::new(owner, repo),
 						git_ref,
 						fetch_submodules: false, // may be modified in fetch::upgrade_gitmodules
-						use_builtins_fetchgit: false,
 					})),
 					manifest,
 					opam: None,

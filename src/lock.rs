@@ -1,6 +1,6 @@
 use crate::expr::{Expr, FunCall};
 use crate::hash::NixHash;
-use crate::path_util;
+use crate::{path_util, url_util};
 use anyhow::*;
 use serde::de::{Deserialize, Deserializer};
 use std::borrow::Borrow;
@@ -217,22 +217,32 @@ pub trait GitUrl {
 pub struct GithubRepo {
 	pub owner: String,
 	pub repo: String,
+	pub private: bool,
 }
 
 impl GithubRepo {
+	pub fn new(owner: String, repo: String) -> Self {
+		Self { owner, repo, private: false }
+	}
+
 	pub fn for_rev(&self, rev: String) -> Github {
 		Github {
 			repo: self.clone(),
 			git_ref: rev,
 			fetch_submodules: false,
-			use_builtins_fetchgit: false
 		}
 	}
 }
 
 impl GitUrl for GithubRepo {
 	fn git_url(&self) -> String {
-		format!("https://github.com/{}/{}.git", &self.owner, &self.repo)
+		let owner = url_util::encode(&self.owner);
+		let repo = url_util::encode(&self.repo);
+		if self.private {
+			format!("git+ssh://git@github.com/{}/{}", owner, repo)
+		} else {
+			format!("https://github.com/{}/{}.git", owner, repo)
+		}
 	}
 }
 
@@ -258,11 +268,6 @@ pub struct Github {
 	pub repo: GithubRepo,
 	pub git_ref: String,
 	pub fetch_submodules: bool,
-
-	// Used for private modules (over SSH). Potentially we could
-	// also/instead support https auth, but
-	// we already use `git ls-remote` via SSH
-	pub use_builtins_fetchgit: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -373,10 +378,9 @@ impl<'a> FetchSpecRef<'a> {
 		match &self.spec {
 			FetchSpec::Github(github) => {
 				let Github {
-					repo: GithubRepo { owner, repo },
+					repo,
 					git_ref,
 					fetch_submodules,
-					use_builtins_fetchgit,
 				} = github;
 				let mut attrs = vec![
 					("rev", Expr::str(git_ref.to_owned())),
@@ -387,13 +391,14 @@ impl<'a> FetchSpecRef<'a> {
 					attrs.push(("fetchSubmodules", Expr::Bool(true)));
 				}
 
-				if *use_builtins_fetchgit {
-					attrs.push(("url", Expr::str(format!("git+ssh://git@github.com/{}/{}", owner, repo))));
+				if repo.private {
+					attrs.push(("url", Expr::str(repo.git_url())));
 					Expr::fun_call(
 						Expr::Literal("final.fetchGitBuiltin".to_owned()),
 						vec![Expr::attr_set(attrs)],
 					)
 				} else {
+					let GithubRepo { owner, repo, private: _ } = repo;
 					attrs.push(("owner", Expr::str(owner.to_owned())));
 					attrs.push(("repo", Expr::str(repo.to_owned())));
 					Expr::fun_call(

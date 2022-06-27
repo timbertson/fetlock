@@ -9,6 +9,15 @@ use crate::*;
 #[derive(Clone, Debug)]
 pub struct GoLock(Lock<Spec>);
 
+/*
+
+Currently GoLock is a simple frontend to buildGoModule.
+In the future we could consider something more like gomod2nix.
+This still vendors everything for one big build, but individual
+sources are cached independently and symlinked in, which
+improves cache / download times for dependencies.
+
+*/
 impl GoLock {
 	fn vendor_src_for_expr(src: Expr, cache_key: Option<String>) -> CustomFetch {
 		let mut attrs = BTreeMap::new();
@@ -79,7 +88,7 @@ impl Backend for GoLock {
 	async fn finalize(mut self) -> Result<Lock<Self::Spec>> {
 		// fetlock populates `src`, but we need to also populate the vendor digest.
 		for spec in self.0.specs.values_mut() {
-			let mod_fetch = match &spec.src {
+			let mut mod_fetch = match &spec.src {
 				AnySrc::Partial(p) => {
 					return Err(anyhow!("Src digest not populated: {:?}", &p));
 				},
@@ -96,7 +105,7 @@ impl Backend for GoLock {
 				}
 			};
 
-			let hash = fetch::calculate_digest(&mod_fetch).await?;
+			let hash = fetch::calculate_digest(&mut mod_fetch).await?;
 			// TODO how to pass in local src?
 			spec.extra.insert("vendorSha256".to_owned(), Expr::str(hash.sri_string()));
 		}

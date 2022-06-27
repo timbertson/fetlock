@@ -1,5 +1,5 @@
 use crate::cache::{cache_hash, cache_root};
-use crate::cmd;
+use crate::{cmd, url_util};
 use crate::lock::*;
 use crate::hash::*;
 use crate::nix_serialize::*;
@@ -8,6 +8,7 @@ use anyhow::*;
 use lazy_static::lazy_static;
 use log::*;
 use regex::Regex;
+use reqwest::{StatusCode, Client};
 use std::collections::HashMap;
 use std::{fmt, mem};
 use std::io::{ErrorKind, Write};
@@ -38,8 +39,8 @@ pub async fn ensure_digest(src: &mut AnySrc) -> Result<()> {
 	mem::swap(&mut tmp, src);
 	let full = match tmp {
 		AnySrc::Full(full) => full,
-		AnySrc::Partial(fetch) => {
-			let digest = calculate_digest(&fetch)
+		AnySrc::Partial(mut fetch) => {
+			let digest = calculate_digest(&mut fetch)
 				.await
 				.with_context(|| format!("fetching source: {:?}", &fetch))?;
 			Src::Fetch(Fetch::new(fetch, digest))
@@ -61,7 +62,27 @@ fn get_cache_path(fetch_spec: &FetchSpec) -> Option<PathBuf> {
 	Some(cache_dir.join(cache_filename))
 }
 
-pub async fn calculate_digest(fetch_spec: &FetchSpec) -> Result<NixHash> {
+// mut is required so that we can upgrad github repos based on whether they appear to be private.
+// If this gets awkward, we should find a way to do it in a separate pass or via construction.
+// It's convenient here since we can skip the test if we have a cache hit
+pub async fn calculate_digest(fetch_spec: &mut FetchSpec) -> Result<NixHash> {
+	// this could be recursive, but that's awkward with async functions so here's
+	// a maximum two step repeat :facepalm:
+	match calculate_digest_inner(fetch_spec).await? {
+		Prefetch::Complete(hash) => Ok(hash),
+		Prefetch::RetryModified => match calculate_digest_inner(fetch_spec).await? {
+			Prefetch::Complete(hash) => Ok(hash),
+			Prefetch::RetryModified => Err(anyhow!("calculate_digest requested too many retries"))
+		}
+	}
+}
+
+enum Prefetch {
+	Complete(NixHash),
+	RetryModified
+}
+
+async fn calculate_digest_inner(fetch_spec: &mut FetchSpec) -> Result<Prefetch> {
 	let cache_path = get_cache_path(fetch_spec);
 	if cache_path.is_some() {
 		debug!(
@@ -69,7 +90,7 @@ pub async fn calculate_digest(fetch_spec: &FetchSpec) -> Result<NixHash> {
 			&cache_path, fetch_spec
 		);
 	}
-	let result: Result<NixHash> = (|| async {
+	let result: Result<Prefetch> = (|| async {
 		let cached: Option<NixHash> = match &cache_path {
 			None => None,
 			Some(cache_path) => {
@@ -90,8 +111,28 @@ pub async fn calculate_digest(fetch_spec: &FetchSpec) -> Result<NixHash> {
 		};
 
 		match cached {
-			Some(hash) => Ok(hash),
+			Some(hash) => Ok(Prefetch::Complete(hash)),
 			None => {
+				if let FetchSpec::Github(github) = fetch_spec {
+					if github.use_builtins_fetchgit == false {
+						let url = format!("https://github.com/{}/{}",
+							url_util::encode(&github.repo.owner),
+							url_util::encode(&github.repo.repo),
+						);
+						debug!("Testing if public repo is reachable: {}", url);
+
+						let status = Client::builder().build()?
+							.head(&url).send().await
+							.with_context(|| format!("HEAD {}", &url))?
+							.status();
+						if status == StatusCode::NOT_FOUND {
+							info!("Assuming private repo: {:?}", github.repo);
+							github.use_builtins_fetchgit = true;
+							return Ok(Prefetch::RetryModified);
+						}
+					}
+				}
+
 				info!("fetch: {:?}", fetch_spec);
 				let digest = do_prefetch(fetch_spec).await?;
 				if let Some(cache_path) = cache_path {
@@ -101,7 +142,7 @@ pub async fn calculate_digest(fetch_spec: &FetchSpec) -> Result<NixHash> {
 						Ok(write!(f, "{}\n", digest.sri())?)
 					})?;
 				}
-				Ok(digest)
+				Ok(Prefetch::Complete(digest))
 			}
 		}
 
@@ -148,9 +189,14 @@ impl FetchMany {
 		let digests = Some(src_digest);
 		Self::digests(digests.into_iter())
 	}
+	
+	fn add_fetlock_path(cmd: &mut Command) {
+		cmd.arg("-I").arg(format!("fetlock={}", FETLOCK_NIX.unwrap_or("./nix")));
+	}
 
 	fn build_command(&self) -> Command {
 		let mut command = Command::new("nix-build");
+		Self::add_fetlock_path(&mut command);
 		command
 			.arg("--no-out-link")
 			.arg("--show-trace")
@@ -165,10 +211,13 @@ impl FetchMany {
 		self.run_command("nix-build", &mut self.build_command(), Stdio::piped())
 			.await?;
 
+		let mut json_command = Command::new("nix-instantiate");
+		Self::add_fetlock_path(&mut json_command);
+
 		let json = self
 			.check_stdout(
 				"nix-instantiate",
-				Command::new("nix-instantiate")
+					json_command
 					.arg("--show-trace")
 					.arg("-")
 					.arg("--attr")
@@ -372,8 +421,8 @@ impl ExtractSource<'_> {
 
 					let mut new_gh = gh.clone();
 					new_gh.fetch_submodules = true;
-					let new_spec = FetchSpec::Github(new_gh);
-					let digest = calculate_digest(&new_spec).await?;
+					let mut new_spec = FetchSpec::Github(new_gh);
+					let digest = calculate_digest(&mut new_spec).await?;
 					Some(Src::Fetch(Fetch::new(new_spec, digest)))
 				} else {
 					None

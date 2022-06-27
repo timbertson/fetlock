@@ -81,8 +81,8 @@ async fn write<B: Backend + fmt::Debug>(opts: &CliOpts, write_opts: &WriteOpts) 
 	// src comes from an explicit `src`, or `lock_src`.
 	let src = match &write_opts.src {
 		Some(LockRoot::Github(gh)) => {
-			let resolved = FetchSpec::Github(gh.resolve().await?);
-			let digest = fetch::calculate_digest(&resolved).await?;
+			let mut resolved = FetchSpec::Github(gh.resolve().await?);
+			let digest = fetch::calculate_digest(&mut resolved).await?;
 			Src::Fetch(Fetch::new(resolved, digest))
 		},
 		Some(LockRoot::Path(p)) => Src::Local(LocalPath(p.to_owned())),

@@ -88,8 +88,8 @@ impl LocalSrc {
 		}
 	}
 
-	async fn fetch_src(fetch_spec: FetchSpec, relative: Option<String>) -> Result<Self> {
-		let digest = fetch::calculate_digest(&fetch_spec).await?;
+	async fn fetch_src(mut fetch_spec: FetchSpec, relative: Option<String>) -> Result<Self> {
+		let digest = fetch::calculate_digest(&mut fetch_spec).await?;
 		let fetch = Fetch::new(fetch_spec, digest);
 		let root = fetch::realise_source(&fetch).await?;
 		Ok(Self {

@@ -16,6 +16,7 @@ mod opts;
 mod stream_util;
 mod string_util;
 mod path_util;
+mod url_util;
 pub use opts::CliOpts;
 pub use opts::WriteOpts;
 pub use hash::{NixHash, HashAlg};

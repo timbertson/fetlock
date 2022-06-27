@@ -225,6 +225,7 @@ impl GithubRepo {
 			repo: self.clone(),
 			git_ref: rev,
 			fetch_submodules: false,
+			use_builtins_fetchgit: false
 		}
 	}
 }
@@ -257,6 +258,11 @@ pub struct Github {
 	pub repo: GithubRepo,
 	pub git_ref: String,
 	pub fetch_submodules: bool,
+
+	// Used for private modules (over SSH). Potentially we could
+	// also/instead support https auth, but
+	// we already use `git ls-remote` via SSH
+	pub use_builtins_fetchgit: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -370,21 +376,32 @@ impl<'a> FetchSpecRef<'a> {
 					repo: GithubRepo { owner, repo },
 					git_ref,
 					fetch_submodules,
+					use_builtins_fetchgit,
 				} = github;
 				let mut attrs = vec![
-					("owner", Expr::str(owner.to_owned())),
-					("repo", Expr::str(repo.to_owned())),
 					("rev", Expr::str(git_ref.to_owned())),
 					("hash", Expr::str(self.hash.sri_string())),
 				];
+
 				if *fetch_submodules {
 					attrs.push(("fetchSubmodules", Expr::Bool(true)));
 				}
 
-				Expr::fun_call(
-					Expr::Literal("pkgs.fetchFromGitHub".to_owned()),
-					vec![Expr::attr_set(attrs)],
-				)
+				if *use_builtins_fetchgit {
+					attrs.push(("url", Expr::str(format!("git+ssh://git@github.com/{}/{}", owner, repo))));
+					Expr::fun_call(
+						Expr::Literal("final.fetchGitBuiltin".to_owned()),
+						vec![Expr::attr_set(attrs)],
+					)
+				} else {
+					attrs.push(("owner", Expr::str(owner.to_owned())));
+					attrs.push(("repo", Expr::str(repo.to_owned())));
+					Expr::fun_call(
+						Expr::Literal("pkgs.fetchFromGitHub".to_owned()),
+						vec![Expr::attr_set(attrs)],
+					)
+				}
+
 			},
 
 			FetchSpec::Archive(archive) => {

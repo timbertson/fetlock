@@ -309,6 +309,7 @@ dependencies = [
  "lazy_static",
  "log",
  "nom",
+ "percent-encoding",
  "platforms",
  "regex",
  "reqwest",

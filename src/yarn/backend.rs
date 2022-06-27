@@ -181,8 +181,11 @@ impl YarnSpec {
 				}
 			};
 
-			// TODO escaping with `url`?
-			let url = format!("{}/{}/{}", root, self.spec.id.name, self.spec.id.version);
+			let url = format!("{}/{}/{}",
+				root,
+				url_util::encode(&self.spec.id.name),
+				url_util::encode(&self.spec.id.version)
+			);
 			let body = reqwest::get(&url)
 				.await
 				.with_context(|| format!("GET {}", &url))?

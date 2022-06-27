@@ -657,6 +657,7 @@ impl EsySrcInfoVisitor {
 						repo: GithubRepo { owner, repo },
 						git_ref,
 						fetch_submodules: false, // may be modified in fetch::upgrade_gitmodules
+						use_builtins_fetchgit: false,
 					})),
 					manifest,
 					opam: None,

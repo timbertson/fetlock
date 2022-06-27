@@ -52,7 +52,7 @@ let
 					_catchWholesaleEvaluation = abort "\nYou appear to be evaluating the result of `fetlock.load`.\nYou probably meant to evaluate `root`, `fetlock`, `shell`, or a particular `drvsByName.PACKAGE_NAME`";
 
 					inherit pkgs getDrv fetlockImpls;
-					inherit (import ./fetch.nix {inherit pkgs; }) fetchGoModule;
+					inherit (import ./fetch.nix {inherit pkgs; }) fetchGoModule fetchGitBuiltin;
 
 					emptyDrv = stdenv.mkDerivation {
 						name = "empty-drv";

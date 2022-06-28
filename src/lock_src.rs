@@ -13,8 +13,8 @@ pub enum LockRoot {
 #[derive(Debug, Clone)]
 pub struct LockSrc {
 	root: LockRoot,
-	pub relative: Option<String>,
-	pub lockfile: Option<String>,
+	lockfile: Option<String>,
+	resolved: Option<LocalSrc>,
 }
 
 #[derive(Debug, Clone)]
@@ -25,24 +25,39 @@ pub struct LockSrcOpts {
 }
 
 impl LockSrc {
-	pub async fn resolve(&self) -> Result<LocalSrc> {
-		let relative = match (&self.relative, &self.lockfile) {
-			(Some(rel), Some(lock)) => Some(format!("{}/{}", rel, lock)),
-			(Some(rel), None) => Some(rel.clone()),
-			(None, Some(lock)) => Some(lock.clone()),
-			(None, None) => None,
-		};
-		match &self.root {
+	pub async fn resolve(&mut self) -> Result<LocalSrc> {
+		if let Some(resolved) = &self.resolved {
+			return Ok(resolved.clone());
+		}
+
+		let relative = self.lockfile.clone();
+		let resolved = match &self.root {
 			LockRoot::Path(p) => Ok(LocalSrc::path(p.clone(), relative)),
 			LockRoot::Github(gh) => {
 				let src = gh.resolve().await?;
 				LocalSrc::fetch_src(FetchSpec::Github(src), relative).await
 			}
-		}
+		}?;
+		self.resolved = Some(resolved.clone());
+		Ok(resolved)
+	}
+	
+	pub fn lockfile(&self) -> Option<&str> {
+		self.lockfile.as_deref()
 	}
 	
 	pub fn root(&self) -> &LockRoot {
 		&self.root
+	}
+	
+	// When detecting a lockfile from a remote source, we have to resolve it
+	// before we know the relative lockfile path. So if we've done that, we have to make sure
+	// we also update the cached resolution.
+	pub fn set_lockfile(&mut self, path: String) {
+		if let Some(res) = &mut self.resolved {
+			res.relative = Some(path.clone());
+		}
+		self.lockfile = Some(path);
 	}
 }
 
@@ -113,15 +128,19 @@ impl LockSrc {
 		let repo_root: Option<Result<LockRoot>> =
 			repo.map(|repo| Ok(LockRoot::Github(GithubSpec::parse(repo.as_str())?)));
 		let repo_root = repo_root.transpose()?;
-		let (root, relative): (LockRoot, Option<String>) = match (repo_root, lock_root) {
-			(None, None) => (LockRoot::Path(PathBuf::from(".")), None),
-			(Some(root), relative) => (root, relative.map(|s| s.to_owned())),
-			(None, Some(local_root)) => (LockRoot::Path(PathBuf::from(local_root)), None),
+
+		let root: LockRoot = match (repo_root, lock_root) {
+			(None, None) => LockRoot::Path(PathBuf::from(".")),
+			(Some(remote), None) => remote,
+			(None, Some(local)) => LockRoot::Path(PathBuf::from(local)),
+			(Some(root), Some(relative)) => {
+				return Err(anyhow!("Can't specify both --path and --github"))
+			},
 		};
 		Ok(LockSrc {
 			root,
-			relative,
 			lockfile: lockfile.map(|s| s.to_owned()),
+			resolved: None
 		})
 	}
 }

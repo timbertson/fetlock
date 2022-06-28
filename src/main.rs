@@ -37,17 +37,18 @@ pub async fn main() -> Result<()> {
 	}
 }
 
-async fn process<B: Backend + fmt::Debug>(opts: CliOpts) -> Result<()> {
-	match &opts.cmd {
-		opts::Command::Init(init_opts) => init::<B>(&opts, &init_opts).await,
-		opts::Command::Update(update_opts) => update::<B>(&opts, update_opts).await,
-		opts::Command::Write(write_opts) => write::<B>(&opts, &write_opts).await,
+async fn process<B: Backend + fmt::Debug>(mut opts: CliOpts) -> Result<()> {
+	match opts.cmd.clone() {
+		opts::Command::Init(init_opts) => init::<B>(&mut opts, &init_opts).await,
+		opts::Command::Update(update_opts) => update::<B>(&mut opts, &update_opts).await,
+		opts::Command::Write(write_opts) => write::<B>(&mut opts, &write_opts).await,
 	}
 }
 
-async fn write<B: Backend + fmt::Debug>(opts: &CliOpts, write_opts: &WriteOpts) -> Result<()> {
+async fn write<B: Backend + fmt::Debug>(opts: &mut CliOpts, write_opts: &WriteOpts) -> Result<()> {
 	info!("loading {:?}", &opts.lock_src);
 	let lock_src = opts.lock_src.resolve().await?;
+	debug!("resolved lock_src: {:?}", &opts.lock_src);
 	let mut lock = B::load(&lock_src, write_opts)
 		.await
 		.with_context(|| format!("loading {:?}", &lock_src))?;
@@ -120,7 +121,7 @@ async fn write<B: Backend + fmt::Debug>(opts: &CliOpts, write_opts: &WriteOpts) 
 	})
 }
 
-async fn update<B: Backend + fmt::Debug>(opts: &CliOpts, update_opts: &opts::UpdateOpts) -> Result<()> {
+async fn update<B: Backend + fmt::Debug>(opts: &mut CliOpts, update_opts: &opts::UpdateOpts) -> Result<()> {
 	debug!("Updating lockfile {:?}", &opts.lock_src);
 	let local_src = require_local_src(opts).await?;
 	B::update_lockfile(&local_src.root, &local_src.relative).await?;
@@ -133,17 +134,11 @@ async fn update<B: Backend + fmt::Debug>(opts: &CliOpts, update_opts: &opts::Upd
 	}
 }
 
-async fn init<B: Backend + fmt::Debug>(opts: &CliOpts, init_opts: &opts::InitOpts) -> Result<()> {
+async fn init<B: Backend + fmt::Debug>(opts: &mut CliOpts, init_opts: &opts::InitOpts) -> Result<()> {
 	debug!("Initializing {:?}", &opts.lock_src);
 	
 	let root = match opts.lock_src.root() {
-		LockRoot::Path(p) => {
-			let base = PathBuf::from(p);
-			match &opts.lock_src.relative {
-				Some(rel) => base.join(rel),
-				None => base,
-			}
-		},
+		LockRoot::Path(p) => PathBuf::from(p),
 		_ => PathBuf::from("."),
 	};
 	
@@ -202,7 +197,7 @@ fn write_init_file<F: FnOnce(fs::File) -> Result<()>>(
 	}
 }
 
-async fn require_local_src(opts: &CliOpts) -> Result<LocalSrc> {
+async fn require_local_src(opts: &mut CliOpts) -> Result<LocalSrc> {
 	if let LockRoot::Path(p) = opts.lock_src.root() {
 		opts.lock_src.resolve().await
 	} else {

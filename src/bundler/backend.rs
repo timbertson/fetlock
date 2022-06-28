@@ -48,7 +48,6 @@ impl Backend for BundlerLock {
 			"convert.rb",
 			None,
 			Command::new("ruby")
-				// .current_dir(base_dir)
 				.arg("-e")
 				.arg(include_str!("fetlock.rb"))
 				.arg("lock")

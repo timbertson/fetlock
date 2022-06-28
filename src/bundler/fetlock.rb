@@ -3,14 +3,21 @@ require 'bundler'
 require 'json'
 
 cmd = ARGV.shift
+# FETLOCK_DEBUG = ENV['FETLOCK_DEBUG'] == '1'
+def debug(s)
+  # if FETLOCK_DEBUG
+    $stderr.puts(s)
+  # end
+end
 
 case cmd
 when "lock"
   lockfile_path = ARGV.fetch(0)
   lockfile = Dir.chdir(File.dirname(lockfile_path)) do ||
+    debug("Loading from #{Dir.pwd}")
     Bundler::LockfileParser.new(File.basename(lockfile_path))
   end
-  # puts lockfile.inspect
+  debug("Loaded lockfile: #{lockfile.inspect}")
   toplevel_names = lockfile.dependencies.values.map(&:name).reject {|dep| dep == 'bundler' }
   specs = lockfile.specs.sort_by(&:name).map do |spec|
     {

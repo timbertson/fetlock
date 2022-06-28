@@ -23,7 +23,7 @@ mod raw {
 		#[clap(short, long="out", about="Nix lock expression location (default nix/lock.nix)")]
 		pub out_path: Option<String>,
 
-		#[clap(short='l', long, about="lockfile name (default: per-backend default)")]
+		#[clap(short='l', long, about="lockfile name (default: per-backend)")]
 		pub lockfile: Option<String>,
 
 		#[clap(long, about="set root package src attribute to a local path (must begin with a dot) or github repository (author/repo)")]
@@ -44,7 +44,7 @@ mod raw {
 		#[clap(flatten)]
 		pub common_write: CommonWriteOpts,
 
-		#[clap(long, about="load a lockfile directly from a github repository (author/repo)")]
+		#[clap(long, about="load a lockfile directly from a github repository (author/repo[#ref])")]
 		pub github: Option<String>,
 	}
 
@@ -96,7 +96,7 @@ mod raw {
 		#[clap(about="Write a .nix lock expression from a (possibly-remote) lockfile")]
 		Write(WriteOpts),
 
-		#[clap(about="Update local lockfile based on package specification (and write nix expression)")]
+		#[clap(about="Run underlying package manager to update a local lockfile (and then write a new nix lock expression)")]
 		Update(UpdateOpts),
 
 		#[clap(about="Create boilerplate nix expressions for a local project")]
@@ -263,7 +263,7 @@ impl CliOpts {
 	}
 
 	async fn detect_type(src: &mut LockSrc) -> Result<lock::Type> {
-		if let Some(lockfile) = src.lockfile.as_ref() {
+		if let Some(lockfile) = src.lockfile() {
 			debug!("detecting based on lockfile name: {:?}", lockfile);
 			Self::type_from(lockfile).map(|(t, _)| t)
 				.ok_or_else(|| anyhow!("Couldn't determint lock type from lock file name, you'll have to also specify --type/-t"))
@@ -283,7 +283,8 @@ impl CliOpts {
 				return Err(anyhow!("Ambiguous lock type found ({:?})\nYou must specify `--lockfile` or `--type`", &types));
 			}
 			let detected = if let Some((t, lockfile)) = types.into_iter().next() {
-				src.lockfile = Some(lockfile);
+				debug!("detected lockfile: {:?}", &lockfile);
+				src.set_lockfile(lockfile);
 				info!("Detected lock type: {}", t);
 				Some(t)
 			} else {

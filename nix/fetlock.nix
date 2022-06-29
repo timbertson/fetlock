@@ -41,6 +41,7 @@ let
 				fetlock = o: ({
 					inherit src;
 					FETLOCK_NIX = "${src}/nix";
+					FETLOCK_BUNDLER = "${src}/src/bundler";
 					nativeBuildInputs = (o.nativeBuildInputs or [])
 						++ (if stdenv.isDarwin then [ osx.Security ] else []);
 				});

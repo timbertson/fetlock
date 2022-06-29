@@ -1,5 +1,5 @@
 use crate::cache::{cache_hash, cache_root};
-use crate::{cmd};
+use crate::{cmd, fetlock_env};
 use crate::lock::*;
 use crate::hash::*;
 use crate::nix_serialize::*;
@@ -153,11 +153,6 @@ struct FetchMany {
 	expr: String,
 }
 
-// This is set to $PWD/nix in a development shell (e.g. shell.nix).
-// When building from nix, it's set to ${src}/nix, so it'll be
-// a nix store path.
-const FETLOCK_NIX: Option<&'static str> = option_env!("FETLOCK_NIX");
-
 impl FetchMany {
 	fn digests<'a, Digests: Iterator<Item = FetchSpecRef<'a>>>(
 		fetch_specs: Digests,
@@ -188,7 +183,7 @@ impl FetchMany {
 	}
 	
 	fn add_fetlock_path(cmd: &mut Command) {
-		cmd.arg("-I").arg(format!("fetlock={}", FETLOCK_NIX.unwrap_or("./nix")));
+		cmd.arg("-I").arg(format!("fetlock={}", fetlock_env::nix()));
 	}
 
 	fn build_command(&self) -> Command {
@@ -197,7 +192,7 @@ impl FetchMany {
 		command
 			.arg("--no-out-link")
 			.arg("--show-trace")
-			.arg("-I").arg(format!("fetlock={}", FETLOCK_NIX.unwrap_or("./nix")))
+			.arg("-I").arg(format!("fetlock={}", fetlock_env::nix()))
 			.arg("--attr")
 			.arg("drvs")
 			.arg("-");
@@ -290,7 +285,7 @@ async fn do_prefetch(spec: &FetchSpec) -> Result<NixHash> {
 	let (stdout, stderr, status) = fetch
 		.run_command_raw(&mut fetch.build_command(), Stdio::piped())
 		.await?;
-	cmd::warn_output("nix stdout", Ok(stdout));
+	cmd::log_output(Level::Warn, "nix stdout", Ok(stdout));
 
 	let stderr = stderr.ok_or_else(|| anyhow!("stderr not piped"))?;
 	extract_expected_hash(&stderr)

@@ -61,9 +61,10 @@ pub async fn run(
 		.await
 		.with_context(|| format!("executing {}", desc))?;
 	if status.success() {
+		log_output(Level::Debug, desc, Ok(stderr));
 		Ok(stdout)
 	} else {
-		warn_output(desc, Ok(stderr));
+		log_output(Level::Warn, desc, Ok(stderr));
 		Err(anyhow!(
 			"Process failed (code={:?}): {:?}",
 			status.code(),
@@ -85,9 +86,10 @@ fn check_status(
 	output: Result<Option<String>>,
 ) -> Result<()> {
 	if status.success() {
+		log_output(Level::Debug, desc, output);
 		Ok(())
 	} else {
-		warn_output(desc, output);
+		log_output(Level::Warn, desc, output);
 		Err(anyhow!(
 			"Process failed (code={:?}): {:?}",
 			status.code(),
@@ -112,18 +114,20 @@ async fn read_io_opt<Pipe: AsyncRead + Unpin>(pipe: &mut Option<Pipe>) -> Result
 	}
 }
 
-pub fn warn_output(desc: &str, output: Result<Option<String>>) {
-	match output {
-		Ok(None) => (),
-		Ok(Some(output)) => {
-			if !output.is_empty() {
-				for line in output.lines() {
-					warn!("[{}]: {}", desc, line);
+pub fn log_output(lvl: Level, desc: &str, output: Result<Option<String>>) {
+	if log_enabled!(lvl) {
+		match output {
+			Ok(None) => (),
+			Ok(Some(output)) => {
+				if !output.is_empty() {
+					for line in output.lines() {
+						log!(lvl, "[{}]: {}", desc, line);
+					}
 				}
 			}
-		}
-		Err(e) => {
-			warn!("[{}]: can't read stderr: {:?}", desc, e);
+			Err(e) => {
+				warn!("[{}]: can't read stderr: {:?}", desc, e);
+			}
 		}
 	}
 }

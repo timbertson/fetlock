@@ -48,13 +48,13 @@ impl Backend for BundlerLock {
 			"convert.rb",
 			None,
 			Command::new("ruby")
-				.arg("-e")
-				.arg(include_str!("fetlock.rb"))
+				.arg(format!("{}/fetlock.rb", fetlock_env::bundler()))
 				.arg("lock")
 				.arg(lock_path),
 		)
 		.await?;
-		let lockfile: RawFile = serde_json::from_str(&contents)?;
+		let lockfile: RawFile = serde_json::from_str(&contents)
+			.with_context(|| format!("{}\n\n^^parsing JSON output from fetlock.rb", &contents))?;
 		let mut lock: Lock<Spec> = Lock::<Spec>::new(LockContext::new(lock::Type::Bundler));
 		let RawFile { specs, toplevel } = lockfile;
 		let roots: Vec<Key> = toplevel.into_iter().map(Key::new).collect();

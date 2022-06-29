@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 mod expr;
+mod fetlock_env;
 pub use expr::*;
 pub mod lock;
 mod memoize;

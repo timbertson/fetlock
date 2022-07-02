@@ -1,4 +1,8 @@
-with import <nixpkgs> {};
+{
+	pkgs ? import <nixpkgs> {},
+	fetlockBackends ? (import ./nix/backends.nix).all,
+}:
+with pkgs;
 mkShell {
 	RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
 	FETLOCK_NIX = toString ./nix;
@@ -11,5 +15,5 @@ mkShell {
 			frameworks.Foundation
 			frameworks.AppKit
 		])
-	);
+	) ++ (callPackage ./nix/runtimeDeps.nix {} fetlockBackends);
 }

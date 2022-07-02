@@ -11,28 +11,28 @@ mod raw {
 
 #[derive(Parser, Debug, Default, PartialEq, Eq)]
 	pub struct CommonOpts {
-		#[clap(short='t', long="type", about="specify lock type (default: autodetected)")]
+		#[clap(short='t', long="type", help="specify lock type (default: autodetected)")]
 		pub lock_type: Option<String>,
 
-		#[clap(short='p', long, about="project path (directory containing lockfile; default is the current directory)")]
+		#[clap(short='p', long, help="project path (directory containing lockfile; default is the current directory)")]
 		pub path: Option<String>,
 	}
 
 #[derive(Parser, Debug, Default, PartialEq, Eq)]
 	pub struct CommonWriteOpts {
-		#[clap(short, long="out", about="Nix lock expression location (default nix/lock.nix)")]
+		#[clap(short, long="out", help="Nix lock expression location (default nix/lock.nix)")]
 		pub out_path: Option<String>,
 
-		#[clap(short='l', long, about="lockfile name (default: per-backend)")]
+		#[clap(short='l', long, help="lockfile name (default: per-backend)")]
 		pub lockfile: Option<String>,
 
-		#[clap(long, about="set root package src attribute to a local path (must begin with a dot) or github repository (author/repo)")]
+		#[clap(long, help="set root package src attribute to a local path (must begin with a dot) or github repository (author/repo)")]
 		pub build_src: Option<String>,
 
-		#[clap(long="clone-freshness", about="maximum age (in days) for cloned repos")]
+		#[clap(long="clone-freshness", help="maximum age (in days) for cloned repos")]
 		pub clone_freshness_days: Option<u32>,
 
-		#[clap(long="ocaml-version", about="required for opam backend")]
+		#[clap(long="ocaml-version", help="required for opam backend")]
 		pub ocaml_version: Option<String>,
 	}
 
@@ -44,7 +44,7 @@ mod raw {
 		#[clap(flatten)]
 		pub common_write: CommonWriteOpts,
 
-		#[clap(long, about="load a lockfile directly from a github repository (author/repo[#ref])")]
+		#[clap(long, help="load a lockfile directly from a github repository (author/repo[#ref])")]
 		pub github: Option<String>,
 	}
 
@@ -56,7 +56,7 @@ mod raw {
 		#[clap(flatten)]
 		pub common_write: CommonWriteOpts,
 
-		#[clap(long="no-nix", about="Only update lockfile, don't generate a nix lock expression")]
+		#[clap(long="no-nix", help="Only update lockfile, don't generate a nix lock expression")]
 		pub no_nix: bool,
 	}
 
@@ -68,10 +68,10 @@ mod raw {
 		#[clap(flatten)]
 		pub common_write: CommonWriteOpts,
 
-		#[clap(long, about="Overwrite existing boilerplate files")]
+		#[clap(long, help="Overwrite existing boilerplate files")]
 		pub force: bool,
 
-		#[clap(short, long, about="Update (or generate) lock file based on package spec")]
+		#[clap(short, long, help="Update (or generate) lock file based on package spec")]
 		pub update: bool,
 	}
 
@@ -239,7 +239,7 @@ impl CliOpts {
 				"yarn" => lock::Type::Yarn,
 				"bundler" => lock::Type::Bundler,
 				"cargo" => lock::Type::Cargo,
-				"go" => lock::Type::Go,
+				"gomod" => lock::Type::Gomod,
 				other => return Err(anyhow!("Unknown type: {}", other)),
 			};
 			let lockfile = Self::default_filename(lock_type)
@@ -255,7 +255,7 @@ impl CliOpts {
 			lock::Type::Yarn => Some("yarn.lock"),
 			lock::Type::Cargo => Some("Cargo.lock"),
 			lock::Type::Bundler => Some("Gemfile.lock"),
-			lock::Type::Go => Some("go.sum"),
+			lock::Type::Gomod => Some("go.sum"),
 			lock::Type::Opam => Some("opam"),
 			lock::Type::Esy => None
 		}
@@ -271,7 +271,7 @@ impl CliOpts {
 		} else if filename == "Gemfile" || filename == "Gemfile.lock" {
 			Some((lock::Type::Bundler, "Gemfile.lock"))
 		} else if filename == "go.mod" || filename == "go.sum" {
-			Some((lock::Type::Go, "go.sum"))
+			Some((lock::Type::Gomod, "go.sum"))
 		} else if filename.ends_with(".opam") || filename == "opam" {
 			Some((lock::Type::Opam, filename))
 		} else if filename.ends_with("esy.lock") {

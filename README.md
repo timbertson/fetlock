@@ -13,7 +13,7 @@ Fetlock is a _unified tool_ for converting various lockfiles into `nix` expressi
  - [yarn][] (nodejs): rudimentary support for v2 lockfiles
    - no `bin` wrappers
    - no `install` script / native compilation support
- - [golang][] modules:
+ - [gomod][] modules:
    - all-in-one build, i.e. a single `buildGoModule` derivation
    - no way to individually build or override dependencies
    - cache-inefficient, since a change in source code or any dependency causes a full rebuild
@@ -165,6 +165,19 @@ I'm not ruling these out, but I've made no attempt at them so far:
 
 **Cross-platform builds**: I've never needed this myself, and I have no idea how hard it is.
 
+## Adding a new backend:
+
+The idea is that backends should be able to make use of common functionality, but new backends need to be wired up in a few places:
+
+ - Rust:
+   - add a `foo.rs` exporting `foo/backend.rs`, and add `mod foo` to `lib.rs`
+   - add `Foo` to `lock::Type`
+   - add detection logic to `opts.rs` (converting an explicit str -> lock::Type, and detecting a lock::Type from a filename)
+ - Nix:
+   - update `makeBackends` in `fetlock.nix`
+   - add `"foo"` to `backends.nix
+   - update `runtimeDeps.nix`
+
 ## Why the name?
 
 It **fet**ches **lock**file implementations. Also a fetlock is a flexible muscle found on horses and other quadrupeds.
@@ -190,4 +203,4 @@ _If_ this turns out to work well for a few backends, perhaps it'll gain some tra
 [yarn]: https://yarnpkg.com/
 [bundler]: https://bundler.io/
 [cargo]: https://crates.io/
-[golang]: https://go.dev/
+[gomod]: https://go.dev/

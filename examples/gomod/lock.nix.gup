@@ -1,0 +1,4 @@
+#!bash -eux
+gup --always
+
+../../bin/fetlock -o "$1" --github linkedin/Burrow#be40f44509e48462a8b5420a57f4f40cd6839921

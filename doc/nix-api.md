@@ -2,16 +2,18 @@
 
 The `fetlock` command produces a nix lock file, which is suitable for committing alongside your package manager's lockfile. But to actually build software from this lockfile, you'll need to use the `fetlock` nix API, whose source is `nix/` in this repository.
 
-# Building fetlock:
+# Choosing supported backends:
 
-**TODO**: need to make it possible to pass in a list of backends to build a smaller closure, since by default fetlock will depend on _all_ package managers that it might need to produce a lockfile.
+By default, fetlock includes the necessary runtime dependencies for _all_ popular backends (excluding ocaml/esy).
+This can lead to large doanloads / closure sizes, so if you know upfront you can pass in just the ones you need as `fetlockBackends` (a list of strings) when building fetlock's nix expression or shell.
+
+If a backend isn't compiled in, it can still be used - you will just need to arrange for that backend's runtime dependencies to be on `$PATH`.
 
 ## Top level `fetlock` attributes:
 
 Each frontend is a separate attribute on `fetlock`, e.g. `fetlock.bundler`, `fetlock.yarn`, etc.
 
-There are also a few extra toplevel attributes:
- - `shell` / `ocamlShell` / `goShell`
+There is also a `shell` toplevel attribute.
 
 This gives you a standalone shell with fetlock plus the given development utilities.
 

@@ -1,40 +1,38 @@
-{ pkgs, src, opam2nix }: with pkgs;
+{ pkgs, src,
+	fetlockBackends ? (import ./backends.nix).default,
+}: with pkgs;
 # Note: building this derivation requires ./lock.nix,
 # which is generated with fetlock itself.
 # ../shell.nix can be used to bootstrap & build fetlock
 # via cargo, without needing a lock.nix
 let
-	makeBackends = fetlockImpls:
-	let
-		core = callPackage (import ./core.nix { inherit fetlockImpls; }) {};
+	runtimeDeps = pkgs.callPackage ./runtimeDeps.nix { } fetlockBackends;
+	wrapFlags = lib.concatStringsSep " " (
+		["--prefix PATH : \"${lib.makeBinPath runtimeDeps}\"" ]
+	);
+
+	osx = darwin.apple_sdk.frameworks;
+
+	makeBackends = fetlock: let
+		core = callPackage ./core.nix { inherit fetlock; };
 		backend = path: callPackage (import path { inherit core; }) {};
-	in
-	{
+	in {
 		bundler = backend ./bundler;
 		cargo = backend ./cargo;
 		esy = backend ./esy;
 		opam = backend ./opam;
 		yarn = backend ./yarn;
-		go = backend ./go;
+		gomod = backend ./gomod;
 		shell = mkShell {
-			packages = [ fetlockImpls.basic ];
-		};
-		ocamlShell = mkShell {
-			packages = [ opam2nix ];
-		};
-		goShell = mkShell {
-			packages = [ pkgs.go ];
+			packages = [ fetlock ];
 		};
 	};
 
 	# import API with a nonfunctional fetlock
 	# (it's only used to load ./lock.nix, and that doesn't make use of the fetlock binary)
-	bootstrap = makeBackends { fetlockImpls.basic = abort "fetlock used from `bootstrap` expression"; };
+	bootstrap = makeBackends (abort "fetlock used from `bootstrap` expression");
 	
-	# import full API with the bootstrapped fetlock
-	backends = makeBackends { basic = fetlockBasic; ocaml = fetlockWithOcaml; };
-
-	osx = darwin.apple_sdk.frameworks;
+	# import full API via bootstrap
 	selection = bootstrap.cargo.load ./lock.nix {
 		pkgOverrides = self: [
 			(self.overrideAttrs {
@@ -49,16 +47,15 @@ let
 		];
 	};
 
-	fetlockBasic = selection.root;
-	fetlockWithOcaml = stdenv.mkDerivation {
-		inherit (fetlockBasic) pname version;
-		buildInputs = [ makeWrapper ];
+	fetlockWrapped = stdenv.mkDerivation {
+		inherit (selection.root) pname version;
+		# add all backends as passthru attributes
+		passthru = makeBackends fetlockWrapped;
+		buildInputs = [ makeWrapper ] ++ runtimeDeps;
 		buildCommand = ''
 			mkdir -p $out/bin
-			makeWrapper ${fetlockBasic}/bin/fetlock $out/bin/fetlock \
-				--prefix PATH : ${opam2nix}/bin
+			makeWrapper ${selection.root}/bin/fetlock $out/bin/fetlock ${wrapFlags}
 		'';
 	};
 in
-# return the built fetlock derivation, with backends as passthru attributes
-lib.extendDerivation true backends fetlockBasic
+fetlockWrapped

@@ -1,5 +1,4 @@
-{ fetlockImpls }:
-{ pkgs, stdenv, lib }:
+{ fetlock, pkgs, stdenv, lib }:
 with lib;
 let
 	noOverrides = (self: []);
@@ -51,7 +50,7 @@ let
 				in {
 					_catchWholesaleEvaluation = abort "\nYou appear to be evaluating the result of `fetlock.load`.\nYou probably meant to evaluate `root`, `fetlock`, `shell`, or a particular `drvsByName.PACKAGE_NAME`";
 
-					inherit pkgs getDrv fetlockImpls;
+					inherit pkgs getDrv fetlock;
 					inherit (import ./fetch.nix {inherit pkgs; }) fetchGoModule fetchGitBuiltin;
 
 					emptyDrv = stdenv.mkDerivation {
@@ -157,8 +156,6 @@ let
 					# (spec is the fetlock concept, i.e. the representation in lock.nix)
 					overrideSpec = attrs:
 						overrideOnly attrs (fn: drv: drv.overrideSpec fn);
-
-					fetlock = fetlockImpls.basic;
 
 					# Don't mess with an existing store path.
 					# If there's a .git directory, export git.

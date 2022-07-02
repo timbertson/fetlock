@@ -1079,7 +1079,7 @@ in
         ("vscode-proxy-agent@0.11.0")
         ("yauzl@2.10.0")
       ];
-      src = (final.pathSrc ../esy/.);
+      src = (final.pathSrc ../esy);
       nodePathDeps = [
       ];
       pkgname = "onivim2-node";

@@ -72,7 +72,7 @@ impl Backend for GoLock {
 
 		let key = Key::from_id(&spec.id);
 
-		let ctx = LockContext::new(lock::Type::Go);
+		let ctx = LockContext::new(lock::Type::Gomod);
 		let mut lock: Lock<Spec> = Lock::new(ctx);
 		lock.context.root = lock::Root::Package(key.clone());
 

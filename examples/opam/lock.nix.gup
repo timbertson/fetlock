@@ -1,6 +1,6 @@
 #!bash -eux
 gup --always
-nix-shell --show-trace -A ocamlShell ../../nix --run "../../bin/fetlock -o '$1' \
+../../bin/fetlock -o "$1" \
   --github timbertson/vdoml#fcbf81e89df989206bdad4a92327e593078525b2 \
   --ocaml-version 4.12.0 \
-  --lockfile vdoml.opam"
+  --lockfile vdoml.opam

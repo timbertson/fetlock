@@ -1,4 +1,3 @@
-
 // This is set to $PWD/nix in a development shell (e.g. shell.nix).
 // When building from nix, it's set to ${src}/nix, so it'll be
 // a nix store path.

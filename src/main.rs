@@ -33,7 +33,7 @@ pub async fn main() -> Result<()> {
 		lock::Type::Yarn => process::<crate::yarn::YarnLock>(opts).await,
 		lock::Type::Bundler => process::<crate::bundler::BundlerLock>(opts).await,
 		lock::Type::Cargo => process::<crate::cargo::CargoLock>(opts).await,
-		lock::Type::Go => process::<crate::gomod::GoLock>(opts).await,
+		lock::Type::Gomod => process::<crate::gomod::GoLock>(opts).await,
 	}
 }
 

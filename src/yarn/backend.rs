@@ -29,8 +29,8 @@ impl Backend for YarnLock {
 			.insert("pkgname".to_owned(), Expr::str("virtual-root".to_owned()));
 	}
 
-	async fn load(src: &LocalSrc, opts: &WriteOpts) -> Result<Self> {
-		let lock_path = src.lock_path();
+	async fn load(src: &LockSrc, opts: &WriteOpts) -> Result<Self> {
+		let lock_path = src.path();
 
 		let mut package_json_path = lock_path.clone();
 		package_json_path.set_file_name("package.json");
@@ -66,7 +66,7 @@ impl Backend for YarnLock {
 		lockfile.populate_sources().await?;
 
 		let mut sources = fetch::realise_fetch_sources(lockfile.0.specs.iter().map(|(k,v)| (k, &v.spec))).await?;
-		sources.insert(root_key, src.root.clone());
+		sources.insert(root_key, src.root().to_owned());
 		for (key, path) in sources {
 			let spec = lockfile.0.specs.get_mut(&key).ok_or_else(||
 				anyhow!("extracted source is not in specs: {:?}", key)
@@ -88,7 +88,7 @@ impl Backend for YarnLock {
 		Ok(self.lockfile.0)
 	}
 
-	async fn update_lockfile<'a>(root: &'a PathBuf, rel: &'a Option<String>) -> Result<()> {
+	async fn update_lockfile<'a>(root: &'a PathBuf, rel: &'a str) -> Result<()> {
 		cmd::exec(Command::new("yarn")
 			.arg("install")
 			.arg("--mode")

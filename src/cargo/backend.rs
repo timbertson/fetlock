@@ -190,11 +190,11 @@ impl CargoLock {
 impl Backend for CargoLock {
 	type Spec = Spec;
 
-	async fn load(src: &LocalSrc, opts: &WriteOpts) -> Result<Self> {
+	async fn load(src: &LockSrc, opts: &WriteOpts) -> Result<Self> {
 		let mut cmd = MetadataCommand::new();
 		
 		// we have a lockfile but cargo_metadata expects Cargo.toml, which should be a sibling
-		let mut lock_path = src.lock_path();
+		let mut lock_path = src.path().to_owned();
 		lock_path.set_file_name("Cargo.toml");
 		cmd.manifest_path(lock_path);
 		let meta = cmd.exec()?;
@@ -236,7 +236,7 @@ impl Backend for CargoLock {
 		Ok(self.0)
 	}
 	
-	async fn update_lockfile<'a>(root: &'a PathBuf, rel: &'a Option<String>) -> Result<()> {
+	async fn update_lockfile<'a>(root: &'a PathBuf, rel: &'a str) -> Result<()> {
 		cmd::exec(Command::new("cargo").arg("generate-lockfile").current_dir(root)).await
 	}
 }

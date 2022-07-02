@@ -22,7 +22,7 @@ use std::path::*;
 
 #[derive(Clone, Debug)]
 pub struct EsyLock {
-	src: LocalSrc,
+	src: LockSrc,
 	lockfile: EsyLockFile,
 }
 
@@ -61,7 +61,7 @@ impl EsyLock {
 	}
 
 	async fn manifest_contents<'a>(
-		src: &LocalSrc,
+		src: &LockSrc,
 		extract: &Option<fetch::ExtractSource<'a>>,
 		manifest: &ManifestPath,
 	) -> Result<String> {
@@ -75,12 +75,12 @@ impl EsyLock {
 					.file_contents(manifest_path)
 					.await
 			}
-			ManifestPath::Local(manifest_path) => fetch::ExtractSource::from(&src.root)
+			ManifestPath::Local(manifest_path) => fetch::ExtractSource::from(src.root())
 				.await?
 				.file_contents(manifest_path)
 				.await
 				.with_context(|| {
-					format!("can't get manifest {} from {:?}", &manifest_path, &src.root)
+					format!("can't get manifest {} from {:?}", &manifest_path, src.root())
 				}),
 		}
 	}
@@ -104,7 +104,7 @@ impl EsyLock {
 	}
 
 	async fn populate_manifest(
-		src: &LocalSrc,
+		src: &LockSrc,
 		realised_src: Option<&PathBuf>,
 		esy_spec: &mut EsySpec,
 	) -> Result<()> {
@@ -148,7 +148,7 @@ impl EsyLock {
 						ManifestPath::Local(rel_path) => {
 							let opam_path_rel = PathBuf::from(rel_path);
 							let files_path_rel = opam_path_rel.with_file_name("files");
-							let files_path_abs = src.root.join(&files_path_rel);
+							let files_path_abs = src.root().join(&files_path_rel);
 							debug!(
 								"Checking files path {:?} for esy spec {:?}",
 								files_path_abs, &esy_spec
@@ -166,7 +166,7 @@ impl EsyLock {
 								);
 							}
 							Manifest::Path(
-								src.root.join(opam_path_rel).to_string_lossy().to_string(),
+								src.root().join(opam_path_rel).to_string_lossy().to_string(),
 							)
 						}
 						ManifestPath::Remote(_) => {
@@ -184,7 +184,7 @@ impl EsyLock {
 	}
 
 	async fn finalize_spec(
-		src: &LocalSrc,
+		src: &LockSrc,
 		realised_src: Option<&PathBuf>,
 		esy_spec: &mut EsySpec,
 		opam_solution: &opam2nix::Solution,
@@ -263,22 +263,16 @@ impl EsyLock {
 impl Backend for EsyLock {
 	type Spec = EsySpec;
 
-	async fn load(src_dir: &LocalSrc, opts: &WriteOpts) -> Result<Self> {
+	async fn load(src_dir: &LockSrc, opts: &WriteOpts) -> Result<Self> {
 		let context = LockContext::new(lock::Type::Esy);
 
 		// relative paths obtained from esy.lock contain the path to index.json,
 		// so for convenience that's the internal path we use too, despite the fact that
 		// fetlock uses the containing directory
-		let LocalSrc { root, relative: relative_dir, fetch: _ } = src_dir;
-		let relative_file = format!("{}/index.json",
-			relative_dir.as_ref().ok_or_else(||anyhow!("lockfile path required"))?);
-		let src_file = LocalSrc {
-			root: root.clone(),
-			relative: Some(relative_file),
-			fetch: None,
-		};
+		let root = src_dir.lock_root().clone();
+		let src_file = root.src(format!("{}/index.json", src_dir.lockfile()));
 
-		let contents = crate::fs_util::read_to_string(src_file.lock_path())?;
+		let contents = crate::fs_util::read_to_string(src_file.path())?;
 		let lockfile: EsyLockFile = serde_json::from_str(&contents)?;
 		Ok(EsyLock {
 			src: src_file.clone(),

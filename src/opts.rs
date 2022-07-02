@@ -27,7 +27,7 @@ mod raw {
 		pub lockfile: Option<String>,
 
 		#[clap(long, about="set root package src attribute to a local path (must begin with a dot) or github repository (author/repo)")]
-		pub src: Option<String>,
+		pub build_src: Option<String>,
 
 		#[clap(long="clone-freshness", about="maximum age (in days) for cloned repos")]
 		pub clone_freshness_days: Option<u32>,
@@ -135,7 +135,7 @@ pub struct UpdateOpts {
 #[derive(Debug, Clone)]
 pub struct WriteOpts {
 	pub out_path: Option<String>,
-	pub src: Option<LockRoot>,
+	pub build_src: Option<RootSpec>,
 	pub clone_freshness_days: Option<u32>,
 	pub ocaml_version: Option<String>,
 }
@@ -200,34 +200,40 @@ impl CliOpts {
 	async fn resolve_write_opts(opts: raw::WriteOpts) -> Result<(lock::Type, LockSrc, WriteOpts)> {
 		let raw::WriteOpts { common, common_write, github } = opts;
 		let raw::CommonOpts { lock_type, path } = common;
-		let raw::CommonWriteOpts { out_path, lockfile, src, clone_freshness_days, ocaml_version } = common_write;
-
-		// if path is implicit, also use it for `src`:
+		let raw::CommonWriteOpts { out_path, lockfile, build_src, clone_freshness_days, ocaml_version } = common_write;
+		
+		// if path is implicit, we can use it for `build_src`:
 		let implicit_path = path.as_deref().filter(|p| Self::is_implicit_path(p));
-		let src = src.as_deref().or(implicit_path).map(|s| {
+
+		// build src differs from lock src when you want to load a local lockfile but build from e.g. an online git repo
+		let build_src = build_src.as_deref().or(implicit_path).map(|s| {
 			if Self::is_implicit_path(s) {
-				Ok(LockRoot::Path(PathBuf::from(s)))
+				Ok(RootSpec::Path(PathBuf::from(s)))
 			} else {
-				GithubSpec::parse(s).map(LockRoot::Github)
+				GithubSpec::parse(s).map(RootSpec::Github)
 			}
 		}).transpose()?;
-		let mut lock_src = LockSrc::parse(LockSrcOpts {
+
+		let lock_root = LockRoot::resolve(LockRootOpts {
 			repo: github,
 			lock_root: path,
-			lockfile: lockfile,
-		})?;
-		let lock_type = Self::resolve_type(&mut lock_src, lock_type.as_ref()).await?;
+		}).await?;
+
+		let (lock_type, lockfile) = Self::resolve_type(&lock_root, lock_type, lockfile).await?;
+		let lock_src = lock_root.src(lockfile);
+
 		Ok((lock_type, lock_src, WriteOpts {
 			out_path,
-			src,
+			build_src,
 			clone_freshness_days,
 			ocaml_version
 		}))
 	}
 	
-	async fn resolve_type(lock_src: &mut LockSrc, type_str: Option<&String>) -> Result<lock::Type> {
+	async fn resolve_type(lock_root: &LockRoot, type_str: Option<String>, lockfile: Option<String>)
+	-> Result<(lock::Type, String)> {
 		if let Some(type_str) = type_str {
-			Ok(match type_str.as_str() {
+			let lock_type = match type_str.as_str() {
 				"esy" => lock::Type::Esy,
 				"opam" => lock::Type::Opam,
 				"yarn" => lock::Type::Yarn,
@@ -235,9 +241,23 @@ impl CliOpts {
 				"cargo" => lock::Type::Cargo,
 				"go" => lock::Type::Go,
 				other => return Err(anyhow!("Unknown type: {}", other)),
-			})
+			};
+			let lockfile = Self::default_filename(lock_type)
+				.ok_or_else(|| anyhow!("No default lockfile name for {:?}, use --lockfile", lock_type))?;
+			Ok((lock_type, lockfile.to_owned()))
 		} else {
-			Self::detect_type(lock_src).await
+			Self::detect_type(lock_root, lockfile).await
+		}
+	}
+
+	fn default_filename(lock_type: lock::Type) -> Option<&'static str> {
+		match lock_type {
+			lock::Type::Yarn => Some("yarn.lock"),
+			lock::Type::Cargo => Some("Cargo.lock"),
+			lock::Type::Bundler => Some("Gemfile.lock"),
+			lock::Type::Go => Some("go.sum"),
+			lock::Type::Opam => Some("opam"),
+			lock::Type::Esy => None
 		}
 	}
 
@@ -262,18 +282,18 @@ impl CliOpts {
 		}
 	}
 
-	async fn detect_type(src: &mut LockSrc) -> Result<lock::Type> {
-		if let Some(lockfile) = src.lockfile() {
+	async fn detect_type(root: &LockRoot, lockfile: Option<String>) -> Result<(lock::Type, String)> {
+		if let Some(lockfile) = lockfile {
 			debug!("detecting based on lockfile name: {:?}", lockfile);
-			Self::type_from(lockfile).map(|(t, _)| t)
-				.ok_or_else(|| anyhow!("Couldn't determint lock type from lock file name, you'll have to also specify --type/-t"))
+			let lock_type = Self::type_from(&lockfile).map(|(t, _)| t)
+				.ok_or_else(|| anyhow!("Couldn't determine lock type from lock file name, you'll have to also specify --type/-t"))?;
+			Ok((lock_type, lockfile))
 		} else {
 			// detect based on file presence
-			let local_src = src.resolve().await?;
-			let root = local_src.lock_path();
-			debug!("detecting based on contents of path {:?}", &root);
+			let root_path = &root.path;
+			debug!("detecting based on contents of path {:?}", root_path);
 			
-			let types: HashSet<(lock::Type, String)> = root.read_dir()?.flat_map(|ent|
+			let types: HashSet<(lock::Type, String)> = root_path.read_dir()?.flat_map(|ent|
 				ent.ok().and_then(|ent| ent.file_name().to_str().and_then(|f|
 					Self::type_from(f).map(|(t, f)| (t, f.to_owned()))
 				))
@@ -283,10 +303,9 @@ impl CliOpts {
 				return Err(anyhow!("Ambiguous lock type found ({:?})\nYou must specify `--lockfile` or `--type`", &types));
 			}
 			let detected = if let Some((t, lockfile)) = types.into_iter().next() {
-				debug!("detected lockfile: {:?}", &lockfile);
-				src.set_lockfile(lockfile);
 				info!("Detected lock type: {}", t);
-				Some(t)
+				debug!("Detected Based on lockfile: {:?}", &lockfile);
+				Some((t, lockfile))
 			} else {
 				None
 			};

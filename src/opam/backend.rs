@@ -28,9 +28,9 @@ pub struct OpamLock {
 impl Backend for OpamLock {
 	type Spec = OpamSpec;
 
-	async fn load(src: &LocalSrc, opts: &WriteOpts) -> Result<Self> {
+	async fn load(src: &LockSrc, opts: &WriteOpts) -> Result<Self> {
 		use opam2nix::{OpamSource, Repository, Request, SelectedPackage, SolveSpec};
-		let opam_path = src.lock_path();
+		let opam_path = src.path();
 
 		let filename = opam_path
 			.file_name()
@@ -69,7 +69,7 @@ impl Backend for OpamLock {
 		let specs = vec![SolveSpec {
 			name: package_name_str.to_owned(),
 			constraints: None,
-			definition: Some(OpamSource::Path(opam_path)),
+			definition: Some(OpamSource::Path(opam_path.to_owned())),
 		}];
 
 		let request = Request {

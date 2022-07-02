@@ -47,8 +47,8 @@ impl GoLock {
 impl Backend for GoLock {
 	type Spec = lock::Spec;
 
-	async fn load(src: &LocalSrc, opts: &WriteOpts) -> Result<Self> {
-		let sum_path = src.lock_path();
+	async fn load(src: &LockSrc, opts: &WriteOpts) -> Result<Self> {
+		let sum_path = src.path();
 
 		let mut mod_path = sum_path.clone();
 		mod_path.set_file_name("go.mod");

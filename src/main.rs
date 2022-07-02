@@ -46,12 +46,11 @@ async fn process<B: Backend + fmt::Debug>(mut opts: CliOpts) -> Result<()> {
 }
 
 async fn write<B: Backend + fmt::Debug>(opts: &mut CliOpts, write_opts: &WriteOpts) -> Result<()> {
-	info!("loading {:?}", &opts.lock_src);
-	let lock_src = opts.lock_src.resolve().await?;
-	debug!("resolved lock_src: {:?}", &opts.lock_src);
-	let mut lock = B::load(&lock_src, write_opts)
+	let lock_src = &opts.lock_src;
+	info!("loading {:?}", lock_src);
+	let mut lock = B::load(lock_src, write_opts)
 		.await
-		.with_context(|| format!("loading {:?}", &lock_src))?;
+		.with_context(|| format!("loading {:?}", lock_src))?;
 	debug!("{:?}", lock);
 
 	// ensure there is a root package, using a virtual one if necessary
@@ -79,25 +78,25 @@ async fn write<B: Backend + fmt::Debug>(opts: &mut CliOpts, write_opts: &WriteOp
 		.get_mut(&root_key)
 		.ok_or_else(|| anyhow!("root spec ({}) is not defined", root_key))?;
 
-	// src comes from an explicit `src`, or `lock_src`.
-	let src = match &write_opts.src {
-		Some(LockRoot::Github(gh)) => {
+	// build_src comes from an explicit `build_src`, or `lock_src`.
+	let build_src = match &write_opts.build_src {
+		Some(RootSpec::Github(gh)) => {
 			let mut resolved = FetchSpec::Github(gh.resolve().await?);
 			let digest = fetch::calculate_digest(&mut resolved).await?;
 			Src::Fetch(Fetch::new(resolved, digest))
 		},
-		Some(LockRoot::Path(p)) => Src::Local(LocalPath(p.to_owned())),
+		Some(RootSpec::Path(p)) => Src::Local(LocalPath(p.to_owned())),
 		
 		// If there's no explicit source and no remote source, use `../`.
 		// This works well for the default path of nix/lock.nix, but is a bit odd otherwise.
 		None => {
-			lock_src.fetch.map(Src::Fetch)
+			lock_src.fetch().map(|f| Src::Fetch(f.to_owned()))
 				.unwrap_or_else(|| Src::Local(LocalPath(PathBuf::from("..".to_owned()))))
 		},
 	};
 
-	debug!("setting src {:?}, on root {:?}", src, lock_mut.context.root);
-	root_spec.as_spec_mut().set_src(src);
+	debug!("setting src {:?}, on root {:?}", build_src, lock_mut.context.root);
+	root_spec.as_spec_mut().set_src(build_src);
 
 	fetch::populate_source_digests(lock_mut).await?;
 	let lock = lock.finalize().await?;
@@ -106,7 +105,7 @@ async fn write<B: Backend + fmt::Debug>(opts: &mut CliOpts, write_opts: &WriteOp
 		Some(out_path) => PathBuf::from(out_path),
 		None => {
 			// special case: when file path not provided, we will autocreate `project/nix` and write `lock.nix` within it
-			let dir = if let LockRoot::Path(p) = opts.lock_src.root() {
+			let dir = if let RootSpec::Path(p) = &opts.lock_src.lock_root().spec {
 				p.join("nix")
 			} else {
 				PathBuf::from("nix")
@@ -124,7 +123,7 @@ async fn write<B: Backend + fmt::Debug>(opts: &mut CliOpts, write_opts: &WriteOp
 async fn update<B: Backend + fmt::Debug>(opts: &mut CliOpts, update_opts: &opts::UpdateOpts) -> Result<()> {
 	debug!("Updating lockfile {:?}", &opts.lock_src);
 	let local_src = require_local_src(opts).await?;
-	B::update_lockfile(&local_src.root, &local_src.relative).await?;
+	B::update_lockfile(local_src.root(), local_src.lockfile()).await?;
 	
 	if update_opts.no_nix {
 		debug!("--no-nix; exiting");
@@ -137,8 +136,8 @@ async fn update<B: Backend + fmt::Debug>(opts: &mut CliOpts, update_opts: &opts:
 async fn init<B: Backend + fmt::Debug>(opts: &mut CliOpts, init_opts: &opts::InitOpts) -> Result<()> {
 	debug!("Initializing {:?}", &opts.lock_src);
 	
-	let root = match opts.lock_src.root() {
-		LockRoot::Path(p) => PathBuf::from(p),
+	let root = match &opts.lock_src.lock_root().spec {
+		RootSpec::Path(p) => PathBuf::from(p),
 		_ => PathBuf::from("."),
 	};
 	
@@ -197,9 +196,9 @@ fn write_init_file<F: FnOnce(fs::File) -> Result<()>>(
 	}
 }
 
-async fn require_local_src(opts: &mut CliOpts) -> Result<LocalSrc> {
-	if let LockRoot::Path(p) = opts.lock_src.root() {
-		opts.lock_src.resolve().await
+async fn require_local_src(opts: &CliOpts) -> Result<&LockSrc> {
+	if let RootSpec::Path(p) = &opts.lock_src.lock_root().spec {
+		Ok(&opts.lock_src)
 	} else {
 		Err(anyhow!("local path required"))
 	}

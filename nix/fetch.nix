@@ -15,7 +15,10 @@
 		outputHash = hash;
 		outputHashMode = "recursive";
 		buildCommand =
-			let filteredAttrs = pkgs.lib.filterAttrs (n: v: n != "hash") attrs; in
+			# some nix versions assume `master`, but `HEAD` always works.
+			let
+				filteredAttrs = { ref = "HEAD"; } // (pkgs.lib.filterAttrs (n: v: n != "hash") attrs);
+			in
 			''
 				cp -a '${builtins.fetchGit filteredAttrs}' "$out"
 			''

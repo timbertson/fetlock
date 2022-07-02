@@ -5,59 +5,101 @@ use log::*;
 use std::path::*;
 
 #[derive(Debug, Clone)]
-pub enum LockRoot {
+pub enum RootSpec {
 	Github(GithubSpec),
 	Path(PathBuf),
 }
 
+// A temporary state between LockRoot and a full LockSrc
+// so we can resolve locally and autodetect lockfile etc
+#[derive(Debug, Clone)]
+pub struct LockRoot {
+	pub spec: RootSpec,
+	pub path: PathBuf,
+	fetch: Option<Fetch>,
+}
+
+impl LockRoot {
+	pub async fn resolve(opts: LockRootOpts) -> Result<Self> {
+		let spec = Self::parse(opts)?;
+		let (fetch, path) = match &spec {
+			RootSpec::Path(p) => (None, p.clone()),
+			RootSpec::Github(gh) => {
+				let src = gh.resolve().await?;
+				let fetch = Self::fetch(FetchSpec::Github(src)).await?;
+				let root = fetch::realise_source(&fetch).await?;
+				(Some(fetch), root)
+			}
+		};
+		Ok(Self { spec, path, fetch})
+	}
+
+	fn parse(opts: LockRootOpts) -> Result<RootSpec> {
+		debug!("parsing lock src:: {:?}", &opts);
+		let LockRootOpts { repo, lock_root } = opts;
+		let repo_root: Option<Result<RootSpec>> =
+			repo.map(|repo| Ok(RootSpec::Github(GithubSpec::parse(repo.as_str())?)));
+		let repo_root = repo_root.transpose()?;
+
+		let spec: RootSpec = match (repo_root, lock_root) {
+			(None, None) => RootSpec::Path(PathBuf::from(".")),
+			(Some(remote), None) => remote,
+			(None, Some(local)) => RootSpec::Path(PathBuf::from(local)),
+			(Some(root), Some(relative)) => {
+				return Err(anyhow!("Can't specify both --path and --github"))
+			},
+		};
+		Ok(spec)
+	}
+
+	async fn fetch(mut fetch_spec: FetchSpec) -> Result<Fetch> {
+		let digest = fetch::calculate_digest(&mut fetch_spec).await?;
+		Ok(Fetch::new(fetch_spec, digest))
+	}
+
+	pub fn src(self, lockfile: String) -> LockSrc {
+		let full = self.path.join(&lockfile);
+		LockSrc {
+			root: self,
+			full,
+			lockfile
+		}
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct LockRootOpts {
+	pub repo: Option<String>,
+	pub lock_root: Option<String>,
+}
+
+
 #[derive(Debug, Clone)]
 pub struct LockSrc {
 	root: LockRoot,
-	lockfile: Option<String>,
-	resolved: Option<LocalSrc>,
-}
-
-#[derive(Debug, Clone)]
-pub struct LockSrcOpts {
-	pub repo: Option<String>,
-	pub lock_root: Option<String>,
-	pub lockfile: Option<String>,
+	full: PathBuf,
+	lockfile: String,
 }
 
 impl LockSrc {
-	pub async fn resolve(&mut self) -> Result<LocalSrc> {
-		if let Some(resolved) = &self.resolved {
-			return Ok(resolved.clone());
-		}
+	pub fn path(&self) -> &PathBuf {
+		&self.full
+	}
+	
+	pub fn lockfile(&self) -> &str {
+		&self.lockfile
+	}
 
-		let relative = self.lockfile.clone();
-		let resolved = match &self.root {
-			LockRoot::Path(p) => Ok(LocalSrc::path(p.clone(), relative)),
-			LockRoot::Github(gh) => {
-				let src = gh.resolve().await?;
-				LocalSrc::fetch_src(FetchSpec::Github(src), relative).await
-			}
-		}?;
-		self.resolved = Some(resolved.clone());
-		Ok(resolved)
+	pub fn root(&self) -> &PathBuf {
+		&self.root.path
+	}
+
+	pub fn fetch(&self) -> Option<&Fetch> {
+		self.root.fetch.as_ref()
 	}
 	
-	pub fn lockfile(&self) -> Option<&str> {
-		self.lockfile.as_deref()
-	}
-	
-	pub fn root(&self) -> &LockRoot {
+	pub fn lock_root(&self) -> &LockRoot {
 		&self.root
-	}
-	
-	// When detecting a lockfile from a remote source, we have to resolve it
-	// before we know the relative lockfile path. So if we've done that, we have to make sure
-	// we also update the cached resolution.
-	pub fn set_lockfile(&mut self, path: String) {
-		if let Some(res) = &mut self.resolved {
-			res.relative = Some(path.clone());
-		}
-		self.lockfile = Some(path);
 	}
 }
 
@@ -80,67 +122,6 @@ impl GithubSpec {
 		Ok(GithubSpec {
 			repo: GithubRepo::new(owner.to_owned(), repo.to_owned()),
 			git_ref: git_ref.unwrap_or("HEAD").to_owned(),
-		})
-	}
-}
-
-#[derive(Debug, Clone)]
-pub struct LocalSrc {
-	pub root: PathBuf,
-	pub relative: Option<String>,
-	pub fetch: Option<Fetch>,
-}
-
-impl LocalSrc {
-	fn path(root: PathBuf, relative: Option<String>) -> Self {
-		Self {
-			root,
-			relative,
-			fetch: None
-		}
-	}
-
-	async fn fetch_src(mut fetch_spec: FetchSpec, relative: Option<String>) -> Result<Self> {
-		let digest = fetch::calculate_digest(&mut fetch_spec).await?;
-		let fetch = Fetch::new(fetch_spec, digest);
-		let root = fetch::realise_source(&fetch).await?;
-		Ok(Self {
-			root,
-			relative,
-			fetch: Some(fetch),
-		})
-	}
-
-	pub fn lock_path(&self) -> PathBuf {
-		// TODO cache once at construction
-		if let Some(rel) = &self.relative {
-			self.root.join(rel)
-		} else {
-			self.root.clone()
-		}
-	}
-}
-
-impl LockSrc {
-	pub fn parse(opts: LockSrcOpts) -> Result<LockSrc> {
-		debug!("parsing lock src:: {:?}", &opts);
-		let LockSrcOpts { repo, lock_root, lockfile } = opts;
-		let repo_root: Option<Result<LockRoot>> =
-			repo.map(|repo| Ok(LockRoot::Github(GithubSpec::parse(repo.as_str())?)));
-		let repo_root = repo_root.transpose()?;
-
-		let root: LockRoot = match (repo_root, lock_root) {
-			(None, None) => LockRoot::Path(PathBuf::from(".")),
-			(Some(remote), None) => remote,
-			(None, Some(local)) => LockRoot::Path(PathBuf::from(local)),
-			(Some(root), Some(relative)) => {
-				return Err(anyhow!("Can't specify both --path and --github"))
-			},
-		};
-		Ok(LockSrc {
-			root,
-			lockfile: lockfile.map(|s| s.to_owned()),
-			resolved: None
 		})
 	}
 }

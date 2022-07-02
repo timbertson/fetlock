@@ -40,10 +40,10 @@ pub struct BundlerLock(Lock<Spec>);
 impl Backend for BundlerLock {
 	type Spec = Spec;
 
-	async fn load(src: &LocalSrc, opts: &WriteOpts) -> Result<Self> {
+	async fn load(src: &LockSrc, opts: &WriteOpts) -> Result<Self> {
 		// TODO we need both the lockfile and the Gemfile,
 		// the CLIopts include only the lockfile
-		let lock_path = src.lock_path();
+		let lock_path = src.path();
 		let contents = cmd::run_stdout(
 			"convert.rb",
 			None,
@@ -76,7 +76,7 @@ impl Backend for BundlerLock {
 		Ok(self.0)
 	}
 
-	async fn update_lockfile<'a>(root: &'a PathBuf, rel: &'a Option<String>) -> Result<()> {
+	async fn update_lockfile<'a>(root: &'a PathBuf, rel: &'a str) -> Result<()> {
 		cmd::exec(Command::new("bundle").arg("lock").arg("--update").current_dir(root)).await
 	}
 }

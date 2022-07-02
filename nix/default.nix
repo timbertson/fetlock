@@ -6,5 +6,5 @@ let
 in
 callPackage ./fetlock.nix {
 	inherit opam2nix;
-	src = wrangle.exportLocalGit { path = ../.; ref = "HEAD";
-}; }
+	src = if lib.isStorePath ../. then ../. else wrangle.exportLocalGit { path = ../.; ref = "HEAD"; };
+}

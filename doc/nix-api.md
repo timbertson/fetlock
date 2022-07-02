@@ -15,7 +15,7 @@ Each frontend is a separate attribute on `fetlock`, e.g. `fetlock.bundler`, `fet
 
 There is also a `shell` toplevel attribute.
 
-This gives you a standalone shell with fetlock plus the given development utilities.
+This gives you a standalone shell with fetlock and all supported backend tools.
 
 ## load
 
@@ -75,7 +75,7 @@ Each backend has its own `specToDrv` (or `specToAttrs`) function. Some are imple
 
 Regardless of how the derivatino is build, fetlock adds the following `passthru` attributes to every derivation:
 
- - `shell`: pass this to `nix-shell` to get the package's dependencies, plus fetlock and the underlying package manager (yarn, cargo, etc)
+ - `shell`: pass this to `nix-shell` to get the package's dependencies, plus fetlock
  - `spec`: the attributes passed to the frontend derivation build logic, essentially this package's attrs from `lock.nix`
  - `overrideSpec`: like overrideAttrs, but affects the spec before it's passed to the frontend's builder function, rather then `mkDerivation`. This enables higher level (frontend-specific) tweaks.
  - `drvsByName`: just a handy way to access this, it's copied from [selections](#selections)

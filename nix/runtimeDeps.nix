@@ -1,4 +1,4 @@
-{ pkgs, lib }: with lib; with pkgs;
+{ pkgs }: with pkgs; with lib;
 fetlockBackends:
 let
 	sources = (builtins.fromJSON (builtins.readFile ./wrangle.json)).sources;
@@ -9,8 +9,10 @@ in
 	# specifying a custom list of backends is usually a good idea to cut down closure size.
 	# Note that these only appear in the wrapper derivation, so the fetlock binary itself
 	# doesn't need to be rebuilt when you alter backends.
-	(ifEnabled "bundler" bundler)
+	[ nix ]
+	++ (ifEnabled "bundler" bundler)
 	++ (ifEnabled "gomod" go)
 	++ (ifEnabled "yarn" nodejs)
 	++ (ifEnabled "cargo" cargo)
+	++ (ifEnabled "esy" (callPackage ./esy/bin.nix {}))
 	++ (optional (elem "opam" fetlockBackends || elem "esy" fetlockBackends) opam2nix)

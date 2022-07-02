@@ -4,7 +4,6 @@ with lib;
 let
   base = final: prev: {
     specToAttrs = import ./specToAttrs.nix final prev;
-    lockDependencies = [ pkgs.yarn ];
   };
   injectNode = nodejs: final: prev: { inherit nodejs; };
 

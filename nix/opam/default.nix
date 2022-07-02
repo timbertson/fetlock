@@ -7,9 +7,6 @@ let
 	ocamlCommon = pkgs.callPackage ../esy/ocamlCommon.nix {};
 	overlay = final: prev: {
 		repositories = final.context.repositories;
-		
-		# not strictly needed, but useful
-		lockDependencies = [ pkgs.opam ];
 	};
 
 in core.makeAPI {

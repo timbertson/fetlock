@@ -8,8 +8,6 @@ let
 				passthru = (spec.passthru or {}) // final.mkPassthru spec;
 			}; in
 			final.pkgs.buildGoModule (spec // overrides);
-
-		lockDependencies = [ pkgs.go ];
 	};
 
 in core.makeAPI {

@@ -9,7 +9,6 @@ let
 			overlays,
 			userArgs ? args: args, # massage user API into core API
 			pkgOverrides ? noOverrides,
-			apiPassthru ? {},
 		}:
 		let
 			# prevent shadowing later:
@@ -45,8 +44,6 @@ let
 							)
 							else drv
 						);
-
-					shellDeps = self.lockDependencies ++ [ self.fetlock pkgs.nix ];
 				in {
 					_catchWholesaleEvaluation = abort "\nYou appear to be evaluating the result of `fetlock.load`.\nYou probably meant to evaluate `root`, `fetlock`, `shell`, or a particular `drvsByName.PACKAGE_NAME`";
 
@@ -92,9 +89,9 @@ let
 						overrideSpec = fn: self.specToDrv (fn spec);
 						
 						# each drv has its own shell attribute, which also injects fetlock
-						# and the package manager
+						# (which itself depends on the package manager)
 						shell = (getDrv spec.key).overrideAttrs (o: {
-							buildInputs = (o.buildInputs or []) ++ shellDeps;
+							buildInputs = (o.buildInputs or []) ++ self.fetlock;
 						});
 					};
 					
@@ -168,12 +165,6 @@ let
 									then builtins.fetchGit { url = p; }
 									else warn "Using source path: ${p} - this is less efficient than using a git repository or overriding `src`" p
 							);
-
-					# shell makes the lock tool available (e.g. cargo, bundler, etc)
-					# This should be used with nix-shell, not nix-build
-					shell = self.pkgs.mkShell {
-						packages = shellDeps;
-					};
 				}
 			);
 
@@ -227,7 +218,7 @@ let
 		{
 			inherit load;
 			inherit (bootstrap) shell fetlock;
-		} // apiPassthru
+		}
 	);
 in
 {

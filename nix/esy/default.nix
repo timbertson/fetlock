@@ -3,11 +3,8 @@
 with lib;
 let
   ocamlCommon = pkgs.callPackage ./ocamlCommon.nix {};
-  esyImpl = pkgs.callPackage ./bin.nix {};
 
   base = final: prev: {
-    lockDependencies = [ esyImpl ];
-
     # esy expects `linux` / `windows` anything else probably won't work
     os = stdenv.buildPlatform.parsed.kernel.name;
 
@@ -51,9 +48,6 @@ let
   api = core.makeAPI {
     pkgOverrides = self: (ocamlCommon.overrides self) ++ (import ./overrides.nix self);
     overlays = [ ocamlCommon.overlay base ];
-    apiPassthru = {
-      esy = esyImpl;
-    };
   };
 
 in api

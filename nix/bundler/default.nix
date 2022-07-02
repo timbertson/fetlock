@@ -8,7 +8,6 @@ let
     # TODO can we do this with attrs instead of paths?
     bundler = pkgs.callPackage <nixpkgs/pkgs/development/ruby-modules/bundler> { inherit (final) ruby buildRubyGem; };
     buildRubyGem = pkgs.callPackage <nixpkgs/pkgs/development/ruby-modules/gem> { inherit (final) ruby bundler; };
-    lockDependencies = [ final.bundler final.ruby ];
   };
   injectRuby = ruby: final: prev: { inherit ruby; };
   rubyFromVersion = version:

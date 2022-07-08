@@ -50,7 +50,7 @@ You won't write your own raw override, you'll want to use some helpers on `self`
 
  - `self.overrideDrv { mypkg = newDrv; }` like `overrideOnly` except it simply replaces the derivation rahter than running it through a function.
 
- - `self.overrideDrv { mypkg = (attrs: newAttrs); }` like `overrideOnly` except it overrides the attributes (passed to `mkDerivation`, rather than the derivation itself)
+ - `self.overrideAttr { mypkg = (attrs: newAttrs); }` like `overrideOnly` except it overrides the attributes (passed to `mkDerivation`, rather than the derivation itself)
 
  - `self.addBuildInputs { mypkg = [ input1 input2 ]; }` is a convenience function which appends to a derviation's `buildInputs`
 

@@ -317,32 +317,47 @@ impl Src {
 	}
 }
 
+struct LocalPathRender<'a> {
+	is_abs: bool,
+	is_dir: bool,
+	path: &'a PathBuf,
+}
+
 #[derive(Debug, Clone)]
 pub struct LocalPath(pub PathBuf);
 impl LocalPath {
 	pub fn from_string(s: String) -> Self {
 		LocalPath(PathBuf::from(s))
 	}
-
+	
 	pub fn abs_expr_nonportable(&self) -> Result<Expr> {
-		Ok(Self::expr_raw(true, path_util::to_str(&std::fs::canonicalize(&self.0)?)?))
+		Self::expr_raw(LocalPathRender {
+			is_abs: true,
+			is_dir: self.0.is_dir(),
+			path: &std::fs::canonicalize(&self.0)?
+		})
 	}
 
-	fn expr_raw(absolute: bool, s: &str) -> Expr {
-		let prefix = if absolute || s.starts_with('.') { "" } else { "./" };
-		let suffix = if s.ends_with('/') { "." } else { "" };
+	fn expr_raw(render: LocalPathRender) -> Result<Expr> {
+		let s = path_util::to_str(render.path)?;
+		let prefix = if render.is_abs || s.starts_with('.') { "" } else { "./" };
+		let suffix = if render.is_dir { "/." } else { "" };
 		let nix_path = format!("{}{}{}", prefix, s, suffix);
-		Expr::FunCall(FunCall::new(
+		Ok(Expr::FunCall(FunCall::new(
 			Expr::Literal("final.pathSrc".to_owned()),
 			vec!(Expr::Literal(nix_path))
-		))
+		)))
 	}
 
 	pub fn as_expr(&self) -> Result<Expr> {
 		if self.0.is_absolute() {
 			return Err(anyhow!("Attempted to use absolute path in nix expression {:?}", &self.0));
 		}
-		Ok(Self::expr_raw(false, path_util::to_str(&self.0)?))
+		Self::expr_raw(LocalPathRender {
+			is_abs: false,
+			is_dir: self.0.is_dir(),
+			path: &self.0
+		})
 	}
 }
 

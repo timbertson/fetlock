@@ -3,11 +3,19 @@
 with lib;
 let
   base = final: prev: {
-    specToDrv = import ./specToDrv.nix final prev;
+    specToDrv = with prev.pkgs.lib; {
+      key, pname, version,
+      depKeys,
+      src ? prev.emptyDrv,
+    }@spec: final.buildRubyGem {
+      inherit pname version src;
+      gemName = pname;
+      propagatedBuildInputs = (map final.getDrv (filter (k: k != "bundler") depKeys));
+    };
 
     # TODO can we do this with attrs instead of paths?
-    bundler = pkgs.callPackage <nixpkgs/pkgs/development/ruby-modules/bundler> { inherit (final) ruby buildRubyGem; };
-    buildRubyGem = pkgs.callPackage <nixpkgs/pkgs/development/ruby-modules/gem> { inherit (final) ruby bundler; };
+    bundler = pkgs.callPackage "${pkgs.path}/pkgs/development/ruby-modules/bundler" { inherit (final) ruby buildRubyGem; };
+    buildRubyGem = pkgs.callPackage "${pkgs.path}/pkgs/development/ruby-modules/gem" { inherit (final) ruby bundler; };
   };
   injectRuby = ruby: final: prev: { inherit ruby; };
   rubyFromVersion = version:

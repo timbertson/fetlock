@@ -15,7 +15,7 @@ in
       depKeys = [
         ("rails")
       ];
-      src = (final.pathSrc ./src);
+      src = (final.pathSrc ./src/.);
     };
     actioncable = {
       pname = "actioncable";

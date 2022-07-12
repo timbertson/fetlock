@@ -46,6 +46,9 @@ mod raw {
 
 		#[clap(long, help="load a lockfile directly from a github repository (author/repo[#ref])")]
 		pub github: Option<String>,
+
+		#[clap(long, help="load a lockfile from a nix epression literal")]
+		pub from_nix: Option<String>,
 	}
 
 #[derive(Parser, Debug)]
@@ -172,7 +175,7 @@ impl CliOpts {
 			},
 			raw::Command::Update(c) => {
 				let raw::UpdateOpts { common, common_write, no_nix } = c;
-				let raw_write = raw::WriteOpts { common, common_write, github: None };
+				let raw_write = raw::WriteOpts { common, common_write, github: None, from_nix: None };
 				let (lock_type, lock_src, common_write) = Self::resolve_write_opts(raw_write).await?;
 				Ok(CliOpts {
 					lock_type,
@@ -182,7 +185,7 @@ impl CliOpts {
 			},
 			raw::Command::Init(c) => {
 				let raw::InitOpts { force, update, common, common_write } = c;
-				let raw_write = raw::WriteOpts { common, common_write, github: None };
+				let raw_write = raw::WriteOpts { common, common_write, github: None, from_nix: None };
 				let (lock_type, lock_src, write) = Self::resolve_write_opts(raw_write).await?;
 				Ok(CliOpts {
 					lock_type,
@@ -198,7 +201,7 @@ impl CliOpts {
 	}
 
 	async fn resolve_write_opts(opts: raw::WriteOpts) -> Result<(lock::Type, LockSrc, WriteOpts)> {
-		let raw::WriteOpts { common, common_write, github } = opts;
+		let raw::WriteOpts { common, common_write, github, from_nix } = opts;
 		let raw::CommonOpts { lock_type, path } = common;
 		let raw::CommonWriteOpts { out_path, lockfile, build_src, clone_freshness_days, ocaml_version } = common_write;
 		
@@ -217,6 +220,7 @@ impl CliOpts {
 		let lock_root = LockRoot::resolve(LockRootOpts {
 			repo: github,
 			lock_root: path,
+			nix_expr: from_nix,
 		}).await?;
 
 		let (lock_type, lockfile) = Self::resolve_type(&lock_root, lock_type, lockfile).await?;

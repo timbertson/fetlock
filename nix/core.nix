@@ -153,18 +153,6 @@ let
 					# (spec is the fetlock concept, i.e. the representation in lock.nix)
 					overrideSpec = attrs:
 						overrideOnly attrs (fn: drv: drv.overrideSpec fn);
-
-					# Don't mess with an existing store path.
-					# If there's a .git directory, export git.
-					# Otherwise, fall back to a plain path
-					pathSrc = p:
-						if isStorePath p
-							then p
-							else (
-								if pathExists (p + "/.git")
-									then builtins.fetchGit { url = p; }
-									else warn "Using source path: ${p} - this is less efficient than using a git repository or overriding `src`" p
-							);
 				}
 			);
 

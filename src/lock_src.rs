@@ -1,13 +1,17 @@
+use crate::fetch::Fetchers;
+use crate::nix_serialize::WriteContext;
 use crate::string_util::*;
 use crate::*;
 use anyhow::*;
 use log::*;
+use tokio::process::Command;
 use std::path::*;
 
 #[derive(Debug, Clone)]
 pub enum RootSpec {
 	Github(GithubSpec),
 	Path(PathBuf),
+	NixExpr(String),
 }
 
 // A temporary state between LockRoot and a full LockSrc
@@ -24,6 +28,26 @@ impl LockRoot {
 		let spec = Self::parse(opts)?;
 		let (fetch, path) = match &spec {
 			RootSpec::Path(p) => (None, p.clone()),
+			RootSpec::NixExpr(expr) => {
+				let mut expr_buf = Vec::new();
+				let mut out = WriteContext::initial(&mut expr_buf);
+				Fetchers::write_fetcher_prelude(&mut out)?;
+				out.write_str("final.ensureDerivation (")?;
+				out.write_str(expr)?;
+				out.write_str(")")?;
+				let full_expr = String::from_utf8(expr_buf)?;
+
+				let mut command = Command::new("nix-build");
+				command
+					.arg("--no-out-link")
+					.arg("--expr")
+					.arg("-");
+
+				Fetchers::add_fetlock_path(&mut command);
+				let path = cmd::run_stdout("nix-build", Some(&full_expr), &mut command).await
+					.with_context(|| format!("building nix expression: {}", expr))?;
+				(None, PathBuf::from(path.trim()))
+			},
 			RootSpec::Github(gh) => {
 				let src = gh.resolve().await?;
 				let fetch = Self::fetch(FetchSpec::Github(src)).await?;
@@ -36,17 +60,18 @@ impl LockRoot {
 
 	fn parse(opts: LockRootOpts) -> Result<RootSpec> {
 		debug!("parsing lock src:: {:?}", &opts);
-		let LockRootOpts { repo, lock_root } = opts;
+		let LockRootOpts { repo, lock_root, nix_expr } = opts;
 		let repo_root: Option<Result<RootSpec>> =
 			repo.map(|repo| Ok(RootSpec::Github(GithubSpec::parse(repo.as_str())?)));
 		let repo_root = repo_root.transpose()?;
 
-		let spec: RootSpec = match (repo_root, lock_root) {
-			(None, None) => RootSpec::Path(PathBuf::from(".")),
-			(Some(remote), None) => remote,
-			(None, Some(local)) => RootSpec::Path(PathBuf::from(local)),
-			(Some(root), Some(relative)) => {
-				return Err(anyhow!("Can't specify both --path and --github"))
+		let spec: RootSpec = match (repo_root, lock_root, nix_expr) {
+			(None, None, None) => RootSpec::Path(PathBuf::from(".")),
+			(Some(remote), None, None) => remote,
+			(None, Some(local), None) => RootSpec::Path(PathBuf::from(local)),
+			(None, None, Some(expr)) => RootSpec::NixExpr(expr),
+			_ => {
+				return Err(anyhow!("Can only specify one of --path / --github / --from-nix"))
 			},
 		};
 		Ok(spec)
@@ -71,6 +96,7 @@ impl LockRoot {
 pub struct LockRootOpts {
 	pub repo: Option<String>,
 	pub lock_root: Option<String>,
+	pub nix_expr: Option<String>,
 }
 
 

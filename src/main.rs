@@ -79,6 +79,11 @@ async fn write<B: Backend + fmt::Debug>(opts: &mut CliOpts, write_opts: &WriteOp
 		.ok_or_else(|| anyhow!("root spec ({}) is not defined", root_key))?;
 
 	// build_src comes from an explicit `build_src`, or `lock_src`.
+	let default_build_src = || {
+		lock_src.fetch().map(|f| Src::Fetch(f.to_owned()))
+			.unwrap_or_else(|| Src::Local(LocalPath(PathBuf::from("..".to_owned()))))
+	};
+
 	let build_src = match &write_opts.build_src {
 		Some(RootSpec::Github(gh)) => {
 			let mut resolved = FetchSpec::Github(gh.resolve().await?);
@@ -89,10 +94,8 @@ async fn write<B: Backend + fmt::Debug>(opts: &mut CliOpts, write_opts: &WriteOp
 		
 		// If there's no explicit source and no remote source, use `../`.
 		// This works well for the default path of nix/lock.nix, but is a bit odd otherwise.
-		None => {
-			lock_src.fetch().map(|f| Src::Fetch(f.to_owned()))
-				.unwrap_or_else(|| Src::Local(LocalPath(PathBuf::from("..".to_owned()))))
-		},
+		Some(RootSpec::NixExpr(_)) => default_build_src(),
+		None => default_build_src(),
 	};
 
 	debug!("setting src {:?}, on root {:?}", build_src, lock_mut.context.root);

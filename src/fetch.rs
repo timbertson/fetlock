@@ -10,7 +10,7 @@ use log::*;
 use regex::Regex;
 use reqwest::{StatusCode, Client};
 use std::collections::HashMap;
-use std::{fmt, mem};
+use std::{fmt, mem, io};
 use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::process::{ExitStatus, Stdio};
@@ -74,6 +74,27 @@ pub async fn calculate_digest(fetch_spec: &mut FetchSpec) -> Result<NixHash> {
 			Prefetch::Complete(hash) => Ok(hash),
 			Prefetch::RetryModified => Err(anyhow!("calculate_digest requested too many retries"))
 		}
+	}
+}
+
+pub struct Fetchers;
+
+impl Fetchers {
+	pub fn write_fetcher_prelude<'a, W : io::Write>(out: &mut WriteContext<'a, W>) -> Result<()> {
+		// we bind fetlock's fetchers as `final`, because custom fetch
+		// expressions will use that name to access fetchers provided
+		// in the fixpoint.
+		out.write_str(r#"
+			let
+				pkgs = import <nixpkgs> {};
+				final = import <fetlock/fetch.nix> { inherit pkgs; };
+			in
+		"#)?;
+		Ok(())
+	}
+	
+	pub fn add_fetlock_path(cmd: &mut Command) {
+		cmd.arg("-I").arg(format!("fetlock={}", fetlock_env::nix()));
 	}
 }
 
@@ -158,18 +179,8 @@ impl FetchMany {
 		fetch_specs: Digests,
 	) -> Result<FetchMany> {
 		let mut expr = Vec::new();
-
 		let mut out = WriteContext::initial(&mut expr);
-		// we bind fetlock's fetchers as `final`, because custom fetch
-		// expressions will use that name to access fetchers provided
-		// in the fixpoint.
-		out.write_str(r#"
-			let
-				pkgs = import <nixpkgs> {};
-				final = import <fetlock/fetch.nix> { inherit pkgs; };
-			in
-		"#)?;
-
+		Fetchers::write_fetcher_prelude(&mut out)?;
 		out.write_str("rec { drvs = ")?;
 		write_iter(fetch_specs, &mut out)?;
 		out.write_str("; paths = builtins.map (d: d.outPath) drvs; }\n")?;
@@ -182,17 +193,12 @@ impl FetchMany {
 		Self::digests(digests.into_iter())
 	}
 	
-	fn add_fetlock_path(cmd: &mut Command) {
-		cmd.arg("-I").arg(format!("fetlock={}", fetlock_env::nix()));
-	}
-
 	fn build_command(&self) -> Command {
 		let mut command = Command::new("nix-build");
-		Self::add_fetlock_path(&mut command);
+		Fetchers::add_fetlock_path(&mut command);
 		command
 			.arg("--no-out-link")
 			.arg("--show-trace")
-			.arg("-I").arg(format!("fetlock={}", fetlock_env::nix()))
 			.arg("--attr")
 			.arg("drvs")
 			.arg("-");
@@ -204,7 +210,7 @@ impl FetchMany {
 			.await?;
 
 		let mut json_command = Command::new("nix-instantiate");
-		Self::add_fetlock_path(&mut json_command);
+		Fetchers::add_fetlock_path(&mut json_command);
 
 		let json = self
 			.check_stdout(
@@ -228,7 +234,7 @@ impl FetchMany {
 		desc: &'a str,
 		command: &'a mut Command,
 	) -> Result<String> {
-		cmd::run_stdout("desc", Some(self.expr.as_str()), command).await
+		cmd::run_stdout("fetch", Some(self.expr.as_str()), command).await
 	}
 
 	async fn run_command(

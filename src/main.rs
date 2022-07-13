@@ -81,16 +81,15 @@ async fn write<B: Backend + fmt::Debug>(opts: &mut CliOpts, write_opts: &WriteOp
 	// build_src comes from an explicit `build_src`, or `lock_src`.
 	let default_build_src = || {
 		lock_src.fetch().map(|f| Src::Fetch(f.to_owned()))
-			.unwrap_or_else(|| Src::Local(LocalPath(PathBuf::from("..".to_owned()))))
 	};
 
 	let build_src = match &write_opts.build_src {
 		Some(RootSpec::Github(gh)) => {
 			let mut resolved = FetchSpec::Github(gh.resolve().await?);
 			let digest = fetch::calculate_digest(&mut resolved).await?;
-			Src::Fetch(Fetch::new(resolved, digest))
+			Some(Src::Fetch(Fetch::new(resolved, digest)))
 		},
-		Some(RootSpec::Path(p)) => Src::Local(LocalPath(p.to_owned())),
+		Some(RootSpec::Path(p)) => Some(Src::Local(LocalPath(p.to_owned()))),
 		
 		// If there's no explicit source and no remote source, use `../`.
 		// This works well for the default path of nix/lock.nix, but is a bit odd otherwise.
@@ -98,8 +97,10 @@ async fn write<B: Backend + fmt::Debug>(opts: &mut CliOpts, write_opts: &WriteOp
 		None => default_build_src(),
 	};
 
-	debug!("setting src {:?}, on root {:?}", build_src, lock_mut.context.root);
-	root_spec.as_spec_mut().set_src(build_src);
+	if let Some(build_src) = build_src {
+		debug!("setting src {:?}, on root {:?}", build_src, lock_mut.context.root);
+		root_spec.as_spec_mut().set_src(build_src);
+	}
 
 	fetch::populate_source_digests(lock_mut).await?;
 	let lock = lock.finalize().await?;

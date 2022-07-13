@@ -13,9 +13,9 @@ let lib = pkgs.lib; in
 					else lib.warn "Using source path: ${p} - this is less efficient than using a git repository or overriding `src`" p
 			);
 
-	fetchGoModules = { src, hash }:
+	fetchGoModules = { src, hash, deleteVendor ? false }:
 		(pkgs.buildGoModule {
-			inherit src;
+			inherit src deleteVendor;
 			vendorSha256 = hash;
 			pname = "gomod";
 			version = "vendor";

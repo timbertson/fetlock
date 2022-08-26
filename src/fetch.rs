@@ -51,8 +51,11 @@ pub async fn ensure_digest(src: &mut AnySrc) -> Result<()> {
 }
 
 fn get_cache_path(fetch_spec: &FetchSpec) -> Option<PathBuf> {
-	// using Debug formatting is lazy, but easy :shrug:
-	let cache_filename = cache_hash(&format!("{:?}", fetch_spec));
+	let cache_filename = match fetch_spec {
+		FetchSpec::Github(x) => cache_hash(x),
+		FetchSpec::Archive(x) => cache_hash(x),
+		FetchSpec::Custom(custom) => cache_hash(custom.cache_key.as_ref()?),
+	};
 	let cache_shard = &cache_filename[0..2];
 
 	let mut cache_dir = cache_root();

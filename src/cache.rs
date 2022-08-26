@@ -1,3 +1,5 @@
+use crate::Archive;
+use crate::Github;
 use crate::cmd;
 use crate::WriteOpts;
 use crate::hash::*;
@@ -6,6 +8,7 @@ use crate::{Expr, GitUrl};
 use anyhow::*;
 use futures::future::FutureExt;
 use log::*;
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fs;
 use std::fs::*;
@@ -23,17 +26,50 @@ use tokio::sync::Mutex;
 
 const SECONDS_PER_DAY: u64 = 60 * 60 * 24;
 
+pub trait CacheKey {
+	fn cache_key<'a>(&'a self) -> Cow<'a, str>;
+}
+
+impl CacheKey for String {
+	fn cache_key<'a>(&'a self) -> Cow<'a, str> {
+		Cow::Borrowed(self)
+	}
+}
+
+impl CacheKey for str {
+	fn cache_key<'a>(&'a self) -> Cow<'a, str> {
+		Cow::Borrowed(self)
+	}
+}
+
+// Github and Archive are always cacheable,
+// using Debug formatting (it's brittle but I'm lazy)
+// Custom embeds its own (optional) cache_key
+
+impl CacheKey for Github {
+	fn cache_key<'a>(&'a self) -> std::borrow::Cow<'a, str> {
+		Cow::Owned(format!("{:?}", self))
+	}
+}
+
+impl CacheKey for Archive {
+	// using Debug formatting is lazy, but easy :shrug:
+	fn cache_key<'a>(&'a self) -> std::borrow::Cow<'a, str> {
+		Cow::Owned(format!("{:?}", self))
+	}
+}
+
 pub fn cache_root() -> PathBuf {
 	let mut cache_dir = PathBuf::from(std::env::var("HOME").unwrap());
 	cache_dir.push(".cache/fetlock");
 	cache_dir
 }
 
-pub fn cache_hash(src: &str) -> String {
+pub fn cache_hash<T: CacheKey>(key: &T) -> String {
 	use data_encoding::BASE32_NOPAD;
 	use sha2::{Digest, Sha256};
 	let mut hasher = Sha256::new();
-	hasher.update(src);
+	hasher.update(key.cache_key().as_ref());
 	BASE32_NOPAD.encode(&hasher.finalize())
 }
 

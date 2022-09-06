@@ -212,9 +212,21 @@ impl Backend for CargoLock {
 			map
 		};
 
-		let root = resolve.root.ok_or_else(|| anyhow!("Cargo metadata has no root package"))?;
-		let root_meta = metas.get(&root).ok_or_else(||anyhow!("Meta missing for root package ({})", root))?;
-		lock.set_root(Root::Package(CargoKey::from(&root_meta.package)));
+		if let Some(root) = resolve.root {
+			let root_meta = metas.get(&root).ok_or_else(||anyhow!("Meta missing for root package ({})", root))?;
+			lock.set_root(Root::Package(CargoKey::from(&root_meta.package)));
+		} else {
+			// create a virtual package depending on all workspace members (TODO: and their direct deps?)
+			// TODO: for workspace members, use the correct `src`? Currently it uses the root which is the parent dir.
+			let workspace_members = meta.workspace_members;
+			let package_keys: Vec<Key> = workspace_members.iter()
+				.flat_map(|pkgid| metas.get(pkgid))
+				.map(|meta| meta.package)
+				.map(|key| CargoKey::from(key))
+				.collect()
+				;
+			lock.set_root(Root::Virtual(package_keys));
+		}
 
 		let platform = Self::current_platform().await?;
 		let mut registries = Registries::new(opts);

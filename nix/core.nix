@@ -107,10 +107,12 @@ let
 					# keys typically embed version information,
 					# names provide less brittle lookup for human use
 					# (but may not be unique, so keys are preferred when possible)
-					drvsByName = mapAttrs' (key: v:
-						let drv = getAttr key self.drvs; in
-						{ name = drv.pname; value = drv; }
-					) self.drvs;
+					drvsByName = mapAttrs' (key: spec:
+						{
+							name = spec.pname;
+							value = getAttr key self.drvs;
+						}
+					) self.specs;
 
 					# placeholder for better error messages
 					mkDerivation = stdenv.mkDerivation;

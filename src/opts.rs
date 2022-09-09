@@ -34,6 +34,9 @@ mod raw {
 
 		#[clap(long="ocaml-version", help="required for opam backend")]
 		pub ocaml_version: Option<String>,
+
+		#[clap(long="cargo-platform", help="override platform for cargo lockfiles")]
+		pub cargo_platform: Option<String>,
 	}
 
 #[derive(Parser, Debug, Default, PartialEq, Eq)]
@@ -141,6 +144,7 @@ pub struct WriteOpts {
 	pub build_src: Option<RootSpec>,
 	pub clone_freshness_days: Option<u32>,
 	pub ocaml_version: Option<String>,
+	pub cargo_platform: Option<String>,
 }
 
 impl CliOpts {
@@ -203,7 +207,14 @@ impl CliOpts {
 	async fn resolve_write_opts(opts: raw::WriteOpts) -> Result<(lock::Type, LockSrc, WriteOpts)> {
 		let raw::WriteOpts { common, common_write, github, from_nix } = opts;
 		let raw::CommonOpts { lock_type, path } = common;
-		let raw::CommonWriteOpts { out_path, lockfile, build_src, clone_freshness_days, ocaml_version } = common_write;
+		let raw::CommonWriteOpts {
+			out_path,
+			lockfile,
+			build_src,
+			clone_freshness_days,
+			ocaml_version,
+			cargo_platform
+		} = common_write;
 		
 		// if path is implicit, we can use it for `build_src`:
 		let implicit_path = path.as_deref().filter(|p| Self::is_implicit_path(p));
@@ -230,7 +241,8 @@ impl CliOpts {
 			out_path,
 			build_src,
 			clone_freshness_days,
-			ocaml_version
+			ocaml_version,
+			cargo_platform,
 		}))
 	}
 	

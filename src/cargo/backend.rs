@@ -169,8 +169,11 @@ impl CargoLock {
 		partial.build()
 	}
 	
-	async fn current_platform() -> Result<Platform> {
-		let platform = platform::Platform::guess_current().ok_or_else(||anyhow!("Unknown platform"))?;
+	async fn get_platform(override_platform: Option<&str>) -> Result<Platform> {
+		let platform = match override_platform {
+			Some(p) => platforms::Platform::find(p).ok_or_else(||anyhow!("Unknown platform: {}", p))?,
+			None => platform::Platform::guess_current().ok_or_else(||anyhow!("Unknown platform"))?,
+		};
 		let cfg_str = cmd::run_stdout("rustc --print cfg", None, Command::new(env::var("RUSTC").as_ref().map(|s| &**s).unwrap_or("rustc"))
 			.arg("--target")
 			.arg(platform.target_triple)
@@ -228,7 +231,7 @@ impl Backend for CargoLock {
 			lock.set_root(Root::Virtual(package_keys));
 		}
 
-		let platform = Self::current_platform().await?;
+		let platform = Self::get_platform(opts.cargo_platform.as_deref()).await?;
 		let mut registries = Registries::new(opts);
 		for meta in metas.values() {
 			let key = CargoKey::from(&meta.package);

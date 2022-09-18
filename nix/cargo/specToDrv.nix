@@ -12,6 +12,7 @@ with prev.pkgs.lib;
   buildSrc ? null,
   procMacro ? false,
   crateRenames ? {},
+  extraRustcOpts ? null,
 }@spec: final.pkgs.buildRustCrate ({
   inherit pname version src features edition libPath procMacro crateRenames;
   crateName = pname;
@@ -21,4 +22,5 @@ with prev.pkgs.lib;
 }
   // (if buildSrc == null then {} else { build = buildSrc; })
   // (if crateBin == null then {} else { inherit crateBin; })
+  // (if extraRustcOpts == null then {} else { inherit extraRustcOpts; })
 )

@@ -86,7 +86,7 @@ let
 					mkPassthru = spec: {
 						inherit spec;
 						inherit (self) drvsByName;
-						overrideSpec = fn: self.specToDrv (fn spec);
+						overrideSpec = fn: self.specToDrv (spec // (fn spec));
 						
 						# each drv has its own shell attribute, which also injects fetlock
 						# (which itself depends on the package manager)

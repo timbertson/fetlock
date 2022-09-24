@@ -146,7 +146,7 @@ impl CargoLock {
 			);
 		}
 		if let Some(build_target) = build_target {
-			partial.extra.insert("buildSrc".to_owned(), Expr::str(Self::relative_to(base_path, &build_target.src_path)?.to_owned()));
+			partial.extra.insert("build".to_owned(), Expr::str(Self::relative_to(base_path, &build_target.src_path)?.to_owned()));
 		}
 		if proc_macro {
 			partial.extra.insert("procMacro".to_owned(), Expr::Bool(true));

@@ -14,5 +14,6 @@ in
 	++ (ifEnabled "gomod" go)
 	++ (ifEnabled "yarn" nodejs)
 	++ (ifEnabled "cargo" cargo)
+	++ (ifEnabled "cargo" rustc)
 	++ (ifEnabled "esy" (callPackage ./esy/bin.nix {}))
 	++ (optional (elem "opam" fetlockBackends || elem "esy" fetlockBackends) opam2nix)

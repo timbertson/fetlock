@@ -37,6 +37,9 @@ mod raw {
 
 		#[clap(long="cargo-platform", help="override platform for cargo lockfiles")]
 		pub cargo_platform: Option<String>,
+
+		#[clap(long="cargo-features", help="features (comma-separated) for root crate")]
+		pub cargo_features: Option<String>,
 	}
 
 #[derive(Parser, Debug, Default, PartialEq, Eq)]
@@ -145,6 +148,7 @@ pub struct WriteOpts {
 	pub clone_freshness_days: Option<u32>,
 	pub ocaml_version: Option<String>,
 	pub cargo_platform: Option<String>,
+	pub cargo_features: Option<Vec<String>>,
 }
 
 impl CliOpts {
@@ -213,7 +217,8 @@ impl CliOpts {
 			build_src,
 			clone_freshness_days,
 			ocaml_version,
-			cargo_platform
+			cargo_platform,
+			cargo_features,
 		} = common_write;
 		
 		// if path is implicit, we can use it for `build_src`:
@@ -243,6 +248,7 @@ impl CliOpts {
 			clone_freshness_days,
 			ocaml_version,
 			cargo_platform,
+			cargo_features: cargo_features.map(|s| s.split(',').map(|s| s.to_owned()).collect()),
 		}))
 	}
 	

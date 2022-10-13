@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use platforms::platform;
 use async_trait::async_trait;
-use cargo_metadata::{DependencyKind, MetadataCommand, Package, Node, PackageId};
+use cargo_metadata::{DependencyKind, MetadataCommand, Package, Node, PackageId, CargoOpt};
 use cargo_platform::Cfg;
 
 #[derive(Clone, Debug)]
@@ -201,6 +201,10 @@ impl Backend for CargoLock {
 		lock_path.set_file_name("Cargo.toml");
 		cmd.manifest_path(lock_path);
 		let meta = cmd.exec()?;
+
+		if let Some(features) = &opts.cargo_features {
+			cmd.features(CargoOpt::SomeFeatures(features.clone()));
+		}
 
 		let mut lock: Lock<Spec> = Lock::<Spec>::new(LockContext::new(lock::Type::Cargo));
 		let resolve = meta.resolve.ok_or_else(||anyhow!("Cargo metadata did not include resolution information"))?;

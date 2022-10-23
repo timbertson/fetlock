@@ -221,11 +221,8 @@ impl CliOpts {
 			cargo_features,
 		} = common_write;
 		
-		// if path is implicit, we can use it for `build_src`:
-		let implicit_path = path.as_deref().filter(|p| Self::is_implicit_path(p));
-
 		// build src differs from lock src when you want to load a local lockfile but build from e.g. an online git repo
-		let build_src = build_src.as_deref().or(implicit_path).map(|s| {
+		let build_src = build_src.as_deref().map(|s| {
 			if Self::is_implicit_path(s) {
 				Ok(RootSpec::Path(PathBuf::from(s)))
 			} else {

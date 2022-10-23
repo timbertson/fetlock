@@ -329,6 +329,14 @@ impl LocalPath {
 	pub fn from_string(s: String) -> Self {
 		LocalPath(PathBuf::from(s))
 	}
+
+	pub fn relative(self) -> Option<Self> {
+		if self.0.is_relative() {
+			Some(self)
+		} else {
+			None
+		}
+	}
 	
 	pub fn abs_expr_nonportable(&self) -> Result<Expr> {
 		Self::expr_raw(LocalPathRender {

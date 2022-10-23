@@ -78,28 +78,32 @@ async fn write<B: Backend + fmt::Debug>(opts: &mut CliOpts, write_opts: &WriteOp
 		.get_mut(&root_key)
 		.ok_or_else(|| anyhow!("root spec ({}) is not defined", root_key))?;
 
-	// build_src comes from an explicit `build_src`, or `lock_src`.
-	let default_build_src = || {
-		lock_src.fetch().map(|f| Src::Fetch(f.to_owned()))
+	let build_root = match &write_opts.build_src {
+		None => None,
+		Some(root) => Some(LockRoot::resolve_spec(root.clone()).await?),
 	};
 
-	let build_src = match &write_opts.build_src {
-		Some(RootSpec::Github(gh)) => {
-			let mut resolved = FetchSpec::Github(gh.resolve().await?);
-			let digest = fetch::calculate_digest(&mut resolved).await?;
-			Some(Src::Fetch(Fetch::new(resolved, digest)))
-		},
-		Some(RootSpec::Path(p)) => Some(Src::Local(LocalPath(p.to_owned()))),
-		
-		// If there's no explicit source and no remote source, use `../`.
-		// This works well for the default path of nix/lock.nix, but is a bit odd otherwise.
-		Some(RootSpec::NixExpr(_)) => default_build_src(),
-		None => default_build_src(),
-	};
+	// If build_src or lock_root is fetchable, use that.
+	let root_src = build_root.as_ref()
+		.and_then(|root| root.fetch.as_ref())
+		.or(lock_src.lock_root().fetch.as_ref())
+		.map(|f| Src::Fetch(f.to_owned()))
+		.or_else(|| {
+			// Otherwise use a path, as long as it's relative.
+			let rel_path_of = |root: &LockRoot| root.spec.path().and_then(|p| LocalPath(p.to_owned()).relative());
 
-	if let Some(build_src) = build_src {
-		debug!("setting src {:?}, on root {:?}", build_src, lock_mut.context.root);
-		root_spec.as_spec_mut().set_src(build_src);
+			let build_path = build_root.as_ref().and_then(rel_path_of);
+			let lock_path = || rel_path_of(lock_src.lock_root()).map(|path| {
+				// When using lock root, prefix it with `../` to get out of nix/.
+				// This assumes a certain layout, but you can use --build-src=./foo to skip this code path
+				LocalPath(PathBuf::from("..").join(path.0))
+			});
+			build_path.or_else(lock_path).map(Src::Local)
+		});
+
+	if let Some(root_src) = root_src {
+		debug!("setting src {:?}, on root {:?}", root_src, lock_mut.context.root);
+		root_spec.as_spec_mut().set_src(root_src);
 	}
 
 	fetch::populate_source_digests(lock_mut).await?;
@@ -164,7 +168,7 @@ in selection",
 	})?;
 
 	write_init_file(&init_opts, &root, "shell.nix", |mut f| {
-		writeln!(f, "(import ./nix {{}}).shell")?;
+		writeln!(f, "(import ./nix {{}}).root.shell")?;
 		Ok(())
 	})?;
 

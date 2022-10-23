@@ -91,7 +91,7 @@ let
 						# each drv has its own shell attribute, which also injects fetlock
 						# (which itself depends on the package manager)
 						shell = (getDrv spec.key).overrideAttrs (o: {
-							buildInputs = (o.buildInputs or []) ++ self.fetlock;
+							buildInputs = (o.buildInputs or []) ++ [ self.fetlock ];
 						});
 					};
 					

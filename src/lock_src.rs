@@ -14,18 +14,31 @@ pub enum RootSpec {
 	NixExpr(String),
 }
 
+impl RootSpec {
+	pub fn path(&self) -> Option<&PathBuf> {
+		match self {
+			Self::Path(p) => Some(p),
+			_ => None,
+		}
+	}
+}
+
 // A temporary state between LockRoot and a full LockSrc
 // so we can resolve locally and autodetect lockfile etc
 #[derive(Debug, Clone)]
 pub struct LockRoot {
 	pub spec: RootSpec,
 	pub path: PathBuf,
-	fetch: Option<Fetch>,
+	pub fetch: Option<Fetch>,
 }
 
 impl LockRoot {
 	pub async fn resolve(opts: LockRootOpts) -> Result<Self> {
 		let spec = Self::parse(opts)?;
+		Self::resolve_spec(spec).await
+	}
+
+	pub async fn resolve_spec(spec: RootSpec) -> Result<Self> {
 		let (fetch, path) = match &spec {
 			RootSpec::Path(p) => (None, p.clone()),
 			RootSpec::NixExpr(expr) => {

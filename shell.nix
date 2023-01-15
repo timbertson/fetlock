@@ -3,10 +3,11 @@
 	fetlockBackends ? (import ./nix/backends.nix).all,
 }:
 with pkgs;
-mkShell {
+mkShell ({
 	RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
 	FETLOCK_NIX = toString ./nix;
 	FETLOCK_BUNDLER = toString ./src/bundler;
+
 	buildInputs = [ cargo rustc rustfmt rls libiconv openssl.dev ] ++ (
 		lib.optionals stdenv.isDarwin (with darwin.apple_sdk; [
 			frameworks.Security
@@ -16,4 +17,4 @@ mkShell {
 			frameworks.AppKit
 		])
 	) ++ (callPackage ./nix/runtimeDeps.nix {} fetlockBackends);
-}
+} // (import ./nix/openssl-build-env.nix { inherit openssl; }))

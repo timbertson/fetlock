@@ -36,13 +36,15 @@ let
 	selection = bootstrap.cargo.load ./lock.nix {
 		pkgOverrides = self: [
 			(self.overrideAttrs {
-				fetlock = o: ({
+				fetlock = o: {
 					inherit src;
 					FETLOCK_NIX = "${src}/nix";
 					FETLOCK_BUNDLER = "${src}/src/bundler";
 					nativeBuildInputs = (o.nativeBuildInputs or [])
 						++ (if stdenv.isDarwin then [ osx.Security ] else []);
-				});
+				};
+
+				openssl-sys = o: (import ./openssl-build-env.nix { inherit openssl; });
 			})
 		];
 	};

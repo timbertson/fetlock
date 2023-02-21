@@ -1,6 +1,6 @@
 {
 	pkgs ? import <nixpkgs> {},
-	fetlockBackends ? (import ./nix/backends.nix).all,
+	fetlockBackends ? (import ./nix/backends.nix).default,
 }:
 with pkgs;
 mkShell ({
@@ -8,7 +8,7 @@ mkShell ({
 	FETLOCK_NIX = toString ./nix;
 	FETLOCK_BUNDLER = toString ./src/bundler;
 
-	buildInputs = [ cargo rustc rustfmt rls libiconv openssl.dev ] ++ (
+	buildInputs = [ cargo rustc rustfmt rust-analyzer libiconv openssl.dev ] ++ (
 		lib.optionals stdenv.isDarwin (with darwin.apple_sdk; [
 			frameworks.Security
 			frameworks.CoreServices

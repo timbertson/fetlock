@@ -20,4 +20,8 @@ in final.pkgs.buildRustCrate ({
   dependencies = (map final.getDrv depKeys);
   buildDependencies = (map final.getDrv buildDepKeys);
   passthru = final.mkPassthru spec;
+
+  # workaround https://github.com/NixOS/nixpkgs/issues/218712
+  stripDebugList = optional prev.pkgs.stdenv.isDarwin "bin";
+
 } // extraAttrs)

@@ -11,11 +11,12 @@ let
       inherit pname version src;
       gemName = pname;
       propagatedBuildInputs = (map final.getDrv (filter (k: k != "bundler") depKeys));
+      passthru = final.mkPassthru spec;
     };
 
     # TODO can we do this with attrs instead of paths?
     bundler = pkgs.callPackage "${pkgs.path}/pkgs/development/ruby-modules/bundler" { inherit (final) ruby buildRubyGem; };
-    buildRubyGem = pkgs.callPackage "${pkgs.path}/pkgs/development/ruby-modules/gem" { inherit (final) ruby bundler; };
+    buildRubyGem = pkgs.callPackage "${pkgs.path}/pkgs/development/ruby-modules/gem" { inherit (final) ruby bundler; inherit (pkgs.darwin) libobjc; };
   };
   injectRuby = ruby: final: prev: { inherit ruby; };
   rubyFromVersion = version:

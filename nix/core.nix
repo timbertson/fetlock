@@ -45,7 +45,7 @@ let
 							else drv
 						);
 				in {
-					_catchWholesaleEvaluation = abort "\nYou appear to be evaluating the result of `fetlock.load`.\nYou probably meant to evaluate `root`, `fetlock`, `shell`, or a particular `drvsByName.PACKAGE_NAME`";
+					_catchWholesaleEvaluation = abort "\nYou appear to be evaluating the result of `fetlock.load`.\nYou probably meant to evaluate `root`, `fetlock` or a particular `drvsByName.PACKAGE_NAME`";
 
 					inherit pkgs getDrv fetlock;
 					inherit (import ./fetch.nix {inherit pkgs; }) pathSrc fetchGoModule fetchGitBuiltin;

@@ -3,8 +3,10 @@ use crate::*;
 use log::*;
 use anyhow::*;
 use crate::stream_util::map_parallel;
+use crate::http;
 use async_trait::async_trait;
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use tokio::process::Command;
 
@@ -23,14 +25,20 @@ pub struct RawFile {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-pub struct GemInfo {
+pub struct RubyGemsGemInfo {
 	gem_uri: String,
 	sha: String,
 }
 
+struct GemVersions(HashMap<String, NixHash>);
+
 struct PartialBundlerSpec {
 	spec: PartialSpec,
 	repository: String,
+}
+
+struct GemRepoIndex {
+	versions: HashMap<String, GemVersions>
 }
 
 #[derive(Clone, Debug)]
@@ -83,15 +91,18 @@ impl Backend for BundlerLock {
 
 impl BundlerLock {
 	async fn build_specs(raw: Vec<RawSpec>) -> Result<Vec<Spec>> {
+		// TODO: hoist this up to the API level and use it for all backends
+		let client = http::Client::system().await?;
+
 		info!(
 			"resolving {} package sources from online repository...",
 			raw.len()
 		);
 		let stream = futures::stream::iter(raw.into_iter());
-		map_parallel(10, stream, |raw| Self::build_spec(raw)).await
+		map_parallel(10, stream, |raw| Self::build_spec(&client, raw)).await
 	}
 
-	async fn build_spec(raw: RawSpec) -> Result<Spec> {
+	async fn build_spec(client: &http::Client, raw: RawSpec) -> Result<Spec> {
 		let RawSpec {
 			name,
 			version,
@@ -104,24 +115,35 @@ impl BundlerLock {
 		spec.id.set_name(name.clone());
 		spec.id.set_version(version.clone());
 		spec.add_deps(&mut dependencies);
+		
+		let src: Result<Src> = (|| async move {
+			let repo_url = reqwest::Url::parse(&repository)?;
+			if repo_url.host_str() == Some("rubygems.org") {
+				// https://guides.rubygems.org/rubygems-org-api-v2/
+				let url = format!("{}api/v2/rubygems/{}/versions/{}.json", &repository, &name, &version);
+				let body = client.get(&url)
+					.await?
+					.text()
+					.await?;
+				let listing: RubyGemsGemInfo = serde_json::from_str(&body)
+					.with_context(|| format!("Deserializing HTTP response: {}", &body))
+					.with_context(|| format!("From URL: {}", &url))
+					?;
+				
+				// The field is `sha`, but it's a sha256. Hope they don't change that.
+				let digest = NixHash::from_hex(HashAlg::Sha256, &listing.sha)?;
 
-		let src: Result<Fetch> = (|| async move {
-			// https://guides.rubygems.org/rubygems-org-api-v2/
-			let url = format!("{}api/v2/rubygems/{}/versions/{}.json", &repository, &name, &version);
-			let body = reqwest::get(&url)
-				.await
-				.with_context(|| format!("GET {}", &url))?
-				.text()
-				.await?;
-			let listing: GemInfo = serde_json::from_str(&body)?;
-			
-			// The field is `sha`, but it's a sha256. Hope they don't change that.
-			let digest = NixHash::from_hex(HashAlg::Sha256, &listing.sha)?;
-
-			debug!("package listing for {:?}: {:?}", &name, listing);
-			Ok(Fetch::new(FetchSpec::Archive(Archive::new(listing.gem_uri)), digest))
+				debug!("package listing for {:?}: {:?}", &name, listing);
+				Ok(Src::Fetch(Fetch::new(FetchSpec::Archive(Archive::new(listing.gem_uri)), digest)))
+			} else {
+				// Rubygems API isn't necessarily available, fallback to just grabbing the gem file
+				let filename = format!("{}-{}.gem", &name, &version);
+				let url = format!("{}gems/{}", &repository, &filename);
+				let archive = Archive { url: lock::Url(url), name: Some(filename) };
+				fetch::ensure_digest(AnySrc::Partial(FetchSpec::Archive(archive))).await
+			}
 		})().await;
-		spec.set_src(Src::Fetch(src.with_context(|| desc)?));
+		spec.set_src(src.with_context(|| desc)?);
 		spec.build()
 	}
 }

@@ -186,6 +186,7 @@ impl YarnSpec {
 				url_util::encode(&self.spec.id.name),
 				url_util::encode(&self.spec.id.version)
 			);
+			// TODO: use http::Client to support private repos
 			let body = reqwest::get(&url)
 				.await
 				.with_context(|| format!("GET {}", &url))?

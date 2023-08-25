@@ -69,7 +69,7 @@ fn get_cache_path(fetch_spec: &FetchSpec) -> Option<PathBuf> {
 	Some(cache_dir.join(cache_filename))
 }
 
-// mut is required so that we can upgrad github repos based on whether they appear to be private.
+// mut is required so that we can upgrade github repos based on whether they appear to be private.
 // If this gets awkward, we should find a way to do it in a separate pass or via construction.
 // It's convenient here since we can skip the test if we have a cache hit
 pub async fn calculate_digest(fetch_spec: &mut FetchSpec) -> Result<NixHash> {

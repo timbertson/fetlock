@@ -19,7 +19,7 @@ let lib = pkgs.lib; in
 			vendorSha256 = hash;
 			pname = "gomod";
 			version = "vendor";
-		}).go-modules;
+		}).goModules;
 		
 	# builtins.fetchGit doesn't accept or produce a hash, so we wrap
 	# it in a fixed output derivation for consistency

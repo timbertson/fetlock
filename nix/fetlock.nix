@@ -41,7 +41,7 @@ let
 					FETLOCK_NIX = "${src}/nix";
 					FETLOCK_BUNDLER = "${src}/src/bundler";
 					nativeBuildInputs = (o.nativeBuildInputs or [])
-						++ (if stdenv.isDarwin then [ osx.Security ] else []);
+						++ (if stdenv.isDarwin then [ osx.Security osx.SystemConfiguration ] else []);
 				};
 
 				openssl-sys = o: (import ./openssl-build-env.nix { inherit openssl; });

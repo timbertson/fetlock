@@ -3,7 +3,7 @@ use crate::lock_src::*;
 use anyhow::*;
 use log::*;
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 use clap::Parser;
 
 mod raw {
@@ -149,6 +149,18 @@ pub struct WriteOpts {
 	pub ocaml_version: Option<String>,
 	pub cargo_platform: Option<String>,
 	pub cargo_features: Option<Vec<String>>,
+}
+
+impl WriteOpts {
+	pub fn out_dir(&self) -> PathBuf {
+		match &self.out_path {
+			Some(out_path) => {
+				let parent = PathBuf::from(out_path).parent().map(|p| p.to_owned());
+				parent.unwrap_or_else(||PathBuf::from("."))
+			},
+			None => PathBuf::from("nix"),
+		}
+	}
 }
 
 impl CliOpts {

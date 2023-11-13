@@ -7,6 +7,7 @@ use crate::*;
 
 #[derive(Clone, Debug)]
 pub struct GoLock {
+	out_dir: PathBuf,
 	root: LocalPath,
 	lock: Lock<Spec>,
 }
@@ -89,8 +90,9 @@ impl Backend for GoLock {
 		lock.add_impl(key, spec);
 
 		Ok(GoLock {
+			out_dir: opts.out_dir(),
 			root: LocalPath(src.root().clone()),
-			lock
+			lock,
 		})
 	}
 
@@ -120,8 +122,12 @@ impl Backend for GoLock {
 					Src::Fetch(fetch) =>
 						FetchSpec::Custom(GoLock::vendor_src_for_fetch(fetch, delete_vendor)),
 
-					Src::Local(path) =>
-						FetchSpec::Custom(GoLock::vendor_src_for_path(path, delete_vendor)?),
+					Src::Local(path) => {
+						// A local source path should be evaluated relative to the output
+						// nix dir (e.g. nix/), not relative to the current dir
+						let full_path = LocalPath(self.out_dir.join(&path.0));
+						FetchSpec::Custom(GoLock::vendor_src_for_path(&full_path, delete_vendor)?)
+					},
 
 					Src::None => {
 						debug!("using root src for sourceless package: {:?}", &spec.id);

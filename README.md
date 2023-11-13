@@ -88,7 +88,7 @@ Most backends have a hardcoded lock filename (think `yarn.lock` or `Cargo.lock`)
 
 You'll typically use `fetlock` on a local project. But nix needs a source expression to build.
 
-By default, the source for local projects is `../.` (which works for the default path of `nix/lock.nix`). But you can pass `--src` to override this. To pass a local path, it must start with a dot (i.e. `./` or `../`). Anything else is assumed to be a github `author/reponame` pair.
+By default, the source for local projects is `../.` (which works for the default path of `nix/lock.nix`). But you can pass `--build-src` to override this. To pass a local path, it must start with a dot (i.e. `./` or `../`). Anything else is assumed to be a github `author/reponame` pair.
 
 Note: if the project path is a git directory, the generated source expression will actually be a git checkout, rather than the raw files.
 

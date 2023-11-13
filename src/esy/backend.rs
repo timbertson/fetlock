@@ -759,7 +759,7 @@ impl<'de> Visitor<'de> for EsySrcInfoVisitor {
 
 		err::into_serde(match typ {
 			Some(SrcType::Install) => {
-				if let Some(mut src) = src.as_mut() {
+				if let Some(src) = src.as_mut() {
 					src.opam = opam;
 				}
 				src.ok_or_else(|| anyhow!("Missing `source.source`"))

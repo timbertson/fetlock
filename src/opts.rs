@@ -3,7 +3,7 @@ use crate::lock_src::*;
 use anyhow::*;
 use log::*;
 use std::collections::HashSet;
-use std::path::{PathBuf, Path};
+use std::path::PathBuf;
 use clap::Parser;
 
 mod raw {

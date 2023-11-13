@@ -192,6 +192,7 @@ impl<'a> StringAtom<'a> {
 
 pub type OpamSC<'a> = StringComponentOf<Value<'a>>;
 
+#[allow(hidden_glob_reexports)]
 fn ws<'a, F: 'a, O>(inner: F) -> impl FnMut(Src<'a>) -> Res<O>
 where
 	F: SrcParser<'a, O>,

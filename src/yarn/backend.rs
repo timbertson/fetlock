@@ -350,10 +350,9 @@ impl YarnLockFile {
 			});
 
 			let recurse_deps = yarn_spec.spec.dep_keys.clone();
-			drop(yarn_spec);
 
 			// In a second pass, recurse into dependencies. This must be done after
-			// dropping `yarn_spec` because that's behind our mutable self reference
+			// we're done with `yarn_spec` because that's behind our mutable self reference
 			for dep_key in recurse_deps.into_iter() {
 				seen.push(dep_key.clone());
 				self.visit_cyclic_dependencies(seen, cyclic_deps, &dep_key);

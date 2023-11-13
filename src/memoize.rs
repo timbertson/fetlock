@@ -20,7 +20,7 @@ impl<T> Memoize<T> {
 impl<T: Clone + Unpin> Future for Memoize<T> {
 	type Output = T;
 	fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-		let mut ptr = Pin::into_inner(self);
+		let ptr = Pin::into_inner(self);
 		match &mut ptr.value {
 			Either::Left(v) => {
 				debug!("future already resolved...");

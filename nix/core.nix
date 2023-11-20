@@ -48,7 +48,10 @@ let
 					_catchWholesaleEvaluation = abort "\nYou appear to be evaluating the result of `fetlock.load`.\nYou probably meant to evaluate `root`, `fetlock` or a particular `drvsByName.PACKAGE_NAME`";
 
 					inherit pkgs getDrv fetlock;
-					inherit (import ./fetch.nix {inherit pkgs; }) pathSrc fetchGoModule fetchGitBuiltin fetchurl;
+					inherit (import ./fetch.nix {inherit pkgs; }) pathSrc fetchGoModule fetchGitBuiltin;
+					
+					# backwards compatibility with lockfiles created from fetlock 2023-08-25 to 2023-11-03; remove eventually
+					fetchurl = pkgs.fetchurl;
 
 					emptyDrv = stdenv.mkDerivation {
 						name = "empty-drv";

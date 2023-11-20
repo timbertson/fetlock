@@ -1,6 +1,8 @@
 // Gemfile.lock backend
 use crate::*;
+use log::*;
 use anyhow::*;
+use crate::stream_util::map_parallel;
 use async_trait::async_trait;
 use serde::Deserialize;
 use std::path::PathBuf;
@@ -18,6 +20,17 @@ pub struct RawSpec {
 pub struct RawFile {
 	toplevel: Vec<String>,
 	specs: Vec<RawSpec>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct GemInfo {
+	gem_uri: String,
+	sha: String,
+}
+
+struct PartialBundlerSpec {
+	spec: PartialSpec,
+	repository: String,
 }
 
 #[derive(Clone, Debug)]
@@ -70,10 +83,15 @@ impl Backend for BundlerLock {
 
 impl BundlerLock {
 	async fn build_specs(raw: Vec<RawSpec>) -> Result<Vec<Spec>> {
-		raw.into_iter().map(Self::build_spec).collect()
+		info!(
+			"resolving {} package sources from online repository...",
+			raw.len()
+		);
+		let stream = futures::stream::iter(raw.into_iter());
+		map_parallel(10, stream, |raw| Self::build_spec(raw)).await
 	}
 
-	fn build_spec(raw: RawSpec) -> Result<Spec> {
+	async fn build_spec(raw: RawSpec) -> Result<Spec> {
 		let RawSpec {
 			name,
 			version,
@@ -86,11 +104,24 @@ impl BundlerLock {
 		spec.id.set_name(name.clone());
 		spec.id.set_version(version.clone());
 		spec.add_deps(&mut dependencies);
-		
-		let filename = format!("{}-{}.gem", &name, &version);
-		let url = format!("{}gems/{}", &repository, &filename);
-		let archive = Archive { url: lock::Url(url), name: Some(filename) };
-		spec.set_fetch_src(FetchSpec::Archive(archive));
+
+		let src: Result<Fetch> = (|| async move {
+			// https://guides.rubygems.org/rubygems-org-api-v2/
+			let url = format!("{}api/v2/rubygems/{}/versions/{}.json", &repository, &name, &version);
+			let body = reqwest::get(&url)
+				.await
+				.with_context(|| format!("GET {}", &url))?
+				.text()
+				.await?;
+			let listing: GemInfo = serde_json::from_str(&body)?;
+			
+			// The field is `sha`, but it's a sha256. Hope they don't change that.
+			let digest = NixHash::from_hex(HashAlg::Sha256, &listing.sha)?;
+
+			debug!("package listing for {:?}: {:?}", &name, listing);
+			Ok(Fetch::new(FetchSpec::Archive(Archive::new(listing.gem_uri)), digest))
+		})().await;
+		spec.set_src(Src::Fetch(src.with_context(|| desc)?));
 		spec.build()
 	}
 }

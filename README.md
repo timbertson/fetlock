@@ -96,30 +96,6 @@ Note: if the project path is a git directory, the generated source expression wi
 
 Typically, fetlock can autodetect the type. If you don't pass `--type` or `--lockfile`, it'll look for known lock types in your project directory. If it can't find one (or finds multiple), you'll need to either pass `--type` or `--lockfile` (lockfiles typically have an unambiguous mapping to a type, so you rarely need to specify both).
 
-## Private repositories
-
-In a corporate setting, you will often need to fetch from private repositories. Fetlock integrates with nix's authentication mechanism, since you'll need to set that up in order to actually build the generated expressions anyway.
-
-This is a sample auth setup for accessing a private bundler repository:
-
-```sh
-$ grep netrc-file /etc/nix/nix.conf
-netrc-file = /etc/netrc
-
-$ cat /etc/netrc
-machine gemrepo.mycompany.com
-  login employee1234
-  password J8CXZnz3EhZ6x/Hdri/EXU53XfQ=
-```
-
-That will provide the credentials necessary for fetlock (and nix!) to access gems specified via e.g.:
-
-```ruby
-source "https://gemrepo.mycompany.com/gems-internal/" do
-  gem "secretsauce", "~> 1.0"
-end
-```
-
 --
 
 # Backend specific details

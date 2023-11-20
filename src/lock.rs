@@ -443,7 +443,7 @@ impl<'a> FetchSpecRef<'a> {
 				}
 
 				Expr::fun_call(
-					Expr::Literal("final.fetchurl".to_owned()),
+					Expr::Literal("pkgs.fetchurl".to_owned()),
 					vec![Expr::attr_set(attrs)],
 				)
 			},

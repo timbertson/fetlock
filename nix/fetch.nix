@@ -38,10 +38,6 @@ let lib = pkgs.lib; in
 		;
 	};
 	
-	# pkgs.fetchurl doesn't respect netrc, so we use the
-	# builtin fetchurl (which is strangely different to builtins.fetchurl)
-	fetchurl = import <nix/fetchurl.nix>;
-	
 	# builtins.fetchGit results in a store path string, but for
 	# consistency we want derivation we can pass to `nix-build` etc.
 	# This is only used for `--nix-expr`, actual fetchers will use fetchGitBuiltin

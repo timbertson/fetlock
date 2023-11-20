@@ -371,7 +371,6 @@ dependencies = [
  "getopts",
  "lazy_static",
  "log",
- "netrc-rs",
  "nom",
  "percent-encoding",
  "platforms",
@@ -863,12 +862,6 @@ dependencies = [
  "security-framework-sys",
  "tempfile",
 ]
-
-[[package]]
-name = "netrc-rs"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea2970fbbc8c785e8246234a7bd004ed66cd1ed1a35ec73669a92545e419b836"
 
 [[package]]
 name = "nom"

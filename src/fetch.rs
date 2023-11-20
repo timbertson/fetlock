@@ -29,27 +29,23 @@ pub async fn populate_source_digests<S: AsSpec>(lock: &mut Lock<S>) -> Result<()
 	let result = foreach_unordered(
 		8,
 		futures::stream::iter(impls),
-		|i| ensure_digest_mut(&mut i.src)
+		|i| ensure_digest(&mut i.src)
 	).await;
 	result
 }
 
-pub async fn ensure_digest(src: AnySrc) -> Result<Src> {
-	match src {
-		AnySrc::Full(full) => Ok(full),
+pub async fn ensure_digest(src: &mut AnySrc) -> Result<()> {
+	let mut tmp = AnySrc::Full(Src::None);
+	mem::swap(&mut tmp, src);
+	let full = match tmp {
+		AnySrc::Full(full) => full,
 		AnySrc::Partial(mut fetch) => {
 			let digest = calculate_digest(&mut fetch)
 				.await
 				.with_context(|| format!("fetching source: {:?}", &fetch))?;
-			Ok(Src::Fetch(Fetch::new(fetch, digest)))
+			Src::Fetch(Fetch::new(fetch, digest))
 		},
-	}
-}
-
-pub async fn ensure_digest_mut(src: &mut AnySrc) -> Result<()> {
-	let mut tmp = AnySrc::Full(Src::None);
-	mem::swap(&mut tmp, src);
-	let full = ensure_digest(tmp).await?;
+	};
 	*src = AnySrc::Full(full);
 	Ok(())
 }

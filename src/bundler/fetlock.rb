@@ -1,6 +1,7 @@
 # load a gemset + lockfile via bundler, and export a JSON suitable for fetlock
 require 'bundler'
 require 'json'
+$stderr.puts "ruby v#{RUBY_VERSION}, bundler v#{Bundler::VERSION}"
 
 cmd = ARGV.shift
 def debug(s)

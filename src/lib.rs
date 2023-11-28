@@ -2,6 +2,7 @@
 #![allow(unused_variables)]
 mod expr;
 mod fetlock_env;
+mod http_client;
 pub use expr::*;
 pub mod lock;
 mod memoize;

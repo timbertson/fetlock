@@ -53,6 +53,7 @@ impl LockRoot {
 				let mut command = Command::new("nix-build");
 				command
 					.arg("--no-out-link")
+					.arg("--show-trace")
 					.arg("--expr")
 					.arg("-");
 

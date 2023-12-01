@@ -45,6 +45,11 @@ let
 				};
 
 				openssl-sys = o: (import ./openssl-build-env.nix { inherit openssl; });
+				
+				ring = o: {
+					#TODO: buildRustCrate ought to export this, based on `links` from Cargo.toml.
+					CARGO_MANIFEST_LINKS = "ring_core_${lib.replaceStrings ["."] ["_"] o.version}";
+				};
 			})
 		];
 	};
@@ -52,7 +57,7 @@ let
 	fetlockWrapped = stdenv.mkDerivation {
 		inherit (selection.root) pname version;
 		# add all backends as passthru attributes
-		passthru = makeBackends fetlockWrapped;
+		passthru = (makeBackends fetlockWrapped) // { inherit selection; };
 		buildInputs = [ makeWrapper ] ++ runtimeDeps;
 		buildCommand = ''
 			mkdir -p $out/bin

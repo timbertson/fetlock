@@ -41,7 +41,7 @@ impl Backend for BundlerLock {
 			"convert.rb",
 			None,
 			Command::new("ruby")
-				.arg(format!("{}/fetlock.rb", fetlock_env::bundler()))
+				.arg(format!("{}/inject/fetlock.rb", fetlock_env::nix()))
 				.arg("lock")
 				.arg(lock_path),
 		)

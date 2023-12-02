@@ -6,7 +6,6 @@ with pkgs;
 mkShell ({
 	RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
 	FETLOCK_NIX = toString ./nix;
-	FETLOCK_BUNDLER = toString ./src/bundler;
 
 	buildInputs = [ cargo rustc rustfmt rust-analyzer libiconv openssl.dev ] ++ (
 		lib.optionals stdenv.isDarwin (with darwin.apple_sdk; [

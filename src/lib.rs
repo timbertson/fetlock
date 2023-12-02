@@ -29,8 +29,7 @@ pub mod fs;
 pub mod nix_serialize;
 pub mod resolve_git;
 pub use backend::Backend;
-mod main;
-pub use main::main;
+pub mod cli;
 
 // backends
 pub mod bundler;

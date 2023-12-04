@@ -23,6 +23,7 @@ let
 		opam = backend ./opam;
 		yarn = backend ./yarn;
 		gomod = backend ./gomod;
+		sbt = backend ./sbt;
 		shell = mkShell {
 			packages = [ fetlock ];
 		};

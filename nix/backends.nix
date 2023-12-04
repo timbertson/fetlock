@@ -1,4 +1,4 @@
 rec {
-	default = [ "bundler" "gomod" "yarn" "cargo"];
+	default = [ "bundler" "gomod" "yarn" "cargo" "sbt"];
 	all = default ++ ["esy" "opam"];
 }

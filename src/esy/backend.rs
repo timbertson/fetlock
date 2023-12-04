@@ -155,7 +155,7 @@ impl EsyLock {
 							);
 							if files_path_abs.exists() {
 								debug!("Adding files path {:?}", files_path_abs);
-								let hash = cache::nix_digest_of_path(files_path_abs).await?;
+								let hash = cache::nix_digest_of_dir(files_path_abs).await?;
 								esy_spec.spec.extra.insert(
 									"files".to_owned(),
 									cache::subtree_expr(

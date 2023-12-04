@@ -189,7 +189,7 @@ impl CachedRepo {
 	}
 }
 
-pub async fn nix_digest_of_path<P: AsRef<Path>>(path: P) -> Result<NixHash> {
+pub async fn nix_digest_of_dir<P: AsRef<Path>>(path: P) -> Result<NixHash> {
 	let output = cmd::run_stdout(
 		"nix-hash",
 		None,
@@ -204,10 +204,24 @@ pub async fn nix_digest_of_path<P: AsRef<Path>>(path: P) -> Result<NixHash> {
 	NixHash::from_hex(HashAlg::Sha256, &output)
 }
 
+pub async fn nix_digest_of_file<P: AsRef<Path>>(path: P) -> Result<NixHash> {
+	let output = cmd::run_stdout(
+		"nix-hash",
+		None,
+		Command::new("nix-hash")
+			.arg("--type").arg("sha256")
+			.arg("--flat")
+			.arg(path.as_ref()),
+	)
+	.await?;
+	NixHash::from_hex(HashAlg::Sha256, &output)
+}
+
+
 // rev could be a reference, but it makes the actual usage awkward
 pub async fn nix_digest_of_git_repo<P: AsRef<Path>>(path: P, rev: String) -> Result<NixHash> {
 	info!("exporting {:?} revision {}", path.as_ref(), rev);
-	let tmp_dir = tempdir::TempDir::new("fetlock-export")?;
+	let tmp_dir = tempfile::TempDir::with_prefix("fetlock-export-")?;
 	cmd::exec(
 		Command::new("bash")
 			.arg("-euc")
@@ -217,7 +231,7 @@ pub async fn nix_digest_of_git_repo<P: AsRef<Path>>(path: P, rev: String) -> Res
 			.env("EXTRACT", tmp_dir.path()),
 	)
 	.await?;
-	nix_digest_of_path(tmp_dir.path()).await
+	nix_digest_of_dir(tmp_dir.path()).await
 }
 
 pub fn subtree_expr(base: Expr, rel_path: String, hash: &NixHash) -> Expr {

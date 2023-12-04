@@ -1,3 +1,5 @@
+use std::ffi::OsStr;
+
 use anyhow::*;
 
 pub fn split_one<'a>(sep: &'static str, s: &'a str) -> (&'a str, Option<&'a str>) {
@@ -15,4 +17,8 @@ pub fn split_one_or_else<'a, FnErr: FnOnce() -> Error>(
 	let (start, end) = split_one(sep, s);
 	let end = end.ok_or_else(err)?;
 	Ok((start, end))
+}
+
+pub fn str_of_os(os: &OsStr) -> Result<&str> {
+	os.to_str().ok_or_else(|| anyhow!("invalid string: {:?}", os))
 }

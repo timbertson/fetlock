@@ -3,6 +3,7 @@
 mod expr;
 mod fetlock_env;
 mod http_client;
+mod sbt;
 pub use expr::*;
 pub mod lock;
 mod memoize;

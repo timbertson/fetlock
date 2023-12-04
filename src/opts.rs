@@ -271,6 +271,7 @@ impl CliOpts {
 				"bundler" => lock::Type::Bundler,
 				"cargo" => lock::Type::Cargo,
 				"gomod" => lock::Type::Gomod,
+				"sbt" => lock::Type::Sbt,
 				other => return Err(anyhow!("Unknown type: {}", other)),
 			};
 			let lockfile = Self::default_filename(lock_type)
@@ -288,7 +289,8 @@ impl CliOpts {
 			lock::Type::Bundler => Some("Gemfile.lock"),
 			lock::Type::Gomod => Some("go.sum"),
 			lock::Type::Opam => Some("opam"),
-			lock::Type::Esy => None
+			lock::Type::Esy => None,
+			lock::Type::Sbt => Some("build.sbt"),
 		}
 	}
 
@@ -308,6 +310,8 @@ impl CliOpts {
 		} else if filename.ends_with("esy.lock") {
 			// TODO is there a default name?
 			Some((lock::Type::Esy, filename))
+		} else if filename.ends_with(".sbt") {
+			Some((lock::Type::Sbt, filename))
 		} else {
 			None
 		}

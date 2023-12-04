@@ -170,7 +170,7 @@ impl Backend for OpamLock {
 						"Adding files path {:?} from repository `{}`",
 						&files_rel, repository
 					);
-					let hash = cache::nix_digest_of_path(local_path).await?;
+					let hash = cache::nix_digest_of_dir(local_path).await?;
 					spec.extra.insert(
 						"files".to_owned(),
 						cache::subtree_expr(

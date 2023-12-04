@@ -18,6 +18,7 @@ pub enum Type {
 	Bundler,
 	Cargo,
 	Gomod,
+	Sbt,
 }
 
 impl fmt::Display for Type {
@@ -30,6 +31,7 @@ impl fmt::Display for Type {
 			Bundler => "bundler",
 			Cargo => "cargo",
 			Gomod => "gomod",
+			Sbt => "sbt",
 		})
 	}
 }

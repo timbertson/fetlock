@@ -121,110 +121,182 @@ object DeriveDep extends AutoPlugin {
 			}
 		}
 		
-		case class CachedArtifact(url: String, path: String)
+		case class Artifact(url: String, path: Path)
+		object Artifact {
+			def fromSbt(artifact: sbt.Artifact, file: File): Option[Artifact] =
+				artifact.url.map(url => Artifact(url.toString, Paths.get(file.getPath)))
+		}
+		
 
-		def loadParentOf(path: Path, isParent: Boolean = false): Option[ModuleID] = {
-			import org.apache.maven.model.building._
-			import org.apache.maven.model.{Repository, Parent, Dependency}
-			import org.apache.maven.model.resolution.ModelResolver
+		class CacheLogic(csrCache: Path) {
+			def detectCacheLocation(module: ModuleID, artifact: Artifact): Option[ModuleCacheLocation] = {
+				if (artifact.path.startsWith(csrCache)) {
+					val moduleParts = ModuleCacheLocation.moduleUrlRelPaths(module).head.split('/').size
 
-			// All I really want is the parent coords, if any. Seems like a lot of work :shrug:
-			val buildingRequest = new DefaultModelBuildingRequest()
-			buildingRequest.setPomFile(path.toFile())
-			buildingRequest.setProcessPlugins(false)
-			buildingRequest.setValidationLevel(ModelBuildingRequest.VALIDATION_LEVEL_MINIMAL);
-			buildingRequest.setSystemProperties(System.getProperties())
+					val urlBase = artifact.url.toString.split('/').dropRight(moduleParts).mkString("/")
+					val fileBase = artifact.path.toString.split('/').dropRight(moduleParts).mkString("/")
 
-			var parentModel = Option.empty[Parent]
-			buildingRequest.setModelResolver(new ModelResolver {
-
-				@nowarn("cat=deprecation")
-				override def resolveModel(groupId: String, artifactId: String, version: String): ModelSource = null
-
-				@nowarn("cat=deprecation")
-				override def resolveModel(parent: Parent): ModelSource = {
-					parentModel = Some(parent)
-					null
-				}
-
-				@nowarn("cat=deprecation")
-				override def resolveModel(dependency: Dependency): ModelSource = null
-				override def addRepository(repository: Repository): Unit = ()
-				override def addRepository(repository: Repository, replace: Boolean): Unit = ()
-
-				override def newCopy(): ModelResolver = this
-			})
-			
-			val modelBuilder = new DefaultModelBuilderFactory().newInstance()
-			try {
-				modelBuilder.build(buildingRequest)
-			} catch {
-				case _: java.lang.NullPointerException if parentModel.isDefined || isParent => () // expected
-				case other: Exception => {
-					println(s"WARN: unexpected error loading pom at ${path} with parent ${parentModel}; ignoring:\n${other.getClass().getName()}: ${other.getMessage()}")
+					Some(ModuleCacheLocation(urlBase = urlBase, fileBase = fileBase))
+				} else {
+					None
 				}
 			}
-			
-			parentModel.map(parent => ModuleID(
-				organization = parent.getGroupId(),
-				name = parent.getArtifactId(),
-				revision = parent.getVersion()
-			))
-		}
 
-		class MetadataTracker(csrCache: Path, j: JsonWriter) {
-			private val pomPaths = mutable.Set.empty[Path]
-
-			def emitArtifact(module: ModuleID, url: URL, path: Path): Unit = {
-				if (path.startsWith(csrCache)) {
-					// TODO: we detect pom files by just looking for an adjacent one in the cache.
-					// That's pretty naff, and what happens for ivy? Surely there's a way for
-					// SBT / coursier to tell me about the original module metadata file.
-					
-					def moduleUrlPath(id: ModuleID): String = {
-						s"${id.organization.split('.').mkString("/")}/${id.name}/${id.revision}/${id.name}-${id.revision}.pom"
-					}
-					
-					val moduleParts = moduleUrlPath(module).split('/').size
-
-					val urlBase = url.toString.split('/').dropRight(moduleParts).mkString("/")
-					val fileBase = path.toString.split('/').dropRight(moduleParts).mkString("/")
-
-					def addModulePom(id: ModuleID) {
-						val relPath = moduleUrlPath(id)
-						val pomUrl = s"${urlBase}/${relPath}"
-						val pomPath = Paths.get(s"${fileBase}/${relPath}")
-						if (!pomPaths.contains(pomPath)) {
-							if (Files.exists(pomPath)) {
-								// scala.Console.err.println(s"Adding pom ${pomPath}")
-								// firstly, declare the POM artifact
-								pomPaths.add(pomPath)
-								j.startElem()
-								j.pushObj {
-									j.startElem(); j.key("url"); j.str(pomUrl)
-									j.startElem(); j.key("cache_path"); j.str(csrCache.relativize(pomPath).toString)
-								}
-								
-								// then, do the parent if there is one
-								loadParentOf(pomPath, isParent = true).foreach { parent =>
-									addModulePom(parent)
-								}
-							} else {
-								scala.Console.err.println(s"WARN: expected POM path $pomPath doesn't exist in cache; ignoring")
-							}
-						}
-					}
-					addModulePom(module)
-					
+			def emitArtifact(j: JsonWriter, artifact: Artifact): Unit = {
+				if (artifact.path.startsWith(csrCache) && Files.exists(artifact.path)) {
 					j.startElem()
 					j.pushObj {
-						j.startElem(); j.key("url"); j.str(url.toString)
-						j.startElem(); j.key("cache_path"); j.str(csrCache.relativize(path).toString)
+						j.startElem(); j.key("url"); j.str(artifact.url.toString)
+						j.startElem(); j.key("cache_path"); j.str(csrCache.relativize(artifact.path).toString)
 					}
 				} else {
-					scala.Console.err.println(s"Note: path $path is not inside coursier cache $csrCache; ignoring")
+					println(s"Note: path ${artifact.path} is missing or outside coursier cache $csrCache; ignoring")
 				}
 			}
+		}
+		
+		case class ModuleCacheLocation(urlBase: String, fileBase: String) {
+			def moduleArtifacts(id: ModuleID): List[Artifact] = {
+				extantModuleArtifacts(id).flatMap(a => artifactWithParents(a))
+			}
+			
+			private def extantModuleArtifacts(id: ModuleID): List[Artifact] = {
+				val relPaths = ModuleCacheLocation.moduleUrlRelPaths(id)
+				relPaths.flatMap { relPath =>
+					val pomUrl = s"${urlBase}/${relPath}"
+					val pomPath = Paths.get(s"${fileBase}/${relPath}")
+					if (Files.exists(pomPath)) {
+						List(Artifact(pomUrl, pomPath))
+					} else {
+						println(s"Ignoring missing pom path: ${pomPath}")
+						Nil
+					}
+				}
+			}
+
+			private def artifactWithParents(artifact: Artifact, isParent: Boolean = false): List[Artifact] = {
+				import org.apache.maven.model.building._
+				import org.apache.maven.model.{Repository, Parent, Dependency}
+				import org.apache.maven.model.resolution.ModelResolver
+
+				val path = artifact.path
+
+				// All I really want is the parent coords, if any. Seems like a lot of work :shrug:
+				val buildingRequest = new DefaultModelBuildingRequest()
+				buildingRequest.setPomFile(path.toFile())
+				buildingRequest.setProcessPlugins(false)
+				buildingRequest.setValidationLevel(ModelBuildingRequest.VALIDATION_LEVEL_MINIMAL);
+				buildingRequest.setSystemProperties(System.getProperties())
+
+				var parentModel = Option.empty[Parent]
+				buildingRequest.setModelResolver(new ModelResolver {
+
+					@nowarn("cat=deprecation")
+					override def resolveModel(groupId: String, artifactId: String, version: String): ModelSource = null
+
+					@nowarn("cat=deprecation")
+					override def resolveModel(parent: Parent): ModelSource = {
+						parentModel = Some(parent)
+						null
+					}
+
+					@nowarn("cat=deprecation")
+					override def resolveModel(dependency: Dependency): ModelSource = null
+					override def addRepository(repository: Repository): Unit = ()
+					override def addRepository(repository: Repository, replace: Boolean): Unit = ()
+
+					override def newCopy(): ModelResolver = this
+				})
+				
+				val modelBuilder = new DefaultModelBuilderFactory().newInstance()
+				try {
+					modelBuilder.build(buildingRequest)
+				} catch {
+					case _: java.lang.NullPointerException if parentModel.isDefined || isParent => () // expected
+					case other: Exception => {
+						println(s"WARN: unexpected error loading pom at ${path} with parent ${parentModel}; ignoring:\n${other.getClass().getName()}: ${other.getMessage()}")
+					}
+				}
+				
+				val parentArtifacts: List[Artifact] = parentModel.map(parent => ModuleID(
+					organization = parent.getGroupId(),
+					name = parent.getArtifactId(),
+					revision = parent.getVersion()
+				)).toList.flatMap(extantModuleArtifacts)
+
+				// load parents recursively
+				artifact :: (parentArtifacts.flatMap(a => artifactWithParents(a, true)))
+			}
+
+		}
+		
+		object ModuleCacheLocation {
+			def moduleUrlRelPaths(id: ModuleID): List[String] = {
+				val canonical = s"${id.organization.split('.').mkString("/")}/${id.name}/${id.revision}/${id.name}-${id.revision}.pom"
+
+				// SBT plugins are historically published with an invalid but working maven path:
+				// https://github.com/sbt/website/pull/1164/files#r1379000619
+				val sbtPluginLegacy = (id.extraAttributes.get("scalaVersion"), id.extraAttributes.get("sbtVersion")) match {
+					case (Some(scala), Some(sbt)) => List(
+						s"${id.organization.split('.').mkString("/")}/${id.name}_${scala}_${sbt}/${id.revision}/${id.name}-${id.revision}.pom",
+						s"${id.organization.split('.').mkString("/")}/${id.name}_${scala}_${sbt}/${id.revision}/${id.name}_${scala}_${sbt}-${id.revision}.pom"
+					)
+					case _ => Nil
+				}
+				canonical :: sbtPluginLegacy
+			}
+		}
+		
+		case class Project(org: String, name: String) {
+			def key = s"$org.$name"
+		}
+
+		object Project {
+			def from(moduleId: ModuleID) = Project(moduleId.organization, moduleId.name)
+		}
+
+		case class MyModuleReport(artifacts: Set[Artifact], versions: Set[ModuleID]) {
+			def mergeFrom(other: ModuleReport) = {
+				val convertedArtifacts = other.artifacts
+					.flatMap { case (artifact, path) => Artifact.fromSbt(artifact, path) }
+					.toSet
+				MyModuleReport(
+					versions = this.versions + other.module,
+					artifacts = this.artifacts.union(convertedArtifacts),
+				)
+			}
+		}
+
+		object MyModuleReport {
+			val empty = MyModuleReport(Set.empty, Set.empty)
+			def fromSbt(report: ModuleReport): MyModuleReport = empty.mergeFrom(report)
+		}
+
+		def mergeModuleReports(allReports: List[Option[UpdateReport]]): Map[Project, MyModuleReport] = {
+			var usedModules = Map.empty[Project, MyModuleReport]
+
+			allReports.foreach {
+				case None => throw new RuntimeException(s"Failed to resolve the dependencies")
+				case Some(report) => {
+					// We need to include evicted modules so that SBT in the final build
+					// has enough metadata to recreate the solution.
+					for {
+						configReport <- report.configurations
+						orgArtifactReport <- configReport.details
+						moduleReport <- orgArtifactReport.modules
+						// if moduleReport.evicted
+						// moduleRef = getReference(moduleReport.module)
+					} {
+						val project = Project.from(moduleReport.module)
+						// if (project.name.contains("sbt-git")) {
+						// 	println(s"sbt-git: extraattr = ${moduleReport.module.extraAttributes}, conf = ${moduleReport.module.configurations}, branch = ${moduleReport.module.branchName}")
+						// }
+						val newValue = usedModules.getOrElse(project, MyModuleReport.empty).mergeFrom(moduleReport)
+						usedModules = usedModules.updated(project, newValue)
+					}
+				}
+			}
+			usedModules
 		}
 	}
 
@@ -233,7 +305,7 @@ object DeriveDep extends AutoPlugin {
 	}
 
 	import autoImport._
-	
+	import Internal._
 
 	override def trigger = allRequirements
 	override def requires: Plugins = JvmPlugin
@@ -264,7 +336,7 @@ object DeriveDep extends AutoPlugin {
 
 	private val run = Def.task {
 		val updateConfiguration = UpdateConfiguration()
-			.withArtifactFilter(ArtifactTypeFilter.allow(Set("pom")))
+			// .withArtifactFilter(ArtifactTypeFilter.allow(Set("pom")))
 		val uwConfig = UnresolvedWarningConfiguration()
 		val projectID = Keys.projectID.value
 		// val root = Paths.get(Keys.loadedBuild.value.root).toAbsolutePath
@@ -309,9 +381,7 @@ object DeriveDep extends AutoPlugin {
 		}
 
 		logger.info(s"Writing fetlock JSON to ${sys.env.getOrElse("FETLOCK_OUTPUT", "stdout")}")
-		val j = Internal.JsonWriter()
-
-		// val state = Keys.state.value
+		val j = JsonWriter()
 
 		def getReference(module: ModuleID): String =
 			crossVersion(module)
@@ -330,48 +400,42 @@ object DeriveDep extends AutoPlugin {
 				case None => j.nul()
 				case Some(config) => j.str(config)
 			}
+			
+			val allModules = mergeModuleReports(allReports)
+			val cacheLogic = new CacheLogic(csrCache)
 
 			j.startElem(); j.key("dependencies")
-			j.pushArray {
-				allReports.foreach {
-					case None => throw new RuntimeException(s"Failed to resolve the dependencies of $moduleName")
-					case Some(report) => {
-						for {
-							configReport <- report.configurations
-							// moduleReport <- configReport.modules
-							orgArtifactReport <- configReport.details
-							moduleReport <- orgArtifactReport.modules
-							moduleRef = getReference(moduleReport.module)
-						} {
-							j.startElem()
-							j.pushObj {
-								j.startElem(); j.key("key"); j.str(moduleRef)
-								j.startElem(); j.key("name"); j.str(moduleReport.module.name)
-								j.startElem(); j.key("version"); j.str(moduleReport.module.revision)
+			j.pushObj {
+
+				// Output all the used modules, including artifacts via every dependency path, and any eviction-relatd artifacts.
+				allModules.toList.sortBy(_._1.key).foreach { case (key, module) =>
+					scala.Console.err.println(s"* ${key.key} moduleIDs: ${module.versions.map(getReference)}, ${module.artifacts.size} artifacts")
+					if (module.artifacts.isEmpty) {
+						println(s"WARN: skipping module ${key.key} with no artifacts")
+					} else {
+						// TODO how do we end up with empty modules? Does that mean they're all evicted? Or are there
+						// modules which genuinely have no files?
+						j.startElem(); j.key(key.key); j.pushObj {
+
+							var moduleCacheLocation = Option.empty[ModuleCacheLocation]
+
+							// TODO: should MyModule track the _used_ version? I think it's fine to use an arbitrary version, it results in the same path properties
+							val arbitraryVersion = module.versions.toList.sortBy(_.revision).head
+
+							j.startElem(); j.key("artifacts"); j.pushArray {
+								module.artifacts.foreach { artifact =>
+									moduleCacheLocation = moduleCacheLocation.orElse(cacheLogic.detectCacheLocation(arbitraryVersion, artifact))
+									cacheLogic.emitArtifact(j, artifact)
+								}
 								
-								j.startElem(); j.key("evicted"); j.bool(moduleReport.evicted)
+								val cache = moduleCacheLocation.getOrElse {
+									val artifactPaths = module.artifacts.map(_.path)
+									throw new RuntimeException(s"Unable to determine cache location from artifacts for module ${key}.\nCache path: ${csrCache}\nArtifact paths:${artifactPaths.mkString("\n - ", "\n - ", "")}")
+								}
 
-								// j.startElem(); j.key("callers"); j.pushArray {
-								// 	moduleReport.callers.foreach { caller =>
-								// 		j.startElem()
-								// 		j.str(getReference(caller.moduleId))
-								// 	}
-								// }
-
-								j.startElem()
-								j.key("artifacts")
-								j.pushArray {
-
-									val metadataTracker = new Internal.MetadataTracker(csrCache, j)
-									for ((artifact, file) <- moduleReport.artifacts) {
-										// scala.Console.err.println(s"   - Artifact $artifact @ file $file")
-										artifact.url match {
-											case None => {}
-											case Some(url) => {
-												val path = Paths.get(file.getPath)
-												metadataTracker.emitArtifact(moduleReport.module, url, path)
-											}
-										}
+								module.versions.foreach { moduleId =>
+									cache.moduleArtifacts(moduleId).foreach { artifact =>
+										cacheLogic.emitArtifact(j, artifact)
 									}
 								}
 							}

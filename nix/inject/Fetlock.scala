@@ -2,8 +2,8 @@ package net.gfxmonk.fetlock.derive
 
 import coursier._
 import coursier.core.{Authentication, Publication}
-import coursier.cache.FileCache
-import coursier.util.{Artifact}
+import coursier.cache.{FileCache, Cache}
+import coursier.util.{Artifact, Task => CsrTask, EitherT}
 import coursier.credentials.Credentials
 // import coursier.core._
 // import coursier.util.Artifact
@@ -33,11 +33,14 @@ import java.io.PrintWriter
 import java.io.InputStream
 import com.github.plokhotnyuk.jsoniter_scala.core.Key
 import coursier.cache.CacheDefaults
-import com.github.benmanes.caffeine.cache.Cache
 import java.io.File
 import scala.concurrent.duration.Duration
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext
+import coursier.cache.ArtifactError
+import java.util.concurrent.ConcurrentHashMap
+import coursier.util.ModuleMatchers
+import coursier.core.Reconciliation
 
 object DeriveDep extends sbt.AutoPlugin {
 	object Internal {
@@ -188,8 +191,7 @@ object DeriveDep extends sbt.AutoPlugin {
 		// // 	ModuleId("")
 		// // )
 
-		val depModuleIDs: List[ModuleID] = Keys.libraryDependencies.value.toList
-		val depCsr = depModuleIDs.map { plainModuleId =>
+		def moduleIdToDepencency(plainModuleId: ModuleID) = {
 			val m = crossVersion(plainModuleId)
 			val mattrs = m.extraAttributes ++ m.extraDependencyAttributes
 			// if (! mattrs.isEmpty) {
@@ -208,7 +210,7 @@ object DeriveDep extends sbt.AutoPlugin {
 					mappedAttrs),
 			m.revision)
 		}
-		
+
 		val csrConfig = Keys.csrConfiguration.value
 		// println(s"csrConfig: ${csrConfig}");
 		val creds = Keys.allCredentials.value
@@ -271,39 +273,101 @@ object DeriveDep extends sbt.AutoPlugin {
 				realm = direct.realm
 			)
 		}
-		val cache = FileCache[coursier.util.Task](csrCacheRootFile).withCredentials(csrCreds)
-		val fetchResult = Fetch()
-			.withDependencies(depCsr)
-			.withRepositories(repos)
-			.allArtifactTypes()
-			// .addExtraArtifacts(addArtifacts)
+		val cacheImpl = FileCache[CsrTask](csrCacheRootFile).withCredentials(csrCreds)
+		// val cacheLock = new Object()
+		var cacheArtifactMap = new ConcurrentHashMap[String, (Artifact, Path)]
+		val cacheProxy: Cache[CsrTask] = new Cache[CsrTask] {
 
-			// .addArtifactTypes(Type.jar, Type.pom)
-			.runResult()
+			override def file(artifact: Artifact): EitherT[CsrTask,ArtifactError,File] = cacheImpl.file(artifact).map { file =>
+				// cacheLock.synchronized {
+					// println(s"Artifact ${artifact.url} -> ${file.getPath()}")
+					cacheArtifactMap.put(artifact.url, (artifact, file.toPath()))
+				// }
+				file
+			}
 
-		// val allReports = List(
-		// 	// SBT itself
-		// 	// TODO does this do sources? I don't need those...
-		// 	// Keys.updateSbtClassifiers.result.value.toEither.toOption,
-		// 	Keys.bootDependencyResolution.result.value.toEither.toOption.flatMap { dep =>
-		// 		dep.update(
-		// 			module = dep.moduleDescriptor(
-		// 				moduleId = projectID,
-		// 				directDependencies = Vector(sbtModule),
-		// 				scalaModuleInfo = None,
-		// 			),
-		// 			configuration = updateConfiguration,
-		// 			uwconfig = uwConfig,
-		// 			log = logger,
-		// 		).toOption
-		// 	},
+			override def fetch: Cache.Fetch[CsrTask] = new Cache.Fetch[CsrTask] {
+				override def apply(v1: Artifact): EitherT[CsrTask,String,String] = {
+					EitherT {
+						file(v1).run.map {
+							case Left(err) => Left(err.message)
+							case Right(file) => Right(new String(Files.readAllBytes(file.toPath), StandardCharsets.UTF_8))
+						}
+					}
+				}
+			}
 
-		// 	// project deps
-		// 	Keys.updateFull.result.value.toEither.toOption,
-		// 	// Keys.updateClassifiers.result.value.toEither.toOption,
-		// 	// Keys.updateSbtClassifiers.result.value.toEither.toOption,
-		// )
+			override def fetchs: Seq[Cache.Fetch[CsrTask]] = Seq(fetch) // TODO?
+
+			override def ec: ExecutionContext = cacheImpl.ec
+		}
+
+		// filter out fetlock injected deps, as they won't be needed for the actual build
+		// (and may cause evictions)
+		val depModuleIDs: List[ModuleID] = Keys.libraryDependencies.value.toList.filter { dep =>
+			val fetlockInternal = dep.extraAttributes.get("fetlockInternal")
+			fetlockInternal != Some("true")
+		}
 		
+		val moduleSets = List(
+			// we result multiple independent modulesets rather than everything at once, because
+			// version conflicts / evictions would cause different results
+			
+			ModuleSet(
+				"project",
+				depModuleIDs,
+			),
+
+			// SBT resolution is used by SBT launcher
+			ModuleSet(
+				s"sbt ${Keys.sbtDependency.value.revision}",
+				List(Keys.sbtDependency.value)
+			),
+			
+			// SBT fetches scala-compiler before it can build anything
+			ModuleSet(
+				s"scalac ${Keys.scalaVersion.value}",
+				List(ModuleID("org.scala-lang", "scala-compiler", Keys.scalaVersion.value)),
+				// seems necessary to resolve jline for scala-compiler
+				mapFetch = fetch => fetch.withResolutionParams(fetch.resolutionParams.withKeepOptionalDependencies(true))
+			),
+			// (s"compiler-bridge-${Keys.scalaCompilerBridgeSource.value.revision}",
+			// 	List(
+			// 		Keys.scalaCompilerBridgeSource.value.withConfigurations(None)
+			// 	),
+			// 	// seems necessary to resolve jline
+			// 	fetch => fetch.withResolutionParams(fetch.resolutionParams.withKeepOptionalDependencies(true))
+			// ),
+		)
+
+
+		val _ = moduleSets.map { ms =>
+			var fetch = ms.mapFetch(Fetch(cacheProxy)
+				.withDependencies(ms.deps.map(moduleIdToDepencency))
+				.withRepositories(repos)
+				.allArtifactTypes())
+
+			val exclusions = Keys.allExcludeDependencies.value.map { excl =>
+				(coursier.Organization(excl.organization), coursier.ModuleName(excl.name))
+			}.toSet
+			fetch = fetch.withResolutionParams(
+					fetch.resolutionParams
+						.withExclusions(exclusions)
+						// TODO convert this from Keys.csrReconciliations instead of hardcoding SBT defaults
+						.withReconciliation(List((ModuleMatchers.all, Reconciliation.Relaxed)))
+				)
+
+			val result = fetch.runResult()
+			println(s"\n### Resolution for ${ms.desc}:")
+			println(s"Recon: ${fetch.resolutionParams.reconciliation}")
+			ms.deps.foreach { mod =>
+				println(s" - ${mod}")
+			}
+			result.artifacts.foreach { a =>
+				println(s" + ${a._1.url}")
+			}
+		}
+
 		// Ideally we'd read this from SBT itself. But I can't find anything
 		// aside from Resolver, which is an opaque function
 		val repoConfig = Option(System.getProperty("sbt.repository.config")).map { path =>
@@ -313,14 +377,6 @@ object DeriveDep extends sbt.AutoPlugin {
 		logger.info(s"Writing fetlock JSON to ${sys.env.getOrElse("FETLOCK_OUTPUT", "stdout")}")
 		val j = JsonWriter()
 		
-		// def getReference(module: ModuleID): String =
-		// 	crossVersion(module)
-		// 		.withConfigurations(None)
-		// 		.withExtraAttributes(Map.empty)
-		// 		.toString
-
-		// val moduleName = crossVersion(projectID).name
-
 		j.pushObj {
 			j.startElem(); j.key("cache_root"); j.str(csrCacheRoot.toString)
 			
@@ -330,86 +386,11 @@ object DeriveDep extends sbt.AutoPlugin {
 				case Some(config) => j.str(config)
 			}
 			
-			// val allModules = mergeModuleReports(allReports)
-			// val cacheLogic = new CacheLogic(csrCacheRoot, extantCsrCaches)
-
 			j.startElem(); j.key("dependencies")
 			j.pushObj {
-				
-				// assert(fetchResult.resolution.isDone)
-				// (fetchResult.resolution.dependencySet.set.foreach { dep =>
-				// 	println(dep)
-				// })
+				val artifactMap = Map("meta" -> cacheArtifactMap.asScala.toList.map { case (_, (a, p)) => CachedArtifact(a, p) })
 
-				var artifactMap: Map[String, List[CachedArtifact]] = fetchResult.detailedArtifacts.map { case (dep, pub, artifact, file) =>
-					(s"${dep.module.organization.value}-${dep.module.name.value}", CachedArtifact.fromCsr(artifact, file))
-				}.foldRight(Map.empty[String, List[CachedArtifact]]) { (kv, acc) =>
-					val (key, artifact) = kv
-					acc.updated(key, artifact :: acc.getOrElse(key, Nil))
-				}
-				// } ++ fetchResult.extraArtifacts.flatMap { case (artifact, file) =>
-				// 	val path = Paths.get(file.getPath())
-				// 	val cacheRel = csrCacheRoot.relativize(path)
-				// 	if (cacheRel.isAbsolute()) {
-				// 		logger.warn(s"Skipping absolute artifact path: ${cacheRel}")
-				// 		Nil
-				// 	} else {
-				// 		Some(("meta", CachedArtifact(artifact, cacheRel)))
-				// 	}
-				// })
-				
-				val metaArtifacts: List[CachedArtifact] = fetchResult.resolution.projectCache.toList.flatMap { case ((module, version), (artifactSource, project)) =>
-					// println("** art  " + artifactSource)
-					// println("** proj  " + project)
-					def pomArtifacts(module: Module, version: String) = {
-						// println(s"getting artifacts for ${module}, $version")
-						val artifacts = artifactSource.artifacts(
-							dependency = Dependency(module, version),
-							project = Project(
-								module = module,
-								version = version,
-								dependencies = Nil,
-								configurations = Map.empty,
-
-								// Maven-specific
-								parent = None, // ?
-								dependencyManagement = project.dependencyManagement,
-								properties = Nil,
-								profiles = Nil,
-								versions = None,
-								snapshotVersioning = None,
-								packagingOpt = None,
-								relocated = false,
-								/** Optional exact version used to get this project metadata. May not match `version` for projects
-									* having a wrong version in their metadata.
-									*/
-								actualVersionOpt = None,
-								publications = Nil,
-
-								// Extra infos, not used during resolution
-								info = Info.empty
-								// .withModule(module).withVersion(version)
-							),
-							overrideClassifiers = None
-						).toList
-						// artifacts.foreach { a => println("--p--\n" + a._2) }
-						artifacts.flatMap { a => a._2.extra.get("metadata").toList }.map { a =>
-							val file = Await.result(cache.file(a).run.future, Duration.Inf).toTry.recoverWith { case err: Throwable =>
-								Failure(new RuntimeException(s"Failed to resolve POM for project ${project.module}", err))
-							}.get
-							CachedArtifact.fromCsr(a, file)
-						}
-					}
-					val parentArtifacts = project.parent.toList.flatMap { case (parentMod, parentVersion) =>
-						pomArtifacts(parentMod, parentVersion)
-					}
-
-					val artifacts: List[CachedArtifact] = (pomArtifacts(module, version) ++ parentArtifacts)
-					// artifacts.foreach { a => println("-----\n" + a) }
-					artifacts
-				}.distinct
-				
-				artifactMap = artifactMap.updated("meta", metaArtifacts.toList)
+				// cacheArtifactMap.asScala.toList.foreach { case (k, (a, p)) => println(s"url $k at path $p") }
 
 				artifactMap.foreach { case (key, cached) =>
 					// println(cached)
@@ -429,24 +410,6 @@ object DeriveDep extends sbt.AutoPlugin {
 						}
 					}
 				}
-				// Output all the used modules, including artifacts via every dependency path, and any eviction-relatd artifacts.
-				// allModules.toList.sortBy(_._1.key).foreach { case (key, module) =>
-				// 	scala.Console.err.println(s"* ${key.key} moduleIDs: ${module.versions.map(getReference)}, ${module.artifacts.size} artifacts")
-				// 	j.startElem(); j.key(key.key); j.pushObj {
-				// 		j.startElem(); j.key("artifacts"); j.pushArray {
-				// 			module.artifacts.foreach { artifact =>
-				// 				cacheLogic.emitArtifact(j, artifact)
-				// 			}
-							
-				// 			module.versions.foreach { moduleId =>
-				// 				cacheLogic.moduleArtifacts(moduleId).foreach { artifact =>
-				// 					cacheLogic.emitArtifact(j, artifact)
-				// 				}
-				// 			}
-				// 		}
-				// 	}
-				// }
-				
 			}
 		}
 		j.close()
@@ -459,4 +422,6 @@ object DeriveDep extends sbt.AutoPlugin {
 			CachedArtifact(artifact, Paths.get(file.getPath))
 		}
 	}
+	
+	case class ModuleSet(desc: String, deps: List[ModuleID], exclude: List[ModuleID] = Nil, mapFetch: Fetch[CsrTask] => Fetch[CsrTask] = identity)
 }

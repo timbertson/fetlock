@@ -110,8 +110,8 @@ impl Backend for SbtLock {
 			Some(""), // disable interactivity
 			Stdio::inherit(), // error output
 			Command::new("sbt")
-				.arg("fetlockGenerate")
-				.current_dir(&project_dir.join("project"))
+				.arg("reload plugins; fetlockGenerate")
+				.current_dir(project_dir)
 				.env("FETLOCK_OUTPUT", fetlock_output.path()),
 		)
 		.await?;
@@ -228,8 +228,8 @@ impl MidSpec {
 	}
 
 	fn into_spec(self, key: &Key) -> Result<Spec> {
-		let Self { artifacts } = self;
-
+		let Self { mut artifacts } = self;
+		artifacts.sort_by(|a, b| str::cmp(&a.cache_path, &b.cache_path));
 
 		let mut spec = PartialSpec::empty();
 		spec.id.set_name(key.to_string().clone());

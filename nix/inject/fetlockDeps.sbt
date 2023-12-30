@@ -4,5 +4,6 @@ ThisBuild / libraryDependencies ++= {
 	Seq(
 		"io.get-coursier" %% "coursier" % version,
 		"io.get-coursier" %% "coursier-sbt-maven-repository" % version,
+		"org.scala-sbt" %% "zinc-lm-integration" % sbtVersion.value
 	).map(markFetlock)
 }

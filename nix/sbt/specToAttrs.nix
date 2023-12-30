@@ -7,9 +7,21 @@ with prev.pkgs.lib;
   src ? null,
   artifacts ? null,
   buildTask ? "TODO",
-  artifactPath ? "TODO",
+  buildInputs ? [],
+  ...
 }@spec:
 let
+  extraAttrs = filterAttrs (n: v: ! (elem n [
+    "key"
+    "pname"
+    "version"
+    "depKeys"
+    "cache"
+    "src"
+    "artifacts"
+    "buildTask"
+    "buildInputs"
+  ])) spec;
 
   offlineRepositories = prev.pkgs.writeTextFile {
     name = "offline-repos";
@@ -47,25 +59,15 @@ if artifacts != null then throw "artifact-only specification ${key} can't be bui
     "-Dsbt.coursier=true"
   ] ++ onlineReposFlags);
   
-  # above properties sbt.offline and coursier.cache seem unreliable
+  # properties sbt.offline and coursier.cache seem unreliable
   COURSIER_MODE = "offline";
-
-  # COURSIER_CACHE = ".nix_sbt/cache";
   COURSIER_CACHE = "${cache}/cache";
   HOME = ".nix_sbt/home";
-  
-    # export HOME="$PWD/.nix_sbt/home"
-    # cp -a --no-preserve=mode "${cache}/cache" .nix_sbt/
-  # sbt wants to write to the cache directory, so we need to make a copy :sigh:
   buildPhase = ''
     mkdir -p .nix_sbt/{boot,sbt,home}
     echo >&2 "Using coursier cache at $COURSIER_CACHE"
-    sbt --debug ${buildTask}
-  '';
-  installPhase = ''
-    mkdir -p $out
-    cp -r --no-preserve=mode ./${artifactPath} $out/
+    sbt ${buildTask}
   '';
 
-  buildInputs = [ final.pkgs.sbt ];
-}
+  buildInputs = [ final.pkgs.sbt ] ++ buildInputs;
+} // extraAttrs

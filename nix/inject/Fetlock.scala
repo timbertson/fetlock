@@ -1,7 +1,7 @@
 package net.gfxmonk.fetlock.derive
 
 import coursier._
-import coursier.core.{Authentication, Publication}
+import coursier.core.{Authentication, Publication, Attributes}
 import coursier.cache.{FileCache, Cache}
 import coursier.util.{Artifact, Task => CsrTask, EitherT}
 import coursier.credentials.Credentials
@@ -191,7 +191,7 @@ object DeriveDep extends sbt.AutoPlugin {
 		// // 	ModuleId("")
 		// // )
 
-		def moduleIdToDepencency(plainModuleId: ModuleID) = {
+		def moduleIdToDepencency(includeTest: Boolean)(plainModuleId: ModuleID): Option[Dependency] = {
 			val m = crossVersion(plainModuleId)
 			val mattrs = m.extraAttributes ++ m.extraDependencyAttributes
 			// if (! mattrs.isEmpty) {
@@ -203,12 +203,16 @@ object DeriveDep extends sbt.AutoPlugin {
 			//       https://github.com/coursier/coursier/blob/1539a6a2ba4642c7cfe4699c3d8252a864d84965/modules/sbt-maven-repository/shared/src/main/scala/coursier/maven/SbtMavenRepository.scala#L85-L86
 
 			val mappedAttrs = m.extraAttributes.map { case (k,v) => k.stripPrefix("e:") -> v }.toMap
-			Dependency(
+			val dep = Dependency(
 				Module(
 					Organization(m.organization),
 					ModuleName(m.name),
 					mappedAttrs),
 			m.revision)
+			m.configurations match {
+				case Some("test") if !includeTest => None
+				case _ => Some(dep)
+			}
 		}
 
 		val csrConfig = Keys.csrConfiguration.value
@@ -273,49 +277,24 @@ object DeriveDep extends sbt.AutoPlugin {
 				realm = direct.realm
 			)
 		}
-		val cacheImpl = FileCache[CsrTask](csrCacheRootFile).withCredentials(csrCreds)
-		// val cacheLock = new Object()
-		var cacheArtifactMap = new ConcurrentHashMap[String, (Artifact, Path)]
-		val cacheProxy: Cache[CsrTask] = new Cache[CsrTask] {
 
-			override def file(artifact: Artifact): EitherT[CsrTask,ArtifactError,File] = cacheImpl.file(artifact).map { file =>
-				// cacheLock.synchronized {
-					// println(s"Artifact ${artifact.url} -> ${file.getPath()}")
-					cacheArtifactMap.put(artifact.url, (artifact, file.toPath()))
-				// }
-				file
-			}
-
-			override def fetch: Cache.Fetch[CsrTask] = new Cache.Fetch[CsrTask] {
-				override def apply(v1: Artifact): EitherT[CsrTask,String,String] = {
-					EitherT {
-						file(v1).run.map {
-							case Left(err) => Left(err.message)
-							case Right(file) => Right(new String(Files.readAllBytes(file.toPath), StandardCharsets.UTF_8))
-						}
-					}
-				}
-			}
-
-			override def fetchs: Seq[Cache.Fetch[CsrTask]] = Seq(fetch) // TODO?
-
-			override def ec: ExecutionContext = cacheImpl.ec
-		}
 
 		// filter out fetlock injected deps, as they won't be needed for the actual build
 		// (and may cause evictions)
-		val depModuleIDs: List[ModuleID] = Keys.libraryDependencies.value.toList.filter { dep =>
+		def removeFetlockDeps(deps: Seq[ModuleID]): List[ModuleID] = deps.toList.filter { dep =>
 			val fetlockInternal = dep.extraAttributes.get("fetlockInternal")
 			fetlockInternal != Some("true")
 		}
-		
+
 		val moduleSets = List(
 			// we result multiple independent modulesets rather than everything at once, because
 			// version conflicts / evictions would cause different results
 			
-			ModuleSet(
-				"project",
-				depModuleIDs,
+			ModuleSet("project", removeFetlockDeps(Keys.libraryDependencies.value)),
+
+			ModuleSet("project (test)",
+				removeFetlockDeps((sbt.Test / Keys.libraryDependencies).value),
+				includeTest = true
 			),
 
 			// SBT resolution is used by SBT launcher
@@ -331,6 +310,14 @@ object DeriveDep extends sbt.AutoPlugin {
 				// seems necessary to resolve jline for scala-compiler
 				mapFetch = fetch => fetch.withResolutionParams(fetch.resolutionParams.withKeepOptionalDependencies(true))
 			),
+			
+			// bridge module for the version of SBT / scalac we're using
+			ModuleSet(
+				s"compiler bridge",
+				List(sbt.internal.inc.ZincLmUtil.getDefaultBridgeModule(Keys.scalaVersion.value)),
+			),
+
+
 			// (s"compiler-bridge-${Keys.scalaCompilerBridgeSource.value.revision}",
 			// 	List(
 			// 		Keys.scalaCompilerBridgeSource.value.withConfigurations(None)
@@ -341,10 +328,38 @@ object DeriveDep extends sbt.AutoPlugin {
 		)
 
 
-		val _ = moduleSets.map { ms =>
+		val allArtifacts = moduleSets.map { ms =>
+			val cacheArtifactMap = new ConcurrentHashMap[String, (Artifact, Path)]
+			val cacheImpl = FileCache[CsrTask](csrCacheRootFile).withCredentials(csrCreds)
+			val cacheProxy: Cache[CsrTask] = new Cache[CsrTask] {
+
+				override def file(artifact: Artifact): EitherT[CsrTask,ArtifactError,File] = {
+					cacheImpl.file(artifact).map { file =>
+						cacheArtifactMap.put(artifact.url, (artifact, file.toPath()))
+						file
+					}
+				}
+
+				override def fetch: Cache.Fetch[CsrTask] = new Cache.Fetch[CsrTask] {
+					override def apply(v1: Artifact): EitherT[CsrTask,String,String] = {
+						EitherT {
+							file(v1).run.map {
+								case Left(err) => Left(err.message)
+								case Right(file) => Right(new String(Files.readAllBytes(file.toPath), StandardCharsets.UTF_8))
+							}
+						}
+					}
+				}
+
+				override def fetchs: Seq[Cache.Fetch[CsrTask]] = Seq(fetch) // TODO?
+
+				override def ec: ExecutionContext = cacheImpl.ec
+			}
+
 			var fetch = ms.mapFetch(Fetch(cacheProxy)
-				.withDependencies(ms.deps.map(moduleIdToDepencency))
+				.withDependencies(ms.deps.flatMap(moduleIdToDepencency(ms.includeTest)))
 				.withRepositories(repos)
+				// .withClassifiers(Set(coursier.Classifier.empty)) // TODO
 				.allArtifactTypes())
 
 			val exclusions = Keys.allExcludeDependencies.value.map { excl =>
@@ -357,16 +372,19 @@ object DeriveDep extends sbt.AutoPlugin {
 						.withReconciliation(List((ModuleMatchers.all, Reconciliation.Relaxed)))
 				)
 
-			val result = fetch.runResult()
+			val _ = fetch.runResult()
+
+			val cached = cacheArtifactMap.asScala.clone()
+
 			println(s"\n### Resolution for ${ms.desc}:")
-			println(s"Recon: ${fetch.resolutionParams.reconciliation}")
 			ms.deps.foreach { mod =>
 				println(s" - ${mod}")
 			}
-			result.artifacts.foreach { a =>
-				println(s" + ${a._1.url}")
+			cached.values.toList.sortBy(_._1.url).foreach { case (a, _) =>
+				println(s" + ${a.url}")
 			}
-		}
+			cached
+		}.reduce(_ ++ _)
 
 		// Ideally we'd read this from SBT itself. But I can't find anything
 		// aside from Resolver, which is an opaque function
@@ -388,9 +406,7 @@ object DeriveDep extends sbt.AutoPlugin {
 			
 			j.startElem(); j.key("dependencies")
 			j.pushObj {
-				val artifactMap = Map("meta" -> cacheArtifactMap.asScala.toList.map { case (_, (a, p)) => CachedArtifact(a, p) })
-
-				// cacheArtifactMap.asScala.toList.foreach { case (k, (a, p)) => println(s"url $k at path $p") }
+				val artifactMap = Map("meta" -> allArtifacts.toList.map { case (_, (a, p)) => CachedArtifact(a, p) })
 
 				artifactMap.foreach { case (key, cached) =>
 					// println(cached)
@@ -423,5 +439,11 @@ object DeriveDep extends sbt.AutoPlugin {
 		}
 	}
 	
-	case class ModuleSet(desc: String, deps: List[ModuleID], exclude: List[ModuleID] = Nil, mapFetch: Fetch[CsrTask] => Fetch[CsrTask] = identity)
+	case class ModuleSet(
+		desc: String,
+		deps: List[ModuleID],
+		exclude: List[ModuleID] = Nil,
+		includeTest: Boolean = false,
+		mapFetch: Fetch[CsrTask] => Fetch[CsrTask] = identity
+	)
 }

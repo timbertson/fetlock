@@ -132,6 +132,16 @@ To ensure you're working with the right ruby version, you can pass either `ruby`
 
 When using `rubyVersion` the minor version will be used based on nixpkgs naming conventions - e.g. "2.7.5" uses `ruby_2_7`. The patch version is disregarded, and you'll get an error if nixpkgs doesn't include that version of ruby.
 
+## SBT backend:
+
+The SBT backend involves some reimplementation of SBT logic, because SBT itself doesn't expose enough information about dependencies to be sufficient. The SBT backend attempts to perform the same dependency resolution(s) as SBT, but using coursier directly. This means that some SBT concepts may not be mapped properly, so you may run into issues with:
+ - unusual repository setups
+ - complex dependency specifications (excludes, override, nonstandard classifiers etc)
+ - multi-module builds
+ - building for multiple scala versions
+
+I do want to support all of these correctly if possible, so please open a bug report if you have a reproducible example.
+
 --
 
 # The problem

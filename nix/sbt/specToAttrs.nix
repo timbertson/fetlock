@@ -66,6 +66,7 @@ if artifacts != null then throw "artifact-only specification ${key} can't be bui
   buildPhase = ''
     mkdir -p .nix_sbt/{boot,sbt,home}
     echo >&2 "Using coursier cache at $COURSIER_CACHE"
+    echo >&2 "+ sbt ${buildTask}"
     sbt ${buildTask}
   '';
 

@@ -1,46 +1,27 @@
 package net.gfxmonk.fetlock.derive
 
 import coursier._
-import coursier.core.{Authentication, Publication, Attributes}
-import coursier.cache.{FileCache, Cache}
-import coursier.util.{Artifact, Task => CsrTask, EitherT}
+import coursier.cache.ArtifactError
+import coursier.cache.{FileCache, Cache, CacheDefaults}
+import coursier.core.{Authentication, Publication, Attributes, Reconciliation}
 import coursier.credentials.Credentials
-// import coursier.core._
-// import coursier.util.Artifact
-import scala.annotation.nowarn
-
-
-import java.nio.file.{Path, Paths, Files}
+import coursier.util.{Artifact, Task => CsrTask, EitherT, ModuleMatchers}
+import java.io.File
+import java.io.FileOutputStream
+import java.io.OutputStream
+import java.io.PrintWriter
+import java.net.URI
 import java.nio.charset.StandardCharsets
-
+import java.nio.file.{Path, Paths, Files}
+import java.util.concurrent.ConcurrentHashMap
+import sbt.librarymanagement.ivy.{Credentials => IvyCredentials}
+import sbt.{ModuleID, TaskKey, Task, Keys, Setting, Def}
+import scala.annotation.nowarn
 import scala.collection.mutable
+import scala.concurrent.ExecutionContext
+import scala.jdk.CollectionConverters._
 import scala.util.Properties
 import scala.util.{Try, Failure}
-import java.net.URI
-
-import sbt.{ModuleID, TaskKey, Task, Keys, Setting, Def}
-import sbt.librarymanagement.ivy.{Credentials => IvyCredentials}
-// import sbt.librarymanagement.{UpdateConfiguration,UnresolvedWarningConfiguration,ArtifactTypeFilter}
-// import sbt.internal.util.complete.Parser
-import scala.collection.mutable
-import scala.jdk.CollectionConverters._
-// import sbt.internal.util.complete.Parsers
-// import sjsonnew.shaded.scalajson.ast.unsafe.JString
-import java.io.OutputStream
-import java.io.BufferedOutputStream
-import java.io.FileOutputStream
-import java.io.PrintWriter
-import java.io.InputStream
-import com.github.plokhotnyuk.jsoniter_scala.core.Key
-import coursier.cache.CacheDefaults
-import java.io.File
-import scala.concurrent.duration.Duration
-import scala.concurrent.Await
-import scala.concurrent.ExecutionContext
-import coursier.cache.ArtifactError
-import java.util.concurrent.ConcurrentHashMap
-import coursier.util.ModuleMatchers
-import coursier.core.Reconciliation
 
 object DeriveDep extends sbt.AutoPlugin {
 	object Internal {
@@ -175,29 +156,14 @@ object DeriveDep extends sbt.AutoPlugin {
 	)
 
 	private val run = Def.task {
-		// val updateConfiguration = UpdateConfiguration()
-		// 	// .withArtifactFilter(ArtifactTypeFilter.allow(Set("pom")))
-		// val uwConfig = UnresolvedWarningConfiguration()
-		// val projectID = Keys.projectID.value
-		// // val root = Paths.get(Keys.loadedBuild.value.root).toAbsolutePath
 		val scalaVersion = (Keys.artifactName / Keys.scalaVersion).value
 		val scalaBinaryVersion = (Keys.artifactName / Keys.scalaBinaryVersion).value
 		val crossVersion = sbt.CrossVersion.apply(scalaVersion, scalaBinaryVersion)
-		// // val allDirectDependencies = Keys.allDependencies.value
-		// // val baseDirectory = Keys.baseDirectory.value
 		val logger = Keys.streams.value.log
-		// val sbtModule = Keys.sbtDependency.value
-		// // val sbtTestDepsShouldntBeRequiredButEh = Vector(
-		// // 	ModuleId("")
-		// // )
 
 		def moduleIdToDepencency(includeTest: Boolean)(plainModuleId: ModuleID): Option[Dependency] = {
 			val m = crossVersion(plainModuleId)
 			val mattrs = m.extraAttributes ++ m.extraDependencyAttributes
-			// if (! mattrs.isEmpty) {
-			// 	println(s" +++ Nonempty attrs: ${m.extraAttributes} dep ${m.extraDependencyAttributes}")
-			// }
-
 			// TODO: I can't see where this happens in SBT, just that the attrs disagree between what I get
 			//       and what coursier-sbt-maven-dependency expects:
 			//       https://github.com/coursier/coursier/blob/1539a6a2ba4642c7cfe4699c3d8252a864d84965/modules/sbt-maven-repository/shared/src/main/scala/coursier/maven/SbtMavenRepository.scala#L85-L86
@@ -251,21 +217,6 @@ object DeriveDep extends sbt.AutoPlugin {
 		
 		logger.info("Resolving dependencies using coursier ...")
 
-		// def addArtifacts(input: Seq[(Dependency, Publication, Artifact)]): Seq[Artifact] = {
-		// 	input.flatMap {
-		// 		case (dependency, publication, artifact) => {
-		// 			println("--")
-		// 			println(s"dependency: ${dependency}")
-		// 			println(s"publication: ${publication}")
-		// 			println(s"artifact: ${artifact}")
-		// 			println(s"metadata artifact: ${artifact.extra.get("metadata").toList}")
-		// 			artifact.extra.get("metadata").toList
-		// 		}
-		// 	}
-		// }
-
-
-		// TODO limit CSR cache location
 		val csrCacheRootFile = CacheDefaults.location
 		val csrCacheRoot = Paths.get(csrCacheRootFile.getPath())
 		val csrCreds = creds.map { c =>
@@ -277,7 +228,6 @@ object DeriveDep extends sbt.AutoPlugin {
 				realm = direct.realm
 			)
 		}
-
 
 		// filter out fetlock injected deps, as they won't be needed for the actual build
 		// (and may cause evictions)
@@ -297,16 +247,10 @@ object DeriveDep extends sbt.AutoPlugin {
 				includeTest = true
 			),
 
-			// SBT resolution is used by SBT launcher
-			ModuleSet(
-				s"sbt ${Keys.sbtDependency.value.revision}",
-				List(Keys.sbtDependency.value)
-			),
-			
 			// SBT fetches scala-compiler before it can build anything
 			ModuleSet(
-				s"scalac ${Keys.scalaVersion.value}",
-				List(ModuleID("org.scala-lang", "scala-compiler", Keys.scalaVersion.value)),
+				s"scalac ${scalaVersion}",
+				List(ModuleID("org.scala-lang", "scala-compiler", scalaVersion)),
 				// seems necessary to resolve jline for scala-compiler
 				mapFetch = fetch => fetch.withResolutionParams(fetch.resolutionParams.withKeepOptionalDependencies(true))
 			),
@@ -314,19 +258,17 @@ object DeriveDep extends sbt.AutoPlugin {
 			// bridge module for the version of SBT / scalac we're using
 			ModuleSet(
 				s"compiler bridge",
-				List(sbt.internal.inc.ZincLmUtil.getDefaultBridgeModule(Keys.scalaVersion.value)),
+				List(sbt.internal.inc.ZincLmUtil.getDefaultBridgeModule(scalaVersion)),
 			),
-
-
-			// (s"compiler-bridge-${Keys.scalaCompilerBridgeSource.value.revision}",
-			// 	List(
-			// 		Keys.scalaCompilerBridgeSource.value.withConfigurations(None)
-			// 	),
-			// 	// seems necessary to resolve jline
-			// 	fetch => fetch.withResolutionParams(fetch.resolutionParams.withKeepOptionalDependencies(true))
-			// ),
-		)
-
+		) ++ {
+			if (Keys.isMetaBuild.value) List(
+				// SBT resolution is used by SBT launcher
+				ModuleSet(
+					s"sbt ${Keys.sbtDependency.value.revision}",
+					List(Keys.sbtDependency.value)
+				),
+			) else Nil
+		}
 
 		val allArtifacts = moduleSets.map { ms =>
 			val cacheArtifactMap = new ConcurrentHashMap[String, (Artifact, Path)]

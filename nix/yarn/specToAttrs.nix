@@ -78,10 +78,11 @@ in
     echo >&2 'NOTE: to use synthesized node_modules you should ln -sfn "$NODE_MODULES"'
   '';
   installPhase = ''
+    chmod -R +rwX .
     mkdir -p $out/${nodeSuffix}/${pkgname}
-    cp -r --no-preserve=mode ./. $out/${nodeSuffix}/${pkgname}
+    cp -a ./. $out/${nodeSuffix}/${pkgname}
     ${if bin == null then "" else installBins { inherit pkgname nodePathDeps; specs = bin; }}
   '';
 
-  buildInputs = [ final.nodejs final.pkgs.makeWrapper ];
+  buildInputs = [ final.nodejs final.pkgs.makeWrapper ] ++ (map final.getDrv depKeys);
 }

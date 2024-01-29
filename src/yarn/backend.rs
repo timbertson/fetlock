@@ -303,6 +303,10 @@ impl YarnLockFile {
 						Some(Ok(resolved.clone()))
 					} else {
 						if v.optional_deps.contains(dep) {
+							debug!("Skipping optional dependency from {:?} -> {} (no resolutions matched)",
+								&v.spec.id,
+								dep,
+							);
 							None
 						} else {
 							if log_enabled!(Level::Debug) {

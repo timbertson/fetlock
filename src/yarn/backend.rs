@@ -305,6 +305,13 @@ impl YarnLockFile {
 						if v.optional_deps.contains(dep) {
 							None
 						} else {
+							if log_enabled!(Level::Debug) {
+								let mut all_keys: Vec<(&Key, &Key)> = resolutions.iter().collect();
+								all_keys.sort();
+								for (key, value) in all_keys {
+									debug!("resolution: {} -> {}", key, value)
+								}
+							}
 							// TODO why does yarn even write lockfiles with missing deps?
 							Some(
 								name_of_key(dep)
@@ -429,9 +436,6 @@ impl<'de> Visitor<'de> for YarnVisitor {
 						.collect::<Result<Vec<DepResolution>>>();
 					let mut spec = map.next_value::<YarnSpec>()?;
 					spec.find_keys = into_serde(find_keys)?;
-
-					// TODO: populate root from package.json
-					// Or, look for the impl @`workspace:.`
 					ret.0.add_impl(spec.resolution.key.clone(), spec);
 				}
 			}
@@ -498,7 +502,10 @@ impl<'de> Visitor<'de> for YarnSpecVisitor {
 
 		let mut optional_deps = HashSet::new();
 		for (k, v) in dependencies.unwrap_or_default().iter() {
-			let key = Key::from_kv(k, v);
+			// resolution may be either a straight name or (more unusually)
+			// a renamed dep. ie. `my-lodash-alias: npm:lodash^1.2.3`
+			let resolution = DepResolution::parse_dependency_spec(&k, &v);
+			let key = resolution.key;
 			if dependencies_meta.get(k).and_then(|m| m.optional) == Some(true) {
 				optional_deps.insert(key.clone());
 			}
@@ -524,17 +531,53 @@ struct DepResolution {
 
 impl DepResolution {
 	fn parse(s: &str) -> Result<DepResolution> {
-		let (name, rest) = split_name(s)?;
-		let (registry, version) = match split_one(":", rest) {
-			(registry, Some(version)) => (Some(registry), version),
-			(version, None) => (None, version),
-		};
-		Ok(DepResolution {
-			name: name.to_owned(),
-			key: Key::new(format!("{}@{}", name, version)),
-			registry: registry.map(|x| x.to_owned()),
-		})
+		let result: Result<DepResolution> = (|| {
+			let (name, rest) = split_name(s)?;
+			let (registry, version) = Self::split_registry(rest);
+			Ok(DepResolution {
+				name: name.to_owned(),
+				key: Key::new(format!("{}@{}", &name, version)),
+				registry: registry.map(|x| x.to_owned()),
+			})
+		})();
+		result.with_context(|| format!("Parsing {}", s))
 	}
+
+	fn parse_dependency_spec(name: &str, version_spec: &str) -> DepResolution {
+		// dependency specs are either version spec like `npm:^1.2.3`
+		// or they can be renames, e.g:
+		// string-width-cjs: "npm:string-width@^4.2.0"
+		
+		let (registry, version_spec) = Self::split_registry(version_spec);
+
+		// use the name from version_spec if present
+		let (name, version_spec) = split_name(version_spec).unwrap_or((name, version_spec));
+
+		// Note in the case of renames all we currently do is
+		// to use the real dep key, ignoring the rename.
+		
+		// The right approach would eventually let `depKeys` specify
+		// the package name under which the dependency
+		// should be installed, rather than taking it from the package.
+		Self::from_name_version_registry(name, version_spec, registry)
+	}
+
+	fn from_name_version_registry(name: &str, version: &str, registry: Option<&str>) -> Self {
+		DepResolution {
+			name: name.to_owned(),
+			key: Key::from_kv(name, version),
+			registry: registry.map(|x| x.to_owned()),
+		}
+	}
+	
+	fn split_registry(s: &str) -> (Option<&str>, &str) {
+		// s.split_once(':').map(|(a,b)| (Some(a), b)).unwrap_or((None, s))
+		match split_one(":", s) {
+			(registry, Some(rest)) => (Some(registry), rest),
+			(rest, None) => (None, rest),
+		}
+	}
+	
 }
 
 #[derive(Debug, Clone, Deserialize)]

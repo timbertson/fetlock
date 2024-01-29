@@ -2,7 +2,7 @@ final: prev:
 with prev.pkgs.lib;
 let
   nodeSuffix = "node_modules";
-  linkModules = keys:
+  linkNodeModules = keys:
     let
       linkModule = key:
         let
@@ -10,11 +10,21 @@ let
           pkg = impl.pkgname;
           # note pkg may contain `/`, thus the `mkdir -p`
         in ''
-          mkdir -p "$(dirname "${pkg}")"
-          ln -s "${impl}/${nodeSuffix}/${pkg}" "${pkg}"
+          mkdir -p "node_modules/$(dirname "${pkg}")"
+          ln -s "${impl}/${nodeSuffix}/${pkg}" "node_modules/${pkg}"
         '';
     in
     concatStringsSep "\n" (map linkModule keys);
+  
+  nodeModules = depKeys: prev.pkgs.stdenv.mkDerivation {
+    pname = "node_modules";
+    name = "node_modules";
+    buildCommand = ''
+      mkdir -p "$out"
+      cd $out
+      ${linkNodeModules depKeys}
+    '';
+  };
 
   installBins = { pkgname, specs, nodePathDeps }:
     let
@@ -36,21 +46,25 @@ in
   depKeys,
   src ? prev.emptyDrv,
   bin ? null,
-  nodePathDeps ? null,
+  nodePathDeps ? [],
   pkgname,
 }@spec: {
   inherit pname version depKeys src;
   configurePhase = "true";
-  passthru = { inherit pkgname; };
+  passthru = {
+    inherit pkgname;
+    nodeModules = nodeModules depKeys;
+  };
   buildPhase = ''
     if [ -e node_modules ]; then
       echo "Removing existing node_modules"
       rm -rf node_modules
     fi
-    mkdir node_modules
-    cd node_modules
-    ${linkModules depKeys}
-    cd ..
+    ${linkNodeModules depKeys}
+  '';
+  shellHook = ''
+    export "NODE_MODULES=${nodeModules depKeys}/node_modules"
+    echo >&2 'NOTE: to use synthesized node_modules you should ln -sfn \$NODE_MODULES'
   '';
   installPhase = ''
     mkdir -p $out/${nodeSuffix}/${pkgname}

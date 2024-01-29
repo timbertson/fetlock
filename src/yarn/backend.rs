@@ -1,5 +1,6 @@
 // yarn.lock backend
 use crate::err::*;
+use crate::fetch::ExtractSource;
 use crate::stream_util::*;
 use crate::string_util::*;
 use crate::*;
@@ -72,7 +73,7 @@ impl Backend for YarnLock {
 				anyhow!("extracted source is not in specs: {:?}", key)
 			)?;
 
-			for err in spec.load_manifest(path).err().iter() {
+			for err in spec.load_manifest(path).await.err().iter() {
 				warn!("Failed to lock package.json from {}: {:?}", key, err)
 			}
 		}
@@ -209,9 +210,9 @@ impl YarnSpec {
 		result.with_context(|| desc)
 	}
 
-	fn load_manifest(&mut self, extract: PathBuf) -> Result<()> {
-		let json_path = extract.join("package.json");
-		let json_contents = fs_util::read_to_string(&json_path)?;
+	async fn load_manifest(&mut self, path: PathBuf) -> Result<()> {
+		let extract = ExtractSource::from(&path).await?;
+		let json_contents = extract.file_contents("package.json").await?;
 		let package_json: PackageJSON = serde_json::from_str(&json_contents)?;
 		if !package_json.bin.is_empty() {
 			self.spec.extra.insert(
@@ -256,7 +257,7 @@ pub struct YarnLockFile(Lock<YarnSpec>);
 impl YarnLockFile {
 	fn fixup_keys(&mut self) -> Result<()> {
 		// Yarn lockfile's dependencies are keyed indirectly.
-		// We key implementations by their its actual resolution,
+		// We key implementations by their actual resolution,
 		// but yarn dependency maps still use _constraints_ as keys.
 
 		// first, build a map with `find_key -> canonical_key`
@@ -291,8 +292,8 @@ impl YarnLockFile {
 										fallbacks
 											.get(&name)
 											.map(|key| {
-												warn!(
-													"{:?}: fallback to {:?} (for {})",
+												debug!(
+													"Replacing unresolved {:?} with {:?} (dependency of {})",
 													dep, key, &v.spec.id.name
 												);
 												key.clone()

@@ -34,7 +34,18 @@ let
 					rootAttrs = getAttr rootKey self.specs;
 
 					overrideAll = fn: drvs: mapAttrs (k: fn) drvs;
-					overrideOnly = attrs: fn:
+					overrideOnly = attrs: fn: drvs:
+						let
+							pnames = map (drv: drv.pname) (attrValues drvs);
+							overrideNames = attrNames attrs;
+							overrideMisses = filter (overrideName: !(elem overrideName pnames)) overrideNames;
+							drvsWithWarning = if overrideMisses == [] then (
+								drvs
+							) else (
+								lib.warn "These overrides matched no derivation pnames: ${builtins.toJSON(overrideMisses)}"
+								drvs
+							);
+						in
 						overrideAll (drv:
 							if hasAttr drv.pname attrs
 							then
@@ -43,7 +54,7 @@ let
 								fn (getAttr drv.pname attrs) drv
 							)
 							else drv
-						);
+						) drvsWithWarning;
 				in {
 					_catchWholesaleEvaluation = abort "\nYou appear to be evaluating the result of `fetlock.load`.\nYou probably meant to evaluate `root`, `fetlock` or a particular `drvsByName.PACKAGE_NAME`";
 

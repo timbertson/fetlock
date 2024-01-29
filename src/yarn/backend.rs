@@ -12,7 +12,7 @@ use serde::de;
 use serde::de::*;
 use serde::Deserialize;
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet, BTreeSet};
 use std::fmt;
 use std::path::PathBuf;
 
@@ -51,16 +51,9 @@ impl Backend for YarnLock {
 		).ok_or_else(|| anyhow!("Can't find lock entry for root package: {}", &package_json.name))?
 		.to_owned();
 
-		let mut cyclic_deps = HashSet::new();
-		lockfile.mark_cyclic_dependencies(&root_key, &mut cyclic_deps);
-		let mut cyclic_deps_sorted: Vec<Key> = cyclic_deps.into_iter().collect();
-		cyclic_deps_sorted.sort_unstable();
+		lockfile.mark_cyclic_dependencies(&root_key);
 
 		let root_spec = lockfile.0.specs.get_mut(&root_key).unwrap();
-		root_spec.spec.extra.insert(
-			"nodePathDeps".to_owned(),
-			Expr::List(cyclic_deps_sorted.into_iter().map(|k| Expr::str(k.to_string())).collect())
-		);
 
 		lockfile.0.context.root = Root::Package(root_key.clone());
 
@@ -227,6 +220,33 @@ impl YarnSpec {
 		}
 		Ok(())
 	}
+	
+	fn populate_cyclic_depkeys(&mut self, my_key: &Key, cycles: &HashSet<BTreeSet<Key>>) {
+		// populate the cyclicDepKeys based on the union of all cycles this
+		// package is present in, while also dropping any element of any cycle
+		// from `dep_keys`
+		let mut my_cyclic_deps = BTreeSet::new();
+		
+		for cycle in cycles.iter() {
+			if cycle.contains(my_key) {
+				// add all keys in this cycle that I'm in
+				my_cyclic_deps.extend(cycle.iter().map(|k| k.to_owned()));
+
+				for cycle_key in cycle.iter() {
+					// drop all cycle participants from each other's dep_keys
+					if let Some(idx) = self.spec.dep_keys.iter().position(|key| key == cycle_key) {
+						self.spec.dep_keys.remove(idx);
+					}
+				}
+			}
+		}
+
+		if !my_cyclic_deps.is_empty() {
+			debug!("Package {:?} has cyclic deps: {:?}", &self.spec.id, &my_cyclic_deps);
+			let exprs = my_cyclic_deps.into_iter().map(|k| Expr::str(k.into_string())).collect();
+			self.spec.extra.insert("cyclicDepKeys".to_owned(), Expr::List(exprs));
+		}
+	}
 }
 
 impl AsSpec for YarnSpec {
@@ -323,41 +343,51 @@ impl YarnLockFile {
 		foreach_unordered(10, stream, |spec| spec.populate_src()).await
 	}
 
-	fn mark_cyclic_dependencies(&mut self, root: &Key, cyclic_deps: &mut HashSet<Key>) {
-		let mut seen = Vec::new();
-		self.visit_cyclic_dependencies(&mut seen, cyclic_deps, root)
+	fn mark_cyclic_dependencies(&mut self, root: &Key) {
+		let mut stack = Vec::new();
+		let mut cycles = HashSet::new();
+		self.visit_cyclic_dependencies(&mut stack, &mut cycles, root);
+		for cycle in cycles.iter() {
+			debug!("Cycle: {:?}", cycle);
+		}
+		for (key, spec) in self.0.specs.iter_mut() {
+			spec.populate_cyclic_depkeys(&key, &cycles);
+		}
 	}
 
-	fn visit_cyclic_dependencies(&mut self, seen: &mut Vec<Key>, cyclic_deps: &mut HashSet<Key>, key: &Key) {
+	fn visit_cyclic_dependencies(&mut self, stack: &mut Vec<Key>, cycles: &mut HashSet<BTreeSet<Key>>, key: &Key) {
 		// Yarn allows a -> b -> c -> a.
 		// We can't represent this as nix `buildInputs` due to infinite recursion.
-		// So we cut each at the first circular dependency we find (i.e. c -> a).
-		// In order for c to be able to require(a), we add each dropped
-		// dependency to the toplevel NODE_PATH (by using wrapProgram on everything
-		// in bin/ of the root package).
-		// This makes `a` globally available as a fallback, since NODE_PATH is
-		// searched after checking node_modules.
-		// Fingers crossed we never need two different versions of `a`.
+		// So we find cycles, and for each derivation present in the cycle we add a
+		// passthru property `cyclicDepKeys`. We don't include these in `depKeys`.
+		//
+		// When installing dependencies into node_modules, if a direct dependency has
+		// this property we copy it instead of symlinking, _and_ we copy all the other
+		// cyclicDepKeys even if they're not direct dependencies.
+		//
+		// The result is that everything is symlinked, except when depending on a, b or c
+		// also contains a (shallow) copy of node_modules/{a,b,c}
 
 		if let Some(yarn_spec) = self.0.specs.get_mut(key) {
-			// First, drop cyclic deps (registering them at the toplevel)
-			yarn_spec.spec.dep_keys.retain(|dep_key| {
-				if seen.contains(dep_key) {
-					cyclic_deps.insert(dep_key.to_owned());
-					false
-				} else {
-					true
+			// first, collect cycles that are triggered by a direct dependency
+			for dep_key in yarn_spec.spec.dep_keys.iter() {
+				if let Some(idx) = stack.iter().position(|key| key == dep_key) {
+					let cycle_keys: BTreeSet<Key> = stack[idx..].to_owned().into_iter().collect();
+					debug!("cycle found in dependency {}: {:?}", &key, &cycle_keys);
+					cycles.insert(cycle_keys);
 				}
-			});
+			}
+			
+			// clone to release the borrow of yarn_spec (behind &self)
+			let recurse_into_deps = yarn_spec.spec.dep_keys.clone();
 
-			let recurse_deps = yarn_spec.spec.dep_keys.clone();
-
-			// In a second pass, recurse into dependencies. This must be done after
-			// we're done with `yarn_spec` because that's behind our mutable self reference
-			for dep_key in recurse_deps.into_iter() {
-				seen.push(dep_key.clone());
-				self.visit_cyclic_dependencies(seen, cyclic_deps, &dep_key);
-				seen.pop();
+			for dep_key in recurse_into_deps.into_iter() {
+				// skip if dep is present in any cycle
+				if !cycles.iter().any(|cycle_keys| cycle_keys.contains(&dep_key)) {
+					stack.push(dep_key.clone());
+					self.visit_cyclic_dependencies(stack, cycles, &dep_key);
+					stack.pop();
+				}
 			}
 		}
 	}

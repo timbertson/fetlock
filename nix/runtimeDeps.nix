@@ -13,6 +13,7 @@ in
 	++ (ifEnabled "bundler" bundler)
 	++ (ifEnabled "gomod" go)
 	++ (ifEnabled "yarn" nodejs)
+	++ (ifEnabled "yarn" yarn-berry)
 	++ (ifEnabled "cargo" cargo)
 	++ (ifEnabled "cargo" rustc)
 	++ (ifEnabled "esy" (callPackage ./esy/bin.nix {}))

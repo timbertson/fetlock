@@ -29,6 +29,7 @@ let
 				let
 					# Utility function for use in dependency lookup
 					getDrv = key: getAttr key self.drvs;
+					getSpec = key: getAttr key self.specs;
 
 					rootKey = self.context.root;
 					rootAttrs = getAttr rootKey self.specs;
@@ -58,7 +59,7 @@ let
 				in {
 					_catchWholesaleEvaluation = abort "\nYou appear to be evaluating the result of `fetlock.load`.\nYou probably meant to evaluate `root`, `fetlock` or a particular `drvsByName.PACKAGE_NAME`";
 
-					inherit pkgs getDrv fetlock;
+					inherit pkgs getDrv getSpec fetlock;
 					inherit (import ./fetch.nix {inherit pkgs; }) pathSrc fetchGoModule fetchGitBuiltin;
 					
 					# backwards compatibility with lockfiles created from fetlock 2023-08-25 to 2023-11-03; remove eventually

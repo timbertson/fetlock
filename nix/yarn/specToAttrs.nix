@@ -4,15 +4,30 @@ let
   nodeSuffix = "node_modules";
   linkNodeModules = keys:
     let
+      # note pkg may contain `/`, thus the `mkdir -p`
+      mkdirParent = impl: ''mkdir -p "node_modules/$(dirname "${impl.pkgname}")"'';
+      copyModule = depKey: key:
+        let
+          impl = final.getDrv key;
+          pkg = impl.pkgname;
+          # a given cyclic dep may be needed for multiple deps,
+          # so only install if not already present
+        in trace "copying cyclic dep ${impl.pkgname} due to dependency on ${depKey}" ''
+          ${mkdirParent impl}
+          if [ ! -e "node_modules/${pkg}" ]; then
+            cp -a "${impl}/${nodeSuffix}/${pkg}" "node_modules/${pkg}"
+          fi
+        '';
       linkModule = key:
         let
           impl = final.getDrv key;
           pkg = impl.pkgname;
-          # note pkg may contain `/`, thus the `mkdir -p`
-        in ''
-          mkdir -p "node_modules/$(dirname "${pkg}")"
+          # if a direct dep has cyclic deps, we copy them all instead
+          # of linking the module
+        in trace "linking direct dep ${pkg}" (if (impl.cyclicDepKeys or []) == [] then ''
+          ${mkdirParent impl}
           ln -s "${impl}/${nodeSuffix}/${pkg}" "node_modules/${pkg}"
-        '';
+        '' else concatStringsSep "\n" (map (copyModule key) impl.cyclicDepKeys));
     in
     concatStringsSep "\n" (map linkModule keys);
   
@@ -28,15 +43,10 @@ let
 
   installBins = { pkgname, specs, nodePathDeps }:
     let
-      makeWrapperArgs = map (dep: "--prefix NODE_PATH : ${final.getDrv dep}/${nodeSuffix}") nodePathDeps;
       installBin = name: path: ''
         echo "Installing $out/bin/${name}"
         chmod +x "$out/${nodeSuffix}/${pkgname}/${path}"
         ln -s "../${nodeSuffix}/${pkgname}/${path}" "$out/bin/${name}"
-        ${if nodePathDeps == [] then "" else ''
-          echo "Wrapping $out/bin/${name}"
-          wrapProgram $out/bin/${name} ${concatStringsSep " " makeWrapperArgs}
-        '' }
       '';
     in
     concatStringsSep "\n" (["mkdir -p $out/bin"] ++ (mapAttrsToList installBin specs));
@@ -44,6 +54,7 @@ in
 {
   key, pname, version,
   depKeys,
+  cyclicDepKeys ? [],
   src ? prev.emptyDrv,
   bin ? null,
   nodePathDeps ? [],
@@ -52,7 +63,7 @@ in
   inherit pname version depKeys src;
   configurePhase = "true";
   passthru = {
-    inherit pkgname;
+    inherit pkgname cyclicDepKeys;
     nodeModules = nodeModules depKeys;
   };
   buildPhase = ''
@@ -64,7 +75,7 @@ in
   '';
   shellHook = ''
     export "NODE_MODULES=${nodeModules depKeys}/node_modules"
-    echo >&2 'NOTE: to use synthesized node_modules you should ln -sfn \$NODE_MODULES'
+    echo >&2 'NOTE: to use synthesized node_modules you should ln -sfn "$NODE_MODULES"'
   '';
   installPhase = ''
     mkdir -p $out/${nodeSuffix}/${pkgname}

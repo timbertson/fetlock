@@ -12,7 +12,7 @@ let
           pkg = impl.pkgname;
           # a given cyclic dep may be needed for multiple deps,
           # so only install if not already present
-        in trace "copying cyclic dep ${impl.pkgname} due to dependency on ${depKey}" ''
+        in ''
           ${mkdirParent impl}
           if [ ! -e "node_modules/${pkg}" ]; then
             cp -a "${impl}/${nodeSuffix}/${pkg}" "node_modules/${pkg}"
@@ -24,10 +24,10 @@ let
           pkg = impl.pkgname;
           # if a direct dep has cyclic deps, we copy them all instead
           # of linking the module
-        in trace "linking direct dep ${pkg}" (if (impl.cyclicDepKeys or []) == [] then ''
+        in if (impl.cyclicDepKeys or []) == [] then ''
           ${mkdirParent impl}
           ln -s "${impl}/${nodeSuffix}/${pkg}" "node_modules/${pkg}"
-        '' else concatStringsSep "\n" (map (copyModule key) impl.cyclicDepKeys));
+        '' else concatStringsSep "\n" (map (copyModule key) impl.cyclicDepKeys);
     in
     concatStringsSep "\n" (map linkModule keys);
   

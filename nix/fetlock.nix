@@ -1,4 +1,4 @@
-{ pkgs, src,
+{ pkgs,
 	fetlockBackends ? (import ./backends.nix).default,
 }: with pkgs;
 # Note: building this derivation requires ./lock.nix,
@@ -6,6 +6,8 @@
 # ../shell.nix can be used to bootstrap & build fetlock
 # via cargo, without needing a lock.nix
 let
+	sources = callPackage ./sources.nix {};
+	src = sources.local { url = ../.; };
 	runtimeDeps = pkgs.callPackage ./runtimeDeps.nix { } fetlockBackends;
 	wrapFlags = lib.concatStringsSep " " (
 		["--prefix PATH : \"${lib.makeBinPath runtimeDeps}\"" ]

@@ -1,8 +1,8 @@
 { pkgs }: with pkgs; with lib;
 fetlockBackends:
 let
-	sources = (builtins.fromJSON (builtins.readFile ./wrangle.json)).sources;
-	opam2nix = callPackage "${fetchFromGitHub sources.opam2nix.fetch}/default.nix" {};
+	sources = callPackage ./sources.nix {};
+	opam2nix = callPackage sources.opam2nix {};
 	ifEnabled = name: value: optional (elem name fetlockBackends) value;
 in
 	# For convenience, we place all tools required for enabled backends on fetlock's $PATH and shell.

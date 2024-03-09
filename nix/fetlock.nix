@@ -45,10 +45,11 @@ let
 				};
 
 				openssl-sys = o: (import ./openssl-build-env.nix { inherit openssl; });
-				
+			})
+			(self.overrideSpec {
 				ring = o: {
-					#TODO: buildRustCrate ought to export this, based on `links` from Cargo.toml.
-					CARGO_MANIFEST_LINKS = "ring_core_${lib.replaceStrings ["."] ["_"] o.version}";
+					#TODO: include this in fetlock output?
+					links = "ring_core_${lib.replaceStrings ["."] ["_"] o.version}";
 				};
 			})
 		];

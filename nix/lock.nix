@@ -298,7 +298,6 @@ in
       version = "0.1.2";
       depKeys = [
         ("anyhow-1.0.48")
-        ("core-foundation-0.9.3")
         ("crypto-hash-0.3.4")
         ("filetime-0.2.22")
         ("hex-0.4.3")
@@ -504,7 +503,6 @@ in
       pname = "cpufeatures";
       version = "0.2.11";
       depKeys = [
-        ("libc-0.2.150")
       ];
       src = (pkgs.fetchurl {
         hash = "sha256-zkIP4Hrs0+Z8X5EGGP5l6UFY9tzArfROANac4r3+D9A=";
@@ -517,8 +515,8 @@ in
       pname = "crypto-hash";
       version = "0.3.4";
       depKeys = [
-        ("commoncrypto-0.2.0")
         ("hex-0.3.2")
+        ("openssl-0.10.59")
       ];
       src = (pkgs.fetchurl {
         hash = "sha256-incWIkD9lySNGaVkpWXrVjo/WSs4bkE2+zAJCeZ93co=";
@@ -1612,11 +1610,10 @@ in
       pname = "native-tls";
       version = "0.2.11";
       depKeys = [
-        ("lazy_static-1.4.0")
-        ("libc-0.2.150")
-        ("security-framework-2.9.2")
-        ("security-framework-sys-2.9.1")
-        ("tempfile-3.8.1")
+        ("log-0.4.20")
+        ("openssl-0.10.59")
+        ("openssl-probe-0.1.5")
+        ("openssl-sys-0.9.95")
       ];
       src = (pkgs.fetchurl {
         hash = "sha256-ByJhc8MvKSYCe2PM5LzYB2w1UoRsvnkl86r/6sCjuS4=";
@@ -2209,7 +2206,6 @@ in
         ("rustls-pemfile-1.0.4")
         ("serde-1.0.192")
         ("serde_urlencoded-0.7.1")
-        ("system-configuration-0.5.1")
         ("tokio-1.34.0")
         ("tokio-native-tls-0.3.1")
         ("tokio-rustls-0.24.1")
@@ -2251,6 +2247,8 @@ in
       version = "0.17.5";
       depKeys = [
         ("getrandom-0.2.11")
+        ("libc-0.2.150")
+        ("spin-0.9.8")
         ("untrusted-0.9.0")
       ];
       src = (pkgs.fetchurl {
@@ -2288,6 +2286,7 @@ in
         ("bitflags-2.4.1")
         ("errno-0.3.6")
         ("libc-0.2.150")
+        ("linux-raw-sys-0.4.11")
       ];
       src = (pkgs.fetchurl {
         hash = "sha256-K0JrBQbl1Qp9ja/PLoFHFADetgI5LH3REIFa+06vAqM=";
@@ -2348,8 +2347,8 @@ in
       pname = "rustls-native-certs";
       version = "0.6.3";
       depKeys = [
+        ("openssl-probe-0.1.5")
         ("rustls-pemfile-1.0.4")
-        ("security-framework-2.9.2")
       ];
       src = (pkgs.fetchurl {
         hash = "sha256-qarOdMtmZjXJGOnBK8DTSCZgN6qOtZm1y6VlcJqN/wA=";
@@ -3548,6 +3547,7 @@ in
       pname = "windows-targets";
       version = "0.48.5";
       depKeys = [
+        ("windows_x86_64_gnu-0.48.5")
       ];
       src = (pkgs.fetchurl {
         hash = "sha256-mi+m4hVdcke+aMCWRWCDFFwYPLu8J2QVDdpFqHGXlAw=";

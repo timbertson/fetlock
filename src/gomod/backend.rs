@@ -138,7 +138,7 @@ impl Backend for GoLock {
 
 			let hash = fetch::calculate_digest(&mut mod_fetch).await?;
 			// TODO how to pass in local src?
-			spec.extra.insert("vendorSha256".to_owned(), Expr::str(hash.sri_string()));
+			spec.extra.insert("vendorHash".to_owned(), Expr::str(hash.sri_string()));
 		}
 		Ok(self.lock)
 	}

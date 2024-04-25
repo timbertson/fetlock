@@ -16,7 +16,7 @@ let lib = pkgs.lib; in
 	fetchGoModules = { src, hash, deleteVendor ? false }:
 		(pkgs.buildGoModule {
 			inherit src deleteVendor;
-			vendorSha256 = hash;
+			vendorHash = hash;
 			pname = "gomod";
 			version = "vendor";
 		}).goModules;

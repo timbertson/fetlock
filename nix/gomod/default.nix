@@ -3,25 +3,20 @@
 with lib;
 let
   base = final: prev: {
-    buildGoModule = prev.pkgs.buildGoModule;
+    buildGoModule = final.pkgs.buildGoModule;
 
     specToDrv = spec:
       let overrides = {
         passthru = (spec.passthru or {}) // final.mkPassthru spec;
       }; in
-      final.buildGoModule (spec // overrides);
+      final.pkgs.buildGoModule (spec // overrides);
   };
 
   injectGo = go: final: prev: {
-    buildGoModule = prev.pkgs.callPackage "${pkgs.path}/pkgs/build-support/go/module.nix" {
-      inherit go;
-    };
-
-};
+    buildGoModule = prev.buildGoModule.override { inherit go; };
+  };
 
 in core.makeAPI {
-
-  # overlays = [ base (injectRuby pkgs.ruby) ];
 
   # accept `go` and project it into the overlay's buildGoPackage
   userArgs = args:

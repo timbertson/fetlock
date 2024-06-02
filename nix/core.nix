@@ -156,6 +156,11 @@ let
 					overrideAttrs = attrs:
 						overrideOnly attrs (fn: drv: drv.overrideAttrs fn);
 
+					setSources = attrs:
+						overrideOnly attrs (src: drv: drv.overrideAttrs (_: {
+							inherit src;
+						}));
+
 					addBuildInputs = attrs:
 						overrideOnly attrs (extra: drv: drv.overrideAttrs (o: {
 							buildInputs = (o.buildInputs or []) ++ extra;

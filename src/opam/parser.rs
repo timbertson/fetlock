@@ -131,6 +131,7 @@ fn escaped_char(s: Src) -> Res<char> {
 			map(char('"'), |_| '"'),
 			map(char('\''), |_| '\''),
 			map(char('\\'), |_| '\\'),
+			map(char('"'), |_| '"'),
 			// TODO:
 			// * three-digit decimal / two-digit hexadecimal character codes (\NNN and \xNN)
 		)),
@@ -262,6 +263,13 @@ impl<'a> Value<'a> {
 			Value::List(_) => true,
 			_ => false,
 		}
+	}
+}
+
+struct BackslashOr(&'static str);
+impl FindToken<char> for BackslashOr {
+	fn find_token(&self, token: char) -> bool {
+		self.0.find_token(token) || token == '\\'
 	}
 }
 
@@ -469,37 +477,34 @@ pub mod opam {
 		context("string", alt((triplequote_string, quote_string)))(s)
 	}
 
-	fn string_char(s: Src) -> Res<char> {
-		alt((none_of("\"\\"), escaped_char))(s)
-	}
-
 	// <string>        ::= ( (") { <char> }* (") ) | ( (""") { <char> }* (""") )
 	pub fn quote_string(s: Src) -> Res<Vec<OpamSC>> {
-		delimited(char('"'), string_inner, char('"'))(s)
-	}
-
-	fn string_inner(s: Src) -> Res<Vec<OpamSC>> {
-		map(many0(string_atom), StringAtom::coalesce)(s)
+		delimited(char('"'), |s| string_inner("\"", s), char('"'))(s)
 	}
 
 	pub fn triplequote_string(s: Src) -> Res<Vec<OpamSC>> {
 		map(
 			preceded(
 				tag("\"\"\""),
-				many_till(triplequote_string_atom, tag("\"\"\"")),
+				many_till(|s| string_atom("", s), tag("\"\"\"")),
 			),
 			|(content, _delim)| StringAtom::coalesce(content),
 		)(s)
 	}
-	fn triplequote_string_atom(s: Src) -> Res<StringAtom> {
-		alt((map(char('"'), StringAtom::Char), string_atom))(s)
+
+	fn string_inner<'a>(disallow: &'static str, s: Src<'a>) -> Res<'a, Vec<OpamSC<'a>>> {
+		map(many0(|s| string_atom(disallow, s)), StringAtom::coalesce)(s)
 	}
 
-	fn string_atom(s: Src) -> Res<StringAtom> {
+	fn string_atom<'a>(disallow: &'static str, s: Src<'a>) -> Res<'a, StringAtom<'a>> {
 		alt((
 			map(interpolation, StringAtom::Expr),
-			map(string_char, StringAtom::Char),
+			map(|s| string_char(disallow, s), StringAtom::Char),
 		))(s)
+	}
+
+	fn string_char<'a>(disallow: &'static str, s: Src<'a>) -> Res<'a, char> {
+		alt((none_of(BackslashOr(disallow)), escaped_char))(s)
 	}
 
 	// <varident>      ::= [ ( <ident> | "_" ) { "+" ( <ident> | "_" ) }* : ] <ident>
@@ -521,7 +526,7 @@ pub mod opam {
 	}
 
 	pub fn entire_string(s: Src) -> Res<Value> {
-		all_consuming(map(opam::string_inner, Value::String))(s)
+		all_consuming(map(|s| opam::string_inner("", s), Value::String))(s)
 	}
 }
 
@@ -610,6 +615,7 @@ mod tests {
 		use opam::*;
 		valid(string, r#""""hello""""#);
 		valid(string, r#""hello""#);
+		valid(entire_string, "LDFLAGS=\"$LDFLAGS -L/opt/local/lib -L/usr/local/lib\" CFLAGS=\"$CFLAGS -I/opt/local/include -I/usr/local/include\" ./configure");
 		use StringComponentOf::*;
 		assert_eq!(p(string, "\"%{1}%\""), vec!(Expr(Value::Int(1))));
 		assert_eq!(

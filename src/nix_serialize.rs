@@ -440,7 +440,7 @@ impl Writeable for Key {
 
 impl<T: Writeable> Writeable for &T {
 	fn write_to<W: Write>(&self, c: &mut WriteContext<W>) -> Result<()> {
-		(*self).deref().write_to(c)
+		(*self).write_to(c)
 	}
 }
 

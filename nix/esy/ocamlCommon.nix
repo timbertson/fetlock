@@ -1,5 +1,6 @@
 # Common utilities across opam / esy
 { pkgs, stdenv, lib }:
+  let frameworks = pkgs.darwin.apple_sdk.frameworks; in
 {
   overlay = final: prev: {
     siteLib = prefix: "${prefix}/lib/ocaml/${final.ocaml.version}/site-lib";
@@ -54,6 +55,7 @@
       esy-tree-sitter = [gcc];
       texinfo = [ perl ];
       yarn-pkg-config = [ libiconv ];
+      dune = if stdenv.isDarwin then [ frameworks.CoreServices ] else [];
     })
   ];
 }

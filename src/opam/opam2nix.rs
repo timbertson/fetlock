@@ -2,7 +2,7 @@ use crate::*;
 use anyhow::*;
 use log::*;
 use serde;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use tokio::process;
 
@@ -94,6 +94,9 @@ pub struct SelectedPackage {
 	pub repository: Option<String>,
 
 	pub src: Option<Src>,
+
+	#[serde(default)]
+	pub extra_sources: BTreeMap<String, Src>,
 
 	#[serde(default)]
 	pub depends: Vec<Key>,

@@ -524,6 +524,19 @@ impl AnySrc {
 			_ => None,
 		}
 	}
+	
+	pub fn as_expr(&self) -> Result<Expr> {
+		match self {
+			AnySrc::Full(src) => match src {
+				Src::None => Ok(Expr::Null),
+				Src::Local(local) => local.as_expr(),
+				Src::Fetch(fetch) => Ok(fetch.as_expr()),
+			},
+			AnySrc::Partial(p) => {
+				Err(anyhow!("Attempted to serialize src without digest: {:?}", self))
+			},
+		}
+	}
 }
 
 #[derive(Clone)]

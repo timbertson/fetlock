@@ -32,6 +32,9 @@ mod raw {
 		#[clap(long="clone-freshness", help="maximum age (in days) for cloned repos")]
 		pub clone_freshness_days: Option<u32>,
 
+		#[clap(long="add", help="additional package (opam backend)")]
+		pub additional_packages: Vec<String>,
+
 		#[clap(long="ocaml-version", help="required for opam backend")]
 		pub ocaml_version: Option<String>,
 
@@ -146,6 +149,7 @@ pub struct WriteOpts {
 	pub out_path: Option<String>,
 	pub build_src: Option<RootSpec>,
 	pub clone_freshness_days: Option<u32>,
+	pub additional_packages: Vec<String>,
 	pub ocaml_version: Option<String>,
 	pub cargo_platform: Option<String>,
 	pub cargo_features: Option<Vec<String>>,
@@ -228,6 +232,7 @@ impl CliOpts {
 			lockfile,
 			build_src,
 			clone_freshness_days,
+			additional_packages,
 			ocaml_version,
 			cargo_platform,
 			cargo_features,
@@ -255,6 +260,7 @@ impl CliOpts {
 			out_path,
 			build_src,
 			clone_freshness_days,
+			additional_packages,
 			ocaml_version,
 			cargo_platform,
 			cargo_features: cargo_features.map(|s| s.split(',').map(|s| s.to_owned()).collect()),

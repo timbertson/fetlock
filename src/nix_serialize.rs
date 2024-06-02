@@ -379,14 +379,9 @@ impl Writeable for Spec {
 			}
 
 			match src {
-				AnySrc::Full(src) => match src {
+				AnySrc::Full(full_src) => match full_src {
 					Src::None => (),
-					Src::Local(local) => {
-						c.attr(&"src", &err::into_io(local.as_expr())?)?;
-					},
-					Src::Fetch(fetch) => {
-						c.attr(&"src", &fetch)?;
-					},
+					other => c.attr(&"src", &err::into_io(src.as_expr())?)?,
 				},
 				AnySrc::Partial(p) => {
 					return Err(io::Error::new(io::ErrorKind::Other,

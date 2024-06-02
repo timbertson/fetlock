@@ -27,7 +27,7 @@ impl<T: Clone + Unpin> Future for Memoize<T> {
 				Poll::Ready(v.clone())
 			}
 			Either::Right(fut) => {
-				debug!("polling future...");
+				// debug!("polling future...");
 				match fut.as_mut().poll(cx) {
 					Poll::Pending => Poll::Pending,
 					Poll::Ready(v) => {

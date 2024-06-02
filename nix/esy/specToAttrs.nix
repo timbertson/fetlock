@@ -14,6 +14,7 @@ in
   buildInputs ? [],
   opamName ? null,
   files ? null,
+  extraSources ? null,
 }@spec:
   let finalBuild = util.populateBuildPhases build; in hooks.extend build.mode ({
     inherit pname version depKeys src;
@@ -45,6 +46,10 @@ in
   }
     // (if opamName != null then { inherit opamName; } else {})
     // (if files != null then { inherit files; } else {})
+    // (if extraSources != null then {
+      postUnpack = let copyFile = (path: src: "cp -r '${src}' '${path}'"); in
+        concatStringsSep "\n" (mapAttrsToList copyFile extraSources);
+    } else {})
 
     # https://github.com/NixOS/nixpkgs/issues/39687
     // (if stdenv.isDarwin != null then { hardeningDisable = ["strictoverflow"]; } else {})

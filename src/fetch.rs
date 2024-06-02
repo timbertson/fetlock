@@ -18,19 +18,32 @@ use std::str;
 use tokio::fs;
 use tokio::process::Command;
 
-pub async fn populate_source_digests<S: AsSpec>(lock: &mut Lock<S>) -> Result<()> {
-	let partial_sources = lock.specs.values()
-		.filter_map(|x| x.as_spec_ref().src.partial())
-		.count();
-	if partial_sources > 0 {
-		warn!("Backend didn't supply digests for {} sources", partial_sources);
+pub trait SourceIterMut<'a> {
+	fn sources_mut(self) -> impl Iterator<Item=&'a mut AnySrc>;
+}
+
+impl <'a, S: AsSpec> SourceIterMut<'a> for &'a mut Lock<S> {
+	fn sources_mut(self) -> impl Iterator<Item=&'a mut AnySrc> {
+		self.specs.values_mut().map(|spec| &mut spec.as_spec_mut().src)
 	}
-	let impls = lock.specs.values_mut().map(|x| x.as_spec_mut());
+}
+
+pub async fn populate_source_digests<'a, S: SourceIterMut<'a>>(sources: S) -> Result<()> {
+	let mut partial_sources_count = 0;
+	let impls = sources.sources_mut();
 	let result = foreach_unordered(
 		8,
 		futures::stream::iter(impls),
-		|i| ensure_digest(&mut i.src)
+		|s| {
+			if s.partial().is_some() {
+				partial_sources_count += 1;
+			}
+			ensure_digest(s)
+		}
 	).await;
+	if partial_sources_count > 0 {
+		warn!("Backend didn't supply digests for {} sources", partial_sources_count);
+	}
 	result
 }
 

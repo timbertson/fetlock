@@ -10,19 +10,29 @@ use crate::opam::opam_manifest::OpamJson;
 use crate::*;
 use anyhow::*;
 use async_trait::async_trait;
+use fetch::SourceIterMut;
 use futures::join;
 use log::*;
 use std::collections::{BTreeMap, HashMap};
+use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
 pub struct OpamSpec {
 	spec: Spec,
+	extra_sources: BTreeMap<String, AnySrc>,
 }
 
 #[derive(Clone, Debug)]
 pub struct OpamLock {
 	lock: Lock<OpamSpec>,
 }
+
+impl<'a, K> SourceIterMut<'a> for &'a mut BTreeMap<K, OpamSpec> {
+	fn sources_mut(self) -> impl Iterator<Item=&'a mut AnySrc> {
+		self.values_mut().flat_map(|v| v.extra_sources.values_mut())
+	}
+}
+
 
 #[async_trait(?Send)]
 impl Backend for OpamLock {
@@ -62,15 +72,40 @@ impl Backend for OpamLock {
 			}),
 		);
 
-		let opam_repo_git = GithubRepo::new("ocaml".to_owned(), "opam-repository".to_owned());
-
-		let opam_repo = CachedRepo::cache(&opts, &opam_repo_git).await?;
-
-		let specs = vec![SolveSpec {
+		let mut specs = vec![SolveSpec {
 			name: package_name_str.to_owned(),
 			constraints: None,
 			definition: Some(OpamSource::Path(opam_path.to_owned())),
 		}];
+		
+		for pkg in opts.additional_packages.iter() {
+			if !pkg.contains('/') {
+				// simple pkg name, like "utop"
+				specs.push(SolveSpec {
+					name: pkg.to_owned(),
+					constraints: None,
+					definition: None,
+				});
+			} else {
+				let path = PathBuf::from(pkg);
+				// path to opam file (typically a private package not found in opam-repository)
+				if path.extension().filter(|ext| *ext == "opam").is_none() {
+					return Err(anyhow!("Unsupported pkg: {} (currently only .opam files are supported)", path.display()));
+				}
+				let name = path.file_stem().and_then(|s| s.to_str())
+					.ok_or_else(|| anyhow!("couldn't extract file stem"))?.to_owned();
+
+				specs.push(SolveSpec {
+					name,
+					constraints: None,
+					definition: Some(OpamSource::Path(path)),
+				});
+			}
+		}
+
+		let opam_repo_git = GithubRepo::new("ocaml".to_owned(), "opam-repository".to_owned());
+
+		let opam_repo = CachedRepo::cache(&opts, &opam_repo_git).await?;
 
 		let request = Request {
 			ocaml_version: opts.ocaml_version.clone(),
@@ -131,6 +166,7 @@ impl Backend for OpamLock {
 				version,
 				repository,
 				src,
+				extra_sources,
 				mut depends,
 				depexts,
 				build_commands: _,
@@ -139,24 +175,15 @@ impl Backend for OpamLock {
 
 			spec.id.set_name(name_str.clone());
 			spec.id.set_version(version.clone());
+
 			spec.set_any_src(match src {
-				Some(src) => {
-					let best_digest = src.digests.iter()
-						.flat_map(|(alg_str, contents)|
-							match HashAlg::parse(alg_str) {
-								Err(e) => None,
-								Ok(alg) => Some((alg, contents))
-							}
-						).max_by_key(|(alg,_)| *alg)
-						.map(|(alg, contents)| NixHash::from_hex(alg, contents));
-					let digest = match best_digest {
-						None => { warn!("No useable opam digests found for {:?}", &src); None },
-						Some(d) => Some(d?),
-					};
-					AnySrc::fetch(FetchSpec::Archive(Archive::new(src.url.clone())), digest)
-				},
+				Some(src) => convert_src(src)?,
 				None => AnySrc::Full(Src::None),
 			});
+
+			let extra_sources = extra_sources.into_iter().map(|(k,v)| {
+				Ok((k, convert_src(v)?))
+			}).collect::<Result<_>>()?;
 
 			spec.add_deps(&mut depends);
 			if let Some(repository) = repository {
@@ -186,6 +213,7 @@ impl Backend for OpamLock {
 				Key::new(name_str.clone()),
 				OpamSpec {
 					spec: spec.build()?,
+					extra_sources,
 				},
 			);
 		}
@@ -197,9 +225,37 @@ impl Backend for OpamLock {
 	}
 
 	async fn finalize(mut self) -> Result<Lock<Self::Spec>> {
-		// add `files` expression for all repo-based packages with an adjacent files directory
+		// TODO: can we customize the iterator here instead?
+		// the common functionality populates all source digests, but we have extra ones
+		fetch::populate_source_digests(&mut self.lock.specs).await?;
+
+		for spec in self.lock.specs.values_mut() {
+			if !spec.extra_sources.is_empty() {
+				let sources = spec.extra_sources.clone();
+				let nix_expr = Expr::AttrSet(sources.into_iter().map(|(k,v)| {
+					v.as_expr().map(|v| (k,v))
+				}).collect::<Result<_>>()?);
+				spec.spec.extra.insert("extraSources".to_owned(), nix_expr);
+			}
+		}
 		Ok(self.lock)
 	}
+}
+
+fn convert_src(src: opam2nix::Src) -> Result<AnySrc> {
+	let best_digest = src.digests.iter()
+		.flat_map(|(alg_str, contents)|
+			match HashAlg::parse(alg_str) {
+				Err(e) => None,
+				Ok(alg) => Some((alg, contents))
+			}
+		).max_by_key(|(alg,_)| *alg)
+		.map(|(alg, contents)| NixHash::from_hex(alg, contents));
+	let digest = match best_digest {
+		None => { warn!("No useable opam digests found for {:?}", &src); None },
+		Some(d) => Some(d?),
+	};
+	Ok(AnySrc::fetch(FetchSpec::Archive(Archive::new(src.url.clone())), digest))
 }
 
 impl AsSpec for OpamSpec {

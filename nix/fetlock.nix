@@ -13,8 +13,6 @@ let
 		["--prefix PATH : \"${lib.makeBinPath runtimeDeps}\"" ]
 	);
 
-	osx = darwin.apple_sdk.frameworks;
-
 	makeBackends = fetlock: let
 		core = callPackage ./core.nix { inherit fetlock; };
 		backend = path: callPackage (import path { inherit core; }) {};
@@ -43,7 +41,7 @@ let
 					FETLOCK_NIX = "${src}/nix";
 					FETLOCK_BUNDLER = "${src}/src/bundler";
 					nativeBuildInputs = (o.nativeBuildInputs or [])
-						++ (if stdenv.isDarwin then [ osx.Security osx.SystemConfiguration ] else []);
+						++ (if stdenv.isDarwin then [ apple-sdk ] else []);
 				};
 
 				openssl-sys = o: (import ./openssl-build-env.nix { inherit openssl; });

@@ -9,12 +9,6 @@ mkShell ({
 	FETLOCK_BUNDLER = toString ./src/bundler;
 
 	buildInputs = [ cargo rustc rustfmt rust-analyzer libiconv openssl.dev ] ++ (
-		lib.optionals stdenv.isDarwin (with darwin.apple_sdk; [
-			frameworks.Security
-			frameworks.CoreServices
-			frameworks.CoreFoundation
-			frameworks.Foundation
-			frameworks.AppKit
-		])
+		lib.optional stdenv.isDarwin apple-sdk
 	) ++ (callPackage ./nix/runtimeDeps.nix {} fetlockBackends);
 } // (import ./nix/openssl-build-env.nix { inherit openssl; }))

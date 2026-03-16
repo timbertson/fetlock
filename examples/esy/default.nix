@@ -1,7 +1,6 @@
 { pkgs ? import <nixpkgs> {}}:
 with pkgs;
 let
-  osx = darwin.apple_sdk.frameworks;
   ifDarwin = deps: if stdenv.isDarwin then deps else [];
   fetlock = callPackage ../../nix {};
   yarnSelection = fetlock.yarn.load ../yarn/lock.nix {};
@@ -74,7 +73,7 @@ let
         revery = (o: {
           propagatedBuildInputs = (o.propagatedBuildInputs or [])
             ++ [ libiconv ]
-            ++ (ifDarwin [ osx.Cocoa osx.ForceFeedback ]);
+            ++ (ifDarwin [ apple-sdk ]);
           patches = [
             # TODO:
             # the stdcxx stuff should be fixed by https://github.com/ocaml/dune/pull/3802
@@ -137,13 +136,8 @@ let
       })
 
       (self.addPropagatedBuildInputs {
-        esy-sdl2 = [libGL.dev] ++ (ifDarwin [
-          osx.IOKit osx.CoreAudio osx.Cocoa
-          osx.Foundation osx.AudioToolbox
-          osx.AudioUnit osx.ForceFeedback
-        ]);
-        esy-skia = ifDarwin [ osx.ApplicationServices ];
-        libvim = [ncurses.dev] ++ (ifDarwin [ osx.AppKit ]);
+        esy-sdl2 = [libGL.dev];
+        libvim = [ncurses.dev];
       })
     ];
   };

@@ -1,6 +1,5 @@
 self: with self.pkgs;
 let
-  osx = darwin.apple_sdk.frameworks;
   ifDarwin = deps: if stdenv.isDarwin then deps else [];
   glibtool = if stdenv.isDarwin
     then (stdenv.mkDerivation {
@@ -37,6 +36,6 @@ in
 
 	(self.addPropagatedBuildInputs {
 		esy-cmake = [ pkgs.cmake self.disableConfigureHook ];
-		revery-terminal = ifDarwin [ osx.AppKit osx.Cocoa ];
+		revery-terminal = ifDarwin [ apple-sdk ];
 	})
 ]
